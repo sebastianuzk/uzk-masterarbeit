@@ -1,0 +1,285 @@
+{
+  "collection_name": "verbesserte_suche",
+  "total_documents": 5,
+  "analysis_timestamp": "2025-10-01T17:35:39.960631",
+  "fields": [
+    {
+      "field_name": "id",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 5,
+      "sample_values": [
+        "b4fe29889126c048",
+        "0f3ed683effb0e81",
+        "7429120a23ac4e15",
+        "b2ebd07066084347",
+        "0416866bfcaf170e"
+      ],
+      "avg_length": 16,
+      "min_value": "0f3ed683effb0e81",
+      "max_value": "0f3ed683effb0e81",
+      "null_count": 0
+    },
+    {
+      "field_name": "text",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 5,
+      "sample_values": [
+        "bitur können Sie als in der beruflichen Bildung Qualifizierte unter bestimmten Voraussetzungen studieren. Je nach beruflicher Vorbildung variieren die Möglichkeiten in Hinblick auf den Hochschulzugang. Informationen zu den verschiedenen Bewerbergruppen und Bewerbungsverfahren stehen Ihnenhierzur Verfügung.KontaktHaben Sie noch Fragen zu unseren Studiengängen und dem Bewerbungsverfahren? Gerne beantworten wir Ihnen diese imWiSo Student Service Pointin einem persönlichen Gespräch/Telefonat oder über unserAnfragenformular.HIStudiengang-ChatFrage direkt die KI zu Inhalten & BewerbungAsk a StudentFrag echte Studierende nach ihren ErfahrungenWiSo Student Service Point WiSSPoSchreibe uns deine konkreten FragenStudienwahl-AssistentFinde mit KI heraus, was zu dir passtBachelorMasterZum Chatzum Seitenanfang\n\nRegulär gilt der 15. Juli/15. Januar als Bewerbungsfrist für das Winter- bzw. Sommersemester",
+        "ten FragenStudienwahl-AssistentFinde mit KI heraus, was zu dir passtBachelorMasterZum Chatzum Seitenanfang\n\nRegulär gilt der 15. Juli/15. Januar als Bewerbungsfrist für das Winter- bzw. Sommersemester. Bitte beachten Sie, dass nur die Bachelorstudiengänge Betriebs- und Volkswirtschaftslehre zusätzlich auch im Sommersemester angeboten werden. Umfangreiche Informationen zum Bewerbungsverfahren finden Siehier. Internationale Studierende informieren sich bitte vorab beimInternational Officeder Universität zu Köln über das Bewerbungsverfahren.\n\nGrundlegende Informationen über die Bewerbung zum höheren Fachsemester für Bachelorstudiengänge finden Siehier.\n\nWichtig:Für die Bewerbung auf ein höheres Fachsemester benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus",
+        "benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus. Weiterführende Informationen zur Antragsstellung finden Siehier.\n\nAuch ohne Abitur können Sie als in der beruflichen Bildung Qualifizierte unter bestimmten Voraussetzungen studieren. Je nach beruflicher Vorbildung variieren die Möglichkeiten in Hinblick auf den Hochschulzugang. Informationen zu den verschiedenen Bewerbergruppen und Bewerbungsverfahren stehen Ihnenhierzur Verfügung.\n\nHaben Sie noch Fragen zu unseren Studiengängen und dem Bewerbungsverfahren? Gerne beantworten wir Ihnen diese imWiSo Student Service Pointin einem persönlichen Gespräch/Telefonat oder über unserAnfragenformular.\n\nzum Seitenanfang\n\nSo bewirbst Du Dich in wenigen Schritten an der Uni Köln!\n\nOnline-Bewerbung EU-BürgerBewerbung Nicht-EU-BürgerUni-Assist",
+        "benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus. Weiterführende Informationen zur Antragsstellung finden Siehier.Bewerbung als beruflich Qualifizierte ohne AbiturAuch ohne Abitur können Sie als in der beruflichen Bildung Qualifizierte unter bestimmten Voraussetzungen studieren. Je nach beruflicher Vorbildung variieren die Möglichkeiten in Hinblick auf den Hochschulzugang",
+        "Wie bewerbe ich mich richtig?Bewerbung zum ersten FachsemesterRegulär gilt der 15. Juli/15. Januar als Bewerbungsfrist für das Winter- bzw. Sommersemester. Bitte beachten Sie, dass nur die Bachelorstudiengänge Betriebs- und Volkswirtschaftslehre zusätzlich auch im Sommersemester angeboten werden. Umfangreiche Informationen zum Bewerbungsverfahren finden Siehier. Internationale Studierende informieren sich bitte vorab beimInternational Officeder Universität zu Köln über das Bewerbungsverfahren.Bewerbung zum höheren FachsemesterGrundlegende Informationen über die Bewerbung zum höheren Fachsemester für Bachelorstudiengänge finden Siehier.Wichtig:Für die Bewerbung auf ein höheres Fachsemester benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus"
+      ],
+      "avg_length": 835.8,
+      "min_value": "benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus. Weiterführende Informationen zur Antragsstellung finden Siehier.Bewerbung als beruflich Qualifizierte ohne AbiturAuch ohne Abitur können Sie als in der beruflichen Bildung Qualifizierte unter bestimmten Voraussetzungen studieren. Je nach beruflicher Vorbildung variieren die Möglichkeiten in Hinblick auf den Hochschulzugang",
+      "max_value": "benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus. Weiterführende Informationen zur Antragsstellung finden Siehier.\n\nAuch ohne Abitur können Sie als in der beruflichen Bildung Qualifizierte unter bestimmten Voraussetzungen studieren. Je nach beruflicher Vorbildung variieren die Möglichkeiten in Hinblick auf den Hochschulzugang. Informationen zu den verschiedenen Bewerbergruppen und Bewerbungsverfahren stehen Ihnenhierzur Verfügung.\n\nHaben Sie noch Fragen zu unseren Studiengängen und dem Bewerbungsverfahren? Gerne beantworten wir Ihnen diese imWiSo Student Service Pointin einem persönlichen Gespräch/Telefonat oder über unserAnfragenformular.\n\nzum Seitenanfang\n\nSo bewirbst Du Dich in wenigen Schritten an der Uni Köln!\n\nOnline-Bewerbung EU-BürgerBewerbung Nicht-EU-BürgerUni-Assist",
+      "null_count": 0
+    },
+    {
+      "field_name": "source_url",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor"
+      ],
+      "avg_length": 55,
+      "min_value": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "max_value": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "null_count": 0
+    },
+    {
+      "field_name": "chunk_index",
+      "data_type": "int",
+      "presence_rate": 1.0,
+      "unique_values": 5,
+      "sample_values": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "avg_length": null,
+      "min_value": 0.0,
+      "max_value": 4.0,
+      "null_count": 0
+    },
+    {
+      "field_name": "total_chunks",
+      "data_type": "int",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        5
+      ],
+      "avg_length": null,
+      "min_value": 5.0,
+      "max_value": 5.0,
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_total_chunks",
+      "data_type": "int",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        5
+      ],
+      "avg_length": null,
+      "min_value": 5.0,
+      "max_value": 5.0,
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_title",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "Bachelor"
+      ],
+      "avg_length": 8,
+      "min_value": "Bachelor",
+      "max_value": "Bachelor",
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_description",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "Auf diesen Seiten erfahren Sie mehr zum Bewerbungsverfahren für die Bachelorstudiengänge an der WiSo-Fakultät der Universität zu Köln."
+      ],
+      "avg_length": 134,
+      "min_value": "Auf diesen Seiten erfahren Sie mehr zum Bewerbungsverfahren für die Bachelorstudiengänge an der WiSo-Fakultät der Universität zu Köln.",
+      "max_value": "Auf diesen Seiten erfahren Sie mehr zum Bewerbungsverfahren für die Bachelorstudiengänge an der WiSo-Fakultät der Universität zu Köln.",
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_word_count",
+      "data_type": "int",
+      "presence_rate": 1.0,
+      "unique_values": 5,
+      "sample_values": [
+        99,
+        102,
+        103,
+        107,
+        60
+      ],
+      "avg_length": null,
+      "min_value": 60.0,
+      "max_value": 107.0,
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_chunk_index",
+      "data_type": "int",
+      "presence_rate": 1.0,
+      "unique_values": 5,
+      "sample_values": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "avg_length": null,
+      "min_value": 0.0,
+      "max_value": 4.0,
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_timestamp",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "2025-10-01T17:35:36.187469"
+      ],
+      "avg_length": 26,
+      "min_value": "2025-10-01T17:35:36.187469",
+      "max_value": "2025-10-01T17:35:36.187469",
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_source_url",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor"
+      ],
+      "avg_length": 55,
+      "min_value": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "max_value": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_domain",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "wiso.uni-koeln.de"
+      ],
+      "avg_length": 17,
+      "min_value": "wiso.uni-koeln.de",
+      "max_value": "wiso.uni-koeln.de",
+      "null_count": 0
+    }
+  ],
+  "data_quality_metrics": {
+    "total_documents": 5,
+    "total_fields": 13,
+    "avg_completeness": 1.0,
+    "consistency_issues": [],
+    "avg_text_length": 835.8,
+    "unique_sources": 1,
+    "source_diversity": 0.2,
+    "fields_with_high_completeness": 13,
+    "fields_with_low_completeness": 0
+  },
+  "optimization_suggestions": [],
+  "sample_documents": [
+    {
+      "id": "0f3ed683effb0e81",
+      "text": "Wie bewerbe ich mich richtig?Bewerbung zum ersten FachsemesterRegulär gilt der 15. Juli/15. Januar als Bewerbungsfrist für das Winter- bzw. Sommersemester. Bitte beachten Sie, dass nur die Bachelorstudiengänge Betriebs- und Volkswirtschaftslehre zusätzlich auch im Sommersemester angeboten werden. Umfangreiche Informationen zum Bewerbungsverfahren finden Siehier. Internationale Studierende informieren sich bitte vorab beimInternational Officeder Universität zu Köln über das Bewerbungsverfahren.Bewerbung zum höheren FachsemesterGrundlegende Informationen über die Bewerbung zum höheren Fachsemester für Bachelorstudiengänge finden Siehier.Wichtig:Für die Bewerbung auf ein höheres Fachsemester benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus",
+      "source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "chunk_index": 0,
+      "total_chunks": 5,
+      "metadata_total_chunks": 5,
+      "metadata_title": "Bachelor",
+      "metadata_description": "Auf diesen Seiten erfahren Sie mehr zum Bewerbungsverfahren für die Bachelorstudiengänge an der WiSo-Fakultät der Universität zu Köln.",
+      "metadata_word_count": 99,
+      "metadata_chunk_index": 0,
+      "metadata_timestamp": "2025-10-01T17:35:36.187469",
+      "metadata_source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "metadata_domain": "wiso.uni-koeln.de"
+    },
+    {
+      "id": "b4fe29889126c048",
+      "text": "benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus. Weiterführende Informationen zur Antragsstellung finden Siehier.\n\nAuch ohne Abitur können Sie als in der beruflichen Bildung Qualifizierte unter bestimmten Voraussetzungen studieren. Je nach beruflicher Vorbildung variieren die Möglichkeiten in Hinblick auf den Hochschulzugang. Informationen zu den verschiedenen Bewerbergruppen und Bewerbungsverfahren stehen Ihnenhierzur Verfügung.\n\nHaben Sie noch Fragen zu unseren Studiengängen und dem Bewerbungsverfahren? Gerne beantworten wir Ihnen diese imWiSo Student Service Pointin einem persönlichen Gespräch/Telefonat oder über unserAnfragenformular.\n\nzum Seitenanfang\n\nSo bewirbst Du Dich in wenigen Schritten an der Uni Köln!\n\nOnline-Bewerbung EU-BürgerBewerbung Nicht-EU-BürgerUni-Assist",
+      "source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "chunk_index": 4,
+      "total_chunks": 5,
+      "metadata_title": "Bachelor",
+      "metadata_total_chunks": 5,
+      "metadata_timestamp": "2025-10-01T17:35:36.187469",
+      "metadata_source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "metadata_description": "Auf diesen Seiten erfahren Sie mehr zum Bewerbungsverfahren für die Bachelorstudiengänge an der WiSo-Fakultät der Universität zu Köln.",
+      "metadata_chunk_index": 4,
+      "metadata_domain": "wiso.uni-koeln.de",
+      "metadata_word_count": 107
+    },
+    {
+      "id": "b2ebd07066084347",
+      "text": "bitur können Sie als in der beruflichen Bildung Qualifizierte unter bestimmten Voraussetzungen studieren. Je nach beruflicher Vorbildung variieren die Möglichkeiten in Hinblick auf den Hochschulzugang. Informationen zu den verschiedenen Bewerbergruppen und Bewerbungsverfahren stehen Ihnenhierzur Verfügung.KontaktHaben Sie noch Fragen zu unseren Studiengängen und dem Bewerbungsverfahren? Gerne beantworten wir Ihnen diese imWiSo Student Service Pointin einem persönlichen Gespräch/Telefonat oder über unserAnfragenformular.HIStudiengang-ChatFrage direkt die KI zu Inhalten & BewerbungAsk a StudentFrag echte Studierende nach ihren ErfahrungenWiSo Student Service Point WiSSPoSchreibe uns deine konkreten FragenStudienwahl-AssistentFinde mit KI heraus, was zu dir passtBachelorMasterZum Chatzum Seitenanfang\n\nRegulär gilt der 15. Juli/15. Januar als Bewerbungsfrist für das Winter- bzw. Sommersemester",
+      "source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "chunk_index": 2,
+      "total_chunks": 5,
+      "metadata_word_count": 103,
+      "metadata_source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "metadata_chunk_index": 2,
+      "metadata_timestamp": "2025-10-01T17:35:36.187469",
+      "metadata_domain": "wiso.uni-koeln.de",
+      "metadata_total_chunks": 5,
+      "metadata_title": "Bachelor",
+      "metadata_description": "Auf diesen Seiten erfahren Sie mehr zum Bewerbungsverfahren für die Bachelorstudiengänge an der WiSo-Fakultät der Universität zu Köln."
+    },
+    {
+      "id": "0416866bfcaf170e",
+      "text": "ten FragenStudienwahl-AssistentFinde mit KI heraus, was zu dir passtBachelorMasterZum Chatzum Seitenanfang\n\nRegulär gilt der 15. Juli/15. Januar als Bewerbungsfrist für das Winter- bzw. Sommersemester. Bitte beachten Sie, dass nur die Bachelorstudiengänge Betriebs- und Volkswirtschaftslehre zusätzlich auch im Sommersemester angeboten werden. Umfangreiche Informationen zum Bewerbungsverfahren finden Siehier. Internationale Studierende informieren sich bitte vorab beimInternational Officeder Universität zu Köln über das Bewerbungsverfahren.\n\nGrundlegende Informationen über die Bewerbung zum höheren Fachsemester für Bachelorstudiengänge finden Siehier.\n\nWichtig:Für die Bewerbung auf ein höheres Fachsemester benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus",
+      "source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "chunk_index": 3,
+      "total_chunks": 5,
+      "metadata_total_chunks": 5,
+      "metadata_word_count": 102,
+      "metadata_chunk_index": 3,
+      "metadata_timestamp": "2025-10-01T17:35:36.187469",
+      "metadata_domain": "wiso.uni-koeln.de",
+      "metadata_source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "metadata_description": "Auf diesen Seiten erfahren Sie mehr zum Bewerbungsverfahren für die Bachelorstudiengänge an der WiSo-Fakultät der Universität zu Köln.",
+      "metadata_title": "Bachelor"
+    },
+    {
+      "id": "7429120a23ac4e15",
+      "text": "benötigen Sie zwei Bescheinigung (Nachweis über den Status Ortswechsel/Quereinstieg und die Fachsemestereinstufung). Beide Bescheinigungen stellt Ihnen das Prüfungsamt der WiSo-Fakultät auf Antrag aus. Weiterführende Informationen zur Antragsstellung finden Siehier.Bewerbung als beruflich Qualifizierte ohne AbiturAuch ohne Abitur können Sie als in der beruflichen Bildung Qualifizierte unter bestimmten Voraussetzungen studieren. Je nach beruflicher Vorbildung variieren die Möglichkeiten in Hinblick auf den Hochschulzugang",
+      "source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "chunk_index": 1,
+      "total_chunks": 5,
+      "metadata_title": "Bachelor",
+      "metadata_word_count": 60,
+      "metadata_description": "Auf diesen Seiten erfahren Sie mehr zum Bewerbungsverfahren für die Bachelorstudiengänge an der WiSo-Fakultät der Universität zu Köln.",
+      "metadata_source_url": "https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor",
+      "metadata_domain": "wiso.uni-koeln.de",
+      "metadata_total_chunks": 5,
+      "metadata_chunk_index": 1,
+      "metadata_timestamp": "2025-10-01T17:35:36.187469"
+    }
+  ]
+}
