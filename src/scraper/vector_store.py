@@ -30,16 +30,6 @@ try:
 except ImportError:
     CHROMADB_AVAILABLE = False
 
-try:
-    import faiss
-    import numpy as np
-    FAISS_AVAILABLE = True
-except ImportError:
-    FAISS_AVAILABLE = False
-
-# Pinecone removed - using only open source alternatives
-PINECONE_AVAILABLE = False
-
 # Embedding dependencies
 try:
     from sentence_transformers import SentenceTransformer
@@ -217,142 +207,8 @@ class ChromaDBBackend(VectorStoreBackend):
         return self.collection.count()
 
 
-class FAISSBackend(VectorStoreBackend):
-    """FAISS vector store backend."""
-    
-    def __init__(self, config: VectorStoreConfig, dimension: int):
-        if not FAISS_AVAILABLE:
-            raise ImportError("faiss-cpu or faiss-gpu is required but not installed")
-        
-        self.config = config
-        self.dimension = dimension
-        self.logger = logging.getLogger(__name__)
-        
-        # Initialize FAISS index
-        self.index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
-        self.documents: Dict[int, VectorDocument] = {}
-        self.next_id = 0
-        
-        # Create persist directory
-        self.persist_path = Path(config.persist_directory)
-        self.persist_path.mkdir(parents=True, exist_ok=True)
-        
-        # Try to load existing index
-        self._load_index()
-    
-    def add_documents(self, documents: List[VectorDocument]) -> None:
-        """Add documents to FAISS index."""
-        if not documents:
-            return
-        
-        embeddings = np.array([doc.embedding for doc in documents], dtype=np.float32)
-        
-        # Normalize embeddings for cosine similarity
-        faiss.normalize_L2(embeddings)
-        
-        # Add to index
-        start_id = self.next_id
-        self.index.add(embeddings)
-        
-        # Store documents
-        for i, doc in enumerate(documents):
-            self.documents[start_id + i] = doc
-        
-        self.next_id += len(documents)
-        
-        # Persist index
-        self._save_index()
-        
-        self.logger.info(f"Added {len(documents)} documents to FAISS index")
-    
-    def search(self, query_embedding: List[float], 
-              k: int = 10, metadata_filter: Optional[Dict] = None) -> List[Tuple[VectorDocument, float]]:
-        """Search for similar documents in FAISS."""
-        query_vector = np.array([query_embedding], dtype=np.float32)
-        faiss.normalize_L2(query_vector)
-        
-        # Search
-        scores, indices = self.index.search(query_vector, min(k, self.index.ntotal))
-        
-        results = []
-        for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:  # FAISS returns -1 for empty slots
-                continue
-            
-            doc = self.documents.get(idx)
-            if doc is None:
-                continue
-            
-            # Apply metadata filter
-            if metadata_filter:
-                if not all(doc.metadata.get(key) == value for key, value in metadata_filter.items()):
-                    continue
-            
-            results.append((doc, float(score)))
-        
-        return results
-    
-    def delete_by_source(self, source_url: str) -> None:
-        """Delete documents by source URL (rebuild index without them)."""
-        # Collect documents to keep
-        docs_to_keep = [
-            doc for doc in self.documents.values() 
-            if doc.source_url != source_url
-        ]
-        
-        # Rebuild index
-        self.index = faiss.IndexFlatIP(self.dimension)
-        self.documents = {}
-        self.next_id = 0
-        
-        if docs_to_keep:
-            self.add_documents(docs_to_keep)
-        
-        self.logger.info(f"Rebuilt index excluding documents from {source_url}")
-    
-    def get_document_count(self) -> int:
-        """Get the total number of documents."""
-        return self.index.ntotal
-    
-    def _save_index(self) -> None:
-        """Save FAISS index and documents to disk."""
-        # Save FAISS index
-        index_path = self.persist_path / "faiss.index"
-        faiss.write_index(self.index, str(index_path))
-        
-        # Save documents
-        docs_path = self.persist_path / "documents.json"
-        with open(docs_path, 'w') as f:
-            docs_dict = {str(k): asdict(v) for k, v in self.documents.items()}
-            json.dump({
-                'documents': docs_dict,
-                'next_id': self.next_id
-            }, f)
-    
-    def _load_index(self) -> None:
-        """Load FAISS index and documents from disk."""
-        index_path = self.persist_path / "faiss.index"
-        docs_path = self.persist_path / "documents.json"
-        
-        if index_path.exists() and docs_path.exists():
-            try:
-                # Load FAISS index
-                self.index = faiss.read_index(str(index_path))
-                
-                # Load documents
-                with open(docs_path, 'r') as f:
-                    data = json.load(f)
-                    docs_dict = data['documents']
-                    self.next_id = data['next_id']
-                    
-                    self.documents = {
-                        int(k): VectorDocument(**v) for k, v in docs_dict.items()
-                    }
-                
-                self.logger.info(f"Loaded FAISS index with {len(self.documents)} documents")
-            except Exception as e:
-                self.logger.warning(f"Failed to load existing index: {e}")
-                self.index = faiss.IndexFlatIP(self.dimension)
+# FAISSBackend removed - not used in current implementation
+# Using only ChromaDB for this project to reduce complexity
 
 
 class VectorStore:
@@ -405,10 +261,9 @@ class VectorStore:
         """Create the vector store backend based on configuration."""
         if self.config.backend == "chromadb":
             return ChromaDBBackend(self.config)
-        elif self.config.backend == "faiss":
-            return FAISSBackend(self.config, self.embedding_provider.get_dimension())
         else:
-            raise ValueError(f"Unknown backend: {self.config.backend}")
+            # Only ChromaDB supported in this simplified implementation
+            raise ValueError(f"Only 'chromadb' backend is supported. Got: {self.config.backend}")
     
     def add_scraped_content(self, scraped_content: List[ScrapedContent]) -> None:
         """
