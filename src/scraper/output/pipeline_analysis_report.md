@@ -2,7 +2,7 @@
 
 **Collection:** verbesserte_suche  
 **Total Documents:** 5  
-**Analysis Date:** 2025-10-01T17:35:39.960631
+**Analysis Date:** 2025-10-01T18:17:54.722588
 
 ## Data Quality Metrics
 
@@ -23,14 +23,14 @@
 | source_url | str | 100.0% | 1 | 55.0 |
 | chunk_index | int | 100.0% | 5 | N/A |
 | total_chunks | int | 100.0% | 1 | N/A |
-| metadata_total_chunks | int | 100.0% | 1 | N/A |
+| metadata_timestamp | str | 100.0% | 1 | 26.0 |
+| metadata_domain | str | 100.0% | 1 | 17.0 |
 | metadata_title | str | 100.0% | 1 | 8.0 |
+| metadata_source_url | str | 100.0% | 1 | 55.0 |
+| metadata_chunk_index | int | 100.0% | 5 | N/A |
 | metadata_description | str | 100.0% | 1 | 134.0 |
 | metadata_word_count | int | 100.0% | 5 | N/A |
-| metadata_chunk_index | int | 100.0% | 5 | N/A |
-| metadata_timestamp | str | 100.0% | 1 | 26.0 |
-| metadata_source_url | str | 100.0% | 1 | 55.0 |
-| metadata_domain | str | 100.0% | 1 | 17.0 |
+| metadata_total_chunks | int | 100.0% | 1 | N/A |
 
 ## Optimization Suggestions
 

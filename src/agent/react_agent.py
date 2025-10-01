@@ -11,6 +11,7 @@ from config.settings import settings
 from src.tools.wikipedia_tool import create_wikipedia_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
+from src.tools.rag_tool import create_university_rag_tool
 
 
 class ReactAgent:
@@ -43,11 +44,14 @@ Verfügbare Tools:
 - Wikipedia: Für Enzyklopädie-Informationen
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
 - DuckDuckGo: Für aktuelle Websuche
+- Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
 
 Verwende Tools nur bei Anfragen wie:
 - "Was sind die neuesten Nachrichten über..."
 - "Suche mir Informationen über..."
 - "Was steht auf der Webseite..."
+- "Was benötige ich für die Bewerbung..." (nutze university_knowledge_search)
+- "Wie sind die Fristen für..." (nutze university_knowledge_search)
 - "Erkläre mir das Thema..."
 
 NICHT bei:
@@ -78,6 +82,15 @@ NICHT bei:
         
         if settings.ENABLE_DUCKDUCKGO:
             tools.append(create_duckduckgo_tool())
+        
+        # RAG-Tool für Universitäts-Wissensdatenbank immer hinzufügen
+        try:
+            rag_tool = create_university_rag_tool()
+            tools.append(rag_tool)
+            print("✅ Universitäts-RAG-Tool erfolgreich geladen")
+        except Exception as e:
+            print(f"⚠️  Universitäts-RAG-Tool konnte nicht geladen werden: {e}")
+            print("   → Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal")
         
         return tools
     
