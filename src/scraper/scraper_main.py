@@ -26,7 +26,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from scraper.batch_scraper import BatchScraper, ScrapingConfig, ScrapedContent
 from scraper.vector_store import VectorStore, VectorStoreConfig
-from scraper.data_structure_analyzer import DataStructureAnalyzer
+from scraper.data_analysis.data_structure_analyzer import DataStructureAnalyzer
 
 
 def setup_logging(level: str = "INFO") -> None:
@@ -214,14 +214,14 @@ async def pipeline_command(args) -> None:
     print(f"  Average completeness: {report.data_quality_metrics['avg_completeness']:.1%}")
     
     # Export analysis report
-    analyzer.export_report(report, "src/scraper/output/pipeline_analysis_report.json", "json")
-    analyzer.export_report(report, "src/scraper/output/pipeline_analysis_report.md", "markdown")
+    analyzer.export_report(report, "src/scraper/data_analysis/pipeline_analysis_report.json", "json")
+    analyzer.export_report(report, "src/scraper/data_analysis/pipeline_analysis_report.md", "markdown")
     print("Analysis reports exported")
     
     # Save scraped data if requested
-    if args.save_scraped:
-        scraper.save_results("src/scraper/output/scraped_data.json", "json")
-        print("Scraped data saved to src/scraper/output/scraped_data.json")
+    #if args.save_scraped:
+    scraper.save_results("src/scraper/data_analysis/scraped_data.json", "json")
+    print("Scraped data saved to src/scraper/data_analysis/scraped_data.json")
     
     print("\n=== PIPELINE COMPLETED SUCCESSFULLY ===")
 
@@ -310,7 +310,7 @@ def export_chunks_direct(chunks_data, format_type, collection_name):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     if format_type == 'json':
-        filename = f"src/scraper/output/chunks_{collection_name}_{timestamp}.json"
+        filename = f"src/scraper/data_analysis/chunks_{collection_name}_{timestamp}.json"
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(chunks_data, f, indent=2, ensure_ascii=False)
     
@@ -340,7 +340,7 @@ def export_chunks(chunks, format_type, collection_name):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     if format_type == 'json':
-        filename = f"src/scraper/output/chunks_{collection_name}_{timestamp}.json"
+        filename = f"src/scraper/data_analysis/chunks_{collection_name}_{timestamp}.json"
         chunks_data = []
         for doc, score in chunks:
             chunk_data = {

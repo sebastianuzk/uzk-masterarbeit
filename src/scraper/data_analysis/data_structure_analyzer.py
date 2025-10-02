@@ -22,8 +22,8 @@ from datetime import datetime
 import logging
 from pathlib import Path
 
-from .vector_store import VectorDocument, VectorStore
-from .batch_scraper import ScrapedContent
+from ..vector_store import VectorDocument, VectorStore
+from ..batch_scraper import ScrapedContent
 
 
 @dataclass
