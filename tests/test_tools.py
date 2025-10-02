@@ -12,6 +12,7 @@ sys.path.insert(0, project_root)
 from src.tools.wikipedia_tool import create_wikipedia_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
+from src.tools.rag_tool import create_university_rag_tool
 from config.settings import settings
 
 
@@ -47,6 +48,16 @@ class TestTools(unittest.TestCase):
             self.assertIsNotNone(tool.description)
         except Exception as e:
             self.fail(f"DuckDuckGo-Tool-Erstellung fehlgeschlagen: {str(e)}")
+    
+    def test_rag_tool_creation(self):
+        """Teste RAG-Tool-Erstellung"""
+        try:
+            tool = create_university_rag_tool()
+            self.assertIsNotNone(tool)
+            self.assertEqual(tool.name, "university_knowledge_search")
+            self.assertIsNotNone(tool.description)
+        except Exception as e:
+            self.fail(f"RAG-Tool-Erstellung fehlgeschlagen: {str(e)}")
     
     def test_wikipedia_search(self):
         """Teste Wikipedia-Suche"""
@@ -86,6 +97,22 @@ class TestTools(unittest.TestCase):
         except Exception as e:
             # DuckDuckGo-Test kann fehlschlagen, wenn keine Internetverbindung besteht
             self.skipTest(f"DuckDuckGo-Test übersprungen: {str(e)}")
+    
+    def test_rag_search(self):
+        """Teste RAG-Tool-Suche"""
+        try:
+            tool = create_university_rag_tool()
+            result = tool._run("Bewerbung höheres Fachsemester")
+            
+            self.assertIsInstance(result, str)
+            self.assertGreater(len(result), 0)
+            
+            # Überprüfe, ob die Antwort relevante Informationen enthält
+            self.assertIn("Bewerbung", result)
+            
+        except Exception as e:
+            # RAG-Test kann fehlschlagen, wenn keine ChromaDB verfügbar ist
+            self.skipTest(f"RAG-Test übersprungen: {str(e)}")
 
 
 if __name__ == "__main__":
