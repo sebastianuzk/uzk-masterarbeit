@@ -40,9 +40,18 @@ class UniversityRAGTool(BaseTool):
         try:
             # ChromaDB direkt importieren und verwenden
             import chromadb
+            from pathlib import Path
             
-            # Verbindung zur ChromaDB
-            client = chromadb.PersistentClient(path="src/scraper/output/vector_db")
+            # Verbindung zur ChromaDB mit absolutem Pfad
+            vector_db_path = Path("src/scraper/vector_db").resolve()
+            if not vector_db_path.exists():
+                return (
+                    f"❌ Universitäts-Wissensdatenbank nicht gefunden unter: {vector_db_path}. "
+                    f"Bitte stellen Sie sicher, dass die Daten vorher mit dem "
+                    f"Web-Scraper erfasst wurden."
+                )
+            
+            client = chromadb.PersistentClient(path=str(vector_db_path))
             
             # Alle verfügbaren Collections abrufen
             collections = client.list_collections()

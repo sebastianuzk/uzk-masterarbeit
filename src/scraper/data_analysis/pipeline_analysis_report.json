@@ -1,7 +1,7 @@
 {
-  "collection_name": "test_pfad_fix",
+  "collection_name": "test_sicherheitstest",
   "total_documents": 3,
-  "analysis_timestamp": "2025-10-02T12:53:37.049321",
+  "analysis_timestamp": "2025-10-02T12:59:07.280174",
   "fields": [
     {
       "field_name": "id",
@@ -9,8 +9,8 @@
       "presence_rate": 1.0,
       "unique_values": 3,
       "sample_values": [
-        "ab5a1aa8d657f2dd",
         "f60f097046d93990",
+        "ab5a1aa8d657f2dd",
         "ad8ff7e39ecf0d52"
       ],
       "avg_length": 16,
@@ -24,9 +24,9 @@
       "presence_rate": 1.0,
       "unique_values": 3,
       "sample_values": [
-        "n mit Beeinträchtigung\n\nHier finden alle Informationen zur Bewerbung an der Universität zu Köln.\n\nAlle Termine & Fristen\n\nKLIPS Online-Bewerbungsportal\n\nZugang für Bildungsinländer\n\n1. Fachsemester\n\n1. und höheres Fachsemester\n\nMaster\n\nHöhere Fachsemester\n\nZweithörer\n\nPJ Humanmedizin\n\nZweitstudium\n\nPromotion\n\nGasthörende\n\nStudierenorientierungsportal\n\nInternational Office der UzK\n\nFAQs\n\nStudieren mit Beeinträchtigung\n\nWichtigBitte geben Sie bei Rückfragen unbedingt Ihre Matrikel- oder Ihre Bewerber- /Antragsnummer an.\n\nBitte geben Sie bei Rückfragen unbedingt Ihre Matrikel- oder Ihre Bewerber- /Antragsnummer an.\n\nBesucheranschrift:Studierenden Service Center1. UntergeschossUniversitätsstraße 22a50937 Köln\n\nStudierenden Service Center1",
         "Rückfragen unbedingt Ihre Matrikel- oder Ihre Bewerber- /Antragsnummer an.\n\nBesucheranschrift:Studierenden Service Center1. UntergeschossUniversitätsstraße 22a50937 Köln\n\nStudierenden Service Center1. UntergeschossUniversitätsstraße 22a50937 Köln\n\nÖffnungszeiten:Montag bis Mittwoch: 09:30 bis 12:30 UhrMontag und Mittwoch: 13:30 bis 15:30 UhrDonnerstag und Freitag:  geschlossen für den Publikumsverkehr - erreichbar ausschließlich per E-Mail oder telefonisch\n\nMontag bis Mittwoch: 09:30 bis 12:30 Uhr\n\nMontag und Mittwoch: 13:30 bis 15:30 Uhr\n\nDonnerstag und Freitag:  geschlossen für den Publikumsverkehr - erreichbar ausschließlich per E-Mail oder telefonisch\n\nE-Mail: studsek@verw.uni-koeln.de\n\nTelefon: +49  221 470-1022Montag bis Freitag: 08:30 bis 12:30 UhrMontag, Mittwoch, Donnerstag: 13:30 bis 15:30 Uhr\n\nMontag bis Freitag: 08:30 bis 12:30 Uhr\n\nMontag, Mittwoch, Donnerstag: 13:30 bis 15:30 Uhr\n\nBitte beachten Sie:- Formulare oder Schreiben Dritter werden vom Studierendensekretariat grundsätzlich nicht ausgefüllt oder gestempelt.- Auskünfte zu personenbezogen Daten werden bei vorhandenen Daten nur unter Vorlage eines geeigneten Identitätsnachweis erteilt.- Anfragen zu Angelegenheiten von Bewerber/innen oder Studierenden durch Dritte werden ohne geeigneten Vorlage einer Vollmacht nicht beantwortet.\n\n- Formulare oder Schreiben Dritter werden vom Studierendensekretariat grundsätzlich nicht ausgefüllt oder gestempelt.\n\n- Auskünfte zu personenbezogen Daten werden bei vorhandenen Daten nur unter Vorlage eines geeigneten Identitätsnachweis erteilt.\n\n- Anfragen zu Angelegenheiten von Bewerber/innen oder Studierenden durch Dritte werden ohne geeigneten Vorlage einer Vollmacht nicht beantwortet.",
-        "Bitte aktivieren Sie Javascript in Ihrem Browser!\n\nBewerbungHier finden alle Informationen zur Bewerbung an der Universität zu Köln.Alle Termine & FristenKLIPS Online-BewerbungsportalZugang für BildungsinländerInformationen zur Bewerbung für...1. Fachsemester1. und höheres FachsemesterMasterHöhere FachsemesterZweithörerPJ HumanmedizinZweitstudiumPromotionGasthörendeInformationsportaleStudierenorientierungsportalInternational Office der UzKFAQsStudieren mit Beeinträchtigung\n\nHier finden alle Informationen zur Bewerbung an der Universität zu Köln.\n\nAlle Termine & Fristen\n\nKLIPS Online-Bewerbungsportal\n\nZugang für Bildungsinländer\n\n1. Fachsemester\n\n1"
+        "Bitte aktivieren Sie Javascript in Ihrem Browser!\n\nBewerbungHier finden alle Informationen zur Bewerbung an der Universität zu Köln.Alle Termine & FristenKLIPS Online-BewerbungsportalZugang für BildungsinländerInformationen zur Bewerbung für...1. Fachsemester1. und höheres FachsemesterMasterHöhere FachsemesterZweithörerPJ HumanmedizinZweitstudiumPromotionGasthörendeInformationsportaleStudierenorientierungsportalInternational Office der UzKFAQsStudieren mit Beeinträchtigung\n\nHier finden alle Informationen zur Bewerbung an der Universität zu Köln.\n\nAlle Termine & Fristen\n\nKLIPS Online-Bewerbungsportal\n\nZugang für Bildungsinländer\n\n1. Fachsemester\n\n1",
+        "n mit Beeinträchtigung\n\nHier finden alle Informationen zur Bewerbung an der Universität zu Köln.\n\nAlle Termine & Fristen\n\nKLIPS Online-Bewerbungsportal\n\nZugang für Bildungsinländer\n\n1. Fachsemester\n\n1. und höheres Fachsemester\n\nMaster\n\nHöhere Fachsemester\n\nZweithörer\n\nPJ Humanmedizin\n\nZweitstudium\n\nPromotion\n\nGasthörende\n\nStudierenorientierungsportal\n\nInternational Office der UzK\n\nFAQs\n\nStudieren mit Beeinträchtigung\n\nWichtigBitte geben Sie bei Rückfragen unbedingt Ihre Matrikel- oder Ihre Bewerber- /Antragsnummer an.\n\nBitte geben Sie bei Rückfragen unbedingt Ihre Matrikel- oder Ihre Bewerber- /Antragsnummer an.\n\nBesucheranschrift:Studierenden Service Center1. UntergeschossUniversitätsstraße 22a50937 Köln\n\nStudierenden Service Center1"
       ],
       "avg_length": 1037.3333333333333,
       "min_value": "Bitte aktivieren Sie Javascript in Ihrem Browser!\n\nBewerbungHier finden alle Informationen zur Bewerbung an der Universität zu Köln.Alle Termine & FristenKLIPS Online-BewerbungsportalZugang für BildungsinländerInformationen zur Bewerbung für...1. Fachsemester1. und höheres FachsemesterMasterHöhere FachsemesterZweithörerPJ HumanmedizinZweitstudiumPromotionGasthörendeInformationsportaleStudierenorientierungsportalInternational Office der UzKFAQsStudieren mit Beeinträchtigung\n\nHier finden alle Informationen zur Bewerbung an der Universität zu Köln.\n\nAlle Termine & Fristen\n\nKLIPS Online-Bewerbungsportal\n\nZugang für Bildungsinländer\n\n1. Fachsemester\n\n1",
@@ -75,6 +75,86 @@
       "null_count": 0
     },
     {
+      "field_name": "metadata_timestamp",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "2025-10-02T12:59:04.212118"
+      ],
+      "avg_length": 26,
+      "min_value": "2025-10-02T12:59:04.212118",
+      "max_value": "2025-10-02T12:59:04.212118",
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_total_chunks",
+      "data_type": "int",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        3
+      ],
+      "avg_length": null,
+      "min_value": 3.0,
+      "max_value": 3.0,
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_domain",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "verwaltung.uni-koeln.de"
+      ],
+      "avg_length": 23,
+      "min_value": "verwaltung.uni-koeln.de",
+      "max_value": "verwaltung.uni-koeln.de",
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_description",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        ""
+      ],
+      "avg_length": 0,
+      "min_value": "",
+      "max_value": "",
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_chunk_index",
+      "data_type": "int",
+      "presence_rate": 1.0,
+      "unique_values": 3,
+      "sample_values": [
+        0,
+        1,
+        2
+      ],
+      "avg_length": null,
+      "min_value": 0.0,
+      "max_value": 2.0,
+      "null_count": 0
+    },
+    {
+      "field_name": "metadata_title",
+      "data_type": "str",
+      "presence_rate": 1.0,
+      "unique_values": 1,
+      "sample_values": [
+        "Bewerbung"
+      ],
+      "avg_length": 9,
+      "min_value": "Bewerbung",
+      "max_value": "Bewerbung",
+      "null_count": 0
+    },
+    {
       "field_name": "metadata_source_url",
       "data_type": "str",
       "presence_rate": 1.0,
@@ -101,86 +181,6 @@
       "min_value": 61.0,
       "max_value": 201.0,
       "null_count": 0
-    },
-    {
-      "field_name": "metadata_description",
-      "data_type": "str",
-      "presence_rate": 1.0,
-      "unique_values": 1,
-      "sample_values": [
-        ""
-      ],
-      "avg_length": 0,
-      "min_value": "",
-      "max_value": "",
-      "null_count": 0
-    },
-    {
-      "field_name": "metadata_title",
-      "data_type": "str",
-      "presence_rate": 1.0,
-      "unique_values": 1,
-      "sample_values": [
-        "Bewerbung"
-      ],
-      "avg_length": 9,
-      "min_value": "Bewerbung",
-      "max_value": "Bewerbung",
-      "null_count": 0
-    },
-    {
-      "field_name": "metadata_chunk_index",
-      "data_type": "int",
-      "presence_rate": 1.0,
-      "unique_values": 3,
-      "sample_values": [
-        0,
-        1,
-        2
-      ],
-      "avg_length": null,
-      "min_value": 0.0,
-      "max_value": 2.0,
-      "null_count": 0
-    },
-    {
-      "field_name": "metadata_total_chunks",
-      "data_type": "int",
-      "presence_rate": 1.0,
-      "unique_values": 1,
-      "sample_values": [
-        3
-      ],
-      "avg_length": null,
-      "min_value": 3.0,
-      "max_value": 3.0,
-      "null_count": 0
-    },
-    {
-      "field_name": "metadata_timestamp",
-      "data_type": "str",
-      "presence_rate": 1.0,
-      "unique_values": 1,
-      "sample_values": [
-        "2025-10-02T12:53:33.893392"
-      ],
-      "avg_length": 26,
-      "min_value": "2025-10-02T12:53:33.893392",
-      "max_value": "2025-10-02T12:53:33.893392",
-      "null_count": 0
-    },
-    {
-      "field_name": "metadata_domain",
-      "data_type": "str",
-      "presence_rate": 1.0,
-      "unique_values": 1,
-      "sample_values": [
-        "verwaltung.uni-koeln.de"
-      ],
-      "avg_length": 23,
-      "min_value": "verwaltung.uni-koeln.de",
-      "max_value": "verwaltung.uni-koeln.de",
-      "null_count": 0
     }
   ],
   "data_quality_metrics": {
@@ -202,14 +202,14 @@
       "source_url": "https://verwaltung.uni-koeln.de/studsek/content/bewerbung/index_ger.html",
       "chunk_index": 1,
       "total_chunks": 3,
-      "metadata_source_url": "https://verwaltung.uni-koeln.de/studsek/content/bewerbung/index_ger.html",
-      "metadata_word_count": 82,
-      "metadata_description": "",
-      "metadata_title": "Bewerbung",
-      "metadata_chunk_index": 1,
+      "metadata_timestamp": "2025-10-02T12:59:04.212118",
       "metadata_total_chunks": 3,
-      "metadata_timestamp": "2025-10-02T12:53:33.893392",
-      "metadata_domain": "verwaltung.uni-koeln.de"
+      "metadata_domain": "verwaltung.uni-koeln.de",
+      "metadata_description": "",
+      "metadata_chunk_index": 1,
+      "metadata_title": "Bewerbung",
+      "metadata_source_url": "https://verwaltung.uni-koeln.de/studsek/content/bewerbung/index_ger.html",
+      "metadata_word_count": 82
     },
     {
       "id": "ad8ff7e39ecf0d52",
@@ -217,14 +217,14 @@
       "source_url": "https://verwaltung.uni-koeln.de/studsek/content/bewerbung/index_ger.html",
       "chunk_index": 2,
       "total_chunks": 3,
-      "metadata_description": "",
-      "metadata_chunk_index": 2,
-      "metadata_word_count": 201,
+      "metadata_timestamp": "2025-10-02T12:59:04.212118",
       "metadata_source_url": "https://verwaltung.uni-koeln.de/studsek/content/bewerbung/index_ger.html",
-      "metadata_total_chunks": 3,
-      "metadata_timestamp": "2025-10-02T12:53:33.893392",
+      "metadata_word_count": 201,
+      "metadata_domain": "verwaltung.uni-koeln.de",
       "metadata_title": "Bewerbung",
-      "metadata_domain": "verwaltung.uni-koeln.de"
+      "metadata_total_chunks": 3,
+      "metadata_description": "",
+      "metadata_chunk_index": 2
     },
     {
       "id": "f60f097046d93990",
@@ -232,14 +232,14 @@
       "source_url": "https://verwaltung.uni-koeln.de/studsek/content/bewerbung/index_ger.html",
       "chunk_index": 0,
       "total_chunks": 3,
-      "metadata_domain": "verwaltung.uni-koeln.de",
-      "metadata_chunk_index": 0,
-      "metadata_title": "Bewerbung",
       "metadata_description": "",
-      "metadata_word_count": 61,
+      "metadata_chunk_index": 0,
       "metadata_total_chunks": 3,
       "metadata_source_url": "https://verwaltung.uni-koeln.de/studsek/content/bewerbung/index_ger.html",
-      "metadata_timestamp": "2025-10-02T12:53:33.893392"
+      "metadata_word_count": 61,
+      "metadata_timestamp": "2025-10-02T12:59:04.212118",
+      "metadata_title": "Bewerbung",
+      "metadata_domain": "verwaltung.uni-koeln.de"
     }
   ]
 }
