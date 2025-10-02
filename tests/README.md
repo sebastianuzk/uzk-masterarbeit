@@ -18,28 +18,73 @@ Das Test-System besteht aus vier fokussierten Test-Dateien, die verschiedene Ber
 
 ## Testausführung
 
-### Direkte Ausführung (Empfohlen)
+### Wichtiger Hinweis zur Umgebung
 
-Führen Sie Tests direkt mit Python aus:
+Sie haben zwei Möglichkeiten, die Tests auszuführen:
+
+1. **Mit venv "Masterarbeit"** (Empfohlen) - Alle Abhängigkeiten sind in der venv installiert
+2. **Ohne venv** - Abhängigkeiten müssen global installiert sein
+
+### Option 1: Mit virtueller Umgebung "Masterarbeit" (Empfohlen)
+
+**Direkte Ausführung mit venv-Interpreter:**
 
 ```bash
 # Einzelne Komponenten testen
-python tests/test_tools.py
-python tests/test_agent.py  
-python tests/test_scraper.py
+& "Masterarbeit\Scripts\python.exe" tests\test_tools.py
+& "Masterarbeit\Scripts\python.exe" tests\test_agent.py  
+& "Masterarbeit\Scripts\python.exe" tests\test_scraper.py
 
 # Vollständiger System-Test
-python tests/test_system_.py
+& "Masterarbeit\Scripts\python.exe" tests\test_system_.py
 
 # Mit pytest (detaillierte Ausgabe)
-python -m pytest tests/test_tools.py -v
-python -m pytest tests/test_agent.py -v
-python -m pytest tests/test_scraper.py -v
-python -m pytest tests/test_system_.py -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_tools.py -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_agent.py -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_scraper.py -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_system_.py -v
 
 # Alle Tests ausführen
-python -m pytest tests/ -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\ -v
 ```
+
+**Oder venv aktivieren und dann kurze Commands verwenden:**
+
+```bash
+# Venv aktivieren
+Masterarbeit\Scripts\Activate.ps1
+
+# Dann normale Commands verwenden
+python tests\test_tools.py
+python tests\test_agent.py
+python -m pytest tests\test_agent.py -v
+python -m pytest tests\ -v
+```
+
+### Option 2: Ohne virtuelle Umgebung
+
+Falls Sie die Tests ohne venv ausführen möchten (stellen Sie sicher, dass alle Dependencies installiert sind):
+
+```bash
+# Einzelne Komponenten testen
+python tests\test_tools.py
+python tests\test_agent.py  
+python tests\test_scraper.py
+
+# Vollständiger System-Test
+python tests\test_system_.py
+
+# Mit pytest (detaillierte Ausgabe)
+python -m pytest tests\test_tools.py -v
+python -m pytest tests\test_agent.py -v
+python -m pytest tests\test_scraper.py -v
+python -m pytest tests\test_system_.py -v
+
+# Alle Tests ausführen
+python -m pytest tests\ -v
+```
+
+**Hinweis**: Bei Option 2 müssen alle Abhängigkeiten global installiert sein (`pip install -r requirements.txt`).
 
 ### VS Code Task verwenden
 
@@ -80,31 +125,61 @@ python -m pytest tests/ -v
 ## Test-Beispiele
 
 ### Beispiel 1: Entwicklung - Komponenten testen
+
+**Mit venv:**
 ```bash
 # Während der Entwicklung einzelne Komponenten testen
-python tests/test_tools.py
-python tests/test_agent.py
+& "Masterarbeit\Scripts\python.exe" tests\test_tools.py
+& "Masterarbeit\Scripts\python.exe" tests\test_agent.py
+```
+
+**Ohne venv:**
+```bash
+python tests\test_tools.py
+python tests\test_agent.py
 ```
 
 ### Beispiel 2: Feature-Testing
+
+**Mit venv:**
 ```bash
 # RAG-System spezifisch testen
-python -m pytest tests/test_tools.py::TestTools::test_rag_search -v -s
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_tools.py::TestTools::test_rag_search -v -s
 
 # Agent spezifisch testen
-python -m pytest tests/test_agent.py::TestReactAgent::test_simple_chat -v -s
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_agent.py::TestReactAgent::test_simple_chat -v -s
+```
+
+**Ohne venv:**
+```bash
+python -m pytest tests\test_tools.py::TestTools::test_rag_search -v -s
+python -m pytest tests\test_agent.py::TestReactAgent::test_simple_chat -v -s
 ```
 
 ### Beispiel 3: Integration vor Deployment
+
+**Mit venv:**
 ```bash
 # Vollständige System-Validation
-python tests/test_system_.py
+& "Masterarbeit\Scripts\python.exe" tests\test_system_.py
+```
+
+**Ohne venv:**
+```bash
+python tests\test_system_.py
 ```
 
 ### Beispiel 4: Alle Tests für Release
+
+**Mit venv:**
 ```bash
 # Komplett-Test aller Komponenten
-python -m pytest tests/ -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\ -v
+```
+
+**Ohne venv:**
+```bash
+python -m pytest tests\ -v
 ```
 
 ## Fehlerdiagnose
@@ -112,18 +187,34 @@ python -m pytest tests/ -v
 ### Häufige Probleme und Lösungen:
 
 #### 1. "Ollama-Server nicht erreichbar"
+
+**Mit venv:**
 ```bash
 # Lösung: Ollama starten
 ollama serve
 # Oder Agent-Tests überspringen:
-python -m pytest tests/test_tools.py tests/test_scraper.py -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_tools.py tests\test_scraper.py -v
+```
+
+**Ohne venv:**
+```bash
+ollama serve
+# Oder Agent-Tests überspringen:
+python -m pytest tests\test_tools.py tests\test_scraper.py -v
 ```
 
 #### 2. "ChromaDB nicht verfügbar"
+
+**Mit venv:**
 ```bash
 # Lösung: RAG-System initialisieren (siehe README.md)
 # Oder RAG-Tests überspringen:
-python -m pytest tests/test_tools.py -v -k "not rag"
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_tools.py -v -k "not rag"
+```
+
+**Ohne venv:**
+```bash
+python -m pytest tests\test_tools.py -v -k "not rag"
 ```
 
 #### 3. "Internet-Verbindung nicht verfügbar"
@@ -133,29 +224,56 @@ python -m pytest tests/test_tools.py -v -k "not rag"
 ```
 
 #### 4. Import-Fehler
+
+**Mit venv:**
 ```bash
 # Python-Pfad Problem, versuchen Sie:
-cd /path/to/uzk-masterarbeit
-python tests/test_tools.py
+cd D:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit
+& "Masterarbeit\Scripts\python.exe" tests\test_tools.py
+```
+
+**Ohne venv:**
+```bash
+# Abhängigkeiten installieren:
+pip install -r requirements.txt
+# Dann erneut versuchen:
+python tests\test_tools.py
 ```
 
 ## Entwickler-Workflow
 
 ### Empfohlene Test-Reihenfolge während der Entwicklung:
 
+**Mit venv "Masterarbeit":**
 ```bash
 # 1. Schnelle Komponenten-Tests (täglich)
-python tests/test_tools.py
-python tests/test_agent.py
+& "Masterarbeit\Scripts\python.exe" tests\test_tools.py
+& "Masterarbeit\Scripts\python.exe" tests\test_agent.py
 
 # 2. Scraper-Tests (bei Scraper-Änderungen)
-python tests/test_scraper.py
+& "Masterarbeit\Scripts\python.exe" tests\test_scraper.py
 
 # 3. System-Tests (vor wichtigen Commits)
-python tests/test_system_.py
+& "Masterarbeit\Scripts\python.exe" tests\test_system_.py
 
 # 4. Alle Tests (vor Release)
-python -m pytest tests/ -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\ -v
+```
+
+**Ohne venv:**
+```bash
+# 1. Schnelle Komponenten-Tests (täglich)
+python tests\test_tools.py
+python tests\test_agent.py
+
+# 2. Scraper-Tests (bei Scraper-Änderungen)
+python tests\test_scraper.py
+
+# 3. System-Tests (vor wichtigen Commits)
+python tests\test_system_.py
+
+# 4. Alle Tests (vor Release)
+python -m pytest tests\ -v
 ```
 
 ## Test-Ergebnisse interpretieren
