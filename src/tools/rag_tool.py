@@ -10,6 +10,12 @@ from typing import Optional
 from langchain.tools import BaseTool
 from pydantic import Field
 
+# Import hyperparameters
+try:
+    from src.scraper.hyperparameters import RAG_SEARCH_RESULTS
+except ImportError:
+    RAG_SEARCH_RESULTS = 5  # fallback
+
 
 class UniversityRAGTool(BaseTool):
     """
@@ -112,8 +118,8 @@ class UniversityRAGTool(BaseTool):
             # Sortiere alle Ergebnisse nach Relevanz (niedrigere Distance = höhere Relevanz)
             all_results.sort(key=lambda x: x['distance'])
             
-            # Nehme die besten Ergebnisse (maximal 5)
-            best_results = all_results[:5]
+            # Nehme die besten Ergebnisse (maximal aus Hyperparametern)
+            best_results = all_results[:RAG_SEARCH_RESULTS]
             
             # Ergebnisse formatieren
             formatted_results = []

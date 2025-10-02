@@ -25,6 +25,15 @@ import time
 from datetime import datetime
 import logging
 from pathlib import Path
+from .hyperparameters import (
+    SCRAPER_MAX_CONCURRENT_REQUESTS,
+    SCRAPER_REQUEST_DELAY,
+    SCRAPER_TIMEOUT,
+    SCRAPER_RETRY_ATTEMPTS,
+    SCRAPER_RETRY_DELAY,
+    SCRAPER_CONTENT_SELECTORS,
+    SCRAPER_EXCLUDE_SELECTORS
+)
 
 
 @dataclass
@@ -42,11 +51,11 @@ class ScrapedContent:
 @dataclass
 class ScrapingConfig:
     """Configuration for web scraping operations."""
-    max_concurrent_requests: int = 10
-    request_delay: float = 1.0
-    timeout: int = 30
-    retry_attempts: int = 3
-    retry_delay: float = 2.0
+    max_concurrent_requests: int = SCRAPER_MAX_CONCURRENT_REQUESTS
+    request_delay: float = SCRAPER_REQUEST_DELAY
+    timeout: int = SCRAPER_TIMEOUT
+    retry_attempts: int = SCRAPER_RETRY_ATTEMPTS
+    retry_delay: float = SCRAPER_RETRY_DELAY
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     headers: Dict[str, str] = None
     content_selectors: Dict[str, str] = None

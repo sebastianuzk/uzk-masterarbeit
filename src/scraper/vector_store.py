@@ -40,7 +40,54 @@ except ImportError:
 # OpenAI removed - using only open source alternatives
 OPENAI_AVAILABLE = False
 
-from .batch_scraper import ScrapedContent
+try:
+    from .scraped_content import ScrapedContent
+except ImportError:
+    # Fallback if scraped_content is not available
+    from dataclasses import dataclass
+    from typing import Dict, Any
+    
+    @dataclass
+    class ScrapedContent:
+        url: str
+        title: str
+        content: str
+        metadata: Dict[str, Any]
+        timestamp: str
+        success: bool
+
+# Import hyperparameters
+try:
+    from .hyperparameters import (
+        VECTOR_BACKEND,
+        VECTOR_PERSIST_DIRECTORY,
+        VECTOR_CHUNK_SIZE,
+        VECTOR_CHUNK_OVERLAP,
+        VECTOR_EMBEDDING_MODEL,
+        VECTOR_EMBEDDING_PROVIDER,
+        VECTOR_SIMILARITY_THRESHOLD,
+        VECTOR_MAX_RESULTS
+    )
+    HYPERPARAMETERS_AVAILABLE = True
+except ImportError:
+    HYPERPARAMETERS_AVAILABLE = False
+
+
+def get_default_vector_config():
+    """Get VectorStoreConfig with hyperparameters if available."""
+    if HYPERPARAMETERS_AVAILABLE:
+        return VectorStoreConfig(
+            backend=VECTOR_BACKEND,
+            persist_directory=VECTOR_PERSIST_DIRECTORY,
+            chunk_size=VECTOR_CHUNK_SIZE,
+            chunk_overlap=VECTOR_CHUNK_OVERLAP,
+            embedding_model=VECTOR_EMBEDDING_MODEL,
+            embedding_provider=VECTOR_EMBEDDING_PROVIDER,
+            similarity_threshold=VECTOR_SIMILARITY_THRESHOLD,
+            max_results=VECTOR_MAX_RESULTS
+        )
+    else:
+        return VectorStoreConfig()
 
 
 @dataclass
