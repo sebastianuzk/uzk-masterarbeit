@@ -159,6 +159,7 @@ cython_debug/
 .idea/
 
 # Project-specific files
+hyperparameter_documentation.md
 Notizen Pascal.txt
 *.txt.bak
 .env
