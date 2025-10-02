@@ -61,7 +61,7 @@ class VectorStoreConfig:
     # Database settings
     backend: str = "chromadb"  # chromadb, faiss (open source only)
     collection_name: str = "scraped_content"
-    persist_directory: str = "src/scraper/output/vector_db"
+    persist_directory: str = "src/scraper/vector_db"
     
     # Chunking settings
     chunk_size: int = 1500  # Larger chunks for better context
@@ -144,7 +144,10 @@ class ChromaDBBackend(VectorStoreBackend):
             raise ImportError("chromadb is required but not installed")
         
         self.config = config
-        self.client = chromadb.PersistentClient(path=config.persist_directory)
+        # Convert to absolute path to avoid ChromaDB creating files in wrong location
+        persist_path = Path(config.persist_directory).resolve()
+        persist_path.mkdir(parents=True, exist_ok=True)
+        self.client = chromadb.PersistentClient(path=str(persist_path))
         self.collection = self.client.get_or_create_collection(
             name=config.collection_name,
             metadata={"hnsw:space": "cosine"}

@@ -458,7 +458,7 @@ Examples:
                                  help='Vector database backend')
     vectorize_parser.add_argument('--collection', default='scraped_content',
                                  help='Collection name')
-    vectorize_parser.add_argument('--persist-dir', default='src/scraper/output/vector_db',
+    vectorize_parser.add_argument('--persist-dir', default='src/scraper/vector_db',
                                  help='Persistence directory')
     vectorize_parser.add_argument('--chunk-size', type=int, default=1000,
                                  help='Text chunk size')
@@ -475,7 +475,7 @@ Examples:
                                help='Collection name')
     analyze_parser.add_argument('--backend', choices=['chromadb', 'faiss'], default='chromadb',
                                help='Vector database backend')
-    analyze_parser.add_argument('--persist-dir', default='src/scraper/output/vector_db',
+    analyze_parser.add_argument('--persist-dir', default='src/scraper/vector_db',
                                help='Persistence directory')
     analyze_parser.add_argument('--sample-size', type=int,
                                help='Sample size for analysis')
@@ -490,7 +490,7 @@ Examples:
                                 help='Collection name')
     pipeline_parser.add_argument('--backend', choices=['chromadb', 'faiss'], default='chromadb',
                                 help='Vector database backend')
-    pipeline_parser.add_argument('--persist-dir', default='src/scraper/output/vector_db',
+    pipeline_parser.add_argument('--persist-dir', default='src/scraper/vector_db',
                                 help='Persistence directory')
     pipeline_parser.add_argument('--concurrent', '-c', type=int, default=10,
                                 help='Max concurrent requests')
@@ -519,7 +519,7 @@ Examples:
                               help='Collection name')
     search_parser.add_argument('--backend', choices=['chromadb', 'faiss'], default='chromadb',
                               help='Vector database backend')
-    search_parser.add_argument('--persist-dir', default='src/scraper/output/vector_db',
+    search_parser.add_argument('--persist-dir', default='src/scraper/vector_db',
                               help='Persistence directory')
     search_parser.add_argument('--results', '-k', type=int, default=5,
                               help='Number of results to return')
@@ -530,7 +530,7 @@ Examples:
                               help='Collection name')
     chunks_parser.add_argument('--backend', choices=['chromadb', 'faiss'], default='chromadb',
                               help='Vector database backend')
-    chunks_parser.add_argument('--persist-dir', default='src/scraper/output/vector_db',
+    chunks_parser.add_argument('--persist-dir', default='src/scraper/vector_db',
                               help='Persistence directory')
     chunks_parser.add_argument('--limit', type=int, default=None,
                               help='Limit number of chunks to show')
