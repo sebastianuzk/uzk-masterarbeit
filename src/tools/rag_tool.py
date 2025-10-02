@@ -44,51 +44,94 @@ class UniversityRAGTool(BaseTool):
             # Verbindung zur ChromaDB
             client = chromadb.PersistentClient(path="src/scraper/output/vector_db")
             
-            try:
-                collection = client.get_collection(name="verbesserte_suche")
-            except Exception:
+            # Alle verfügbaren Collections abrufen
+            collections = client.list_collections()
+            available_collections = [c.name for c in collections]
+            
+            if not available_collections:
                 return (
-                    "❌ Die Universitäts-Wissensdatenbank ist nicht verfügbar. "
-                    "Bitte stellen Sie sicher, dass die Daten vorher mit dem "
-                    "Web-Scraper erfasst wurden."
+                    f"❌ Keine Universitäts-Wissensdatenbank gefunden. "
+                    f"Bitte stellen Sie sicher, dass die Daten vorher mit dem "
+                    f"Web-Scraper erfasst wurden."
                 )
             
-            # Suche durchführen
-            results = collection.query(
-                query_texts=[query],
-                n_results=3
-            )
+            # Durchsuche alle verfügbaren Collections
+            all_results = []
+            searched_collections = []
             
-            if not results['documents'] or not results['documents'][0]:
+            for collection_name in available_collections:
+                try:
+                    collection = client.get_collection(name=collection_name)
+                    
+                    # Suche in dieser Collection durchführen
+                    results = collection.query(
+                        query_texts=[query],
+                        n_results=3
+                    )
+                    
+                    if results['documents'] and results['documents'][0]:
+                        # Ergebnisse mit Collection-Info erweitern
+                        documents = results['documents'][0]
+                        metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(documents)
+                        distances = results['distances'][0] if results['distances'] else [0] * len(documents)
+                        
+                        for doc, metadata, distance in zip(documents, metadatas, distances):
+                            # Erweitere Metadaten um Collection-Info
+                            enhanced_metadata = metadata.copy() if metadata else {}
+                            enhanced_metadata['collection'] = collection_name
+                            
+                            all_results.append({
+                                'document': doc,
+                                'metadata': enhanced_metadata,
+                                'distance': distance
+                            })
+                    
+                    searched_collections.append(collection_name)
+                    
+                except Exception as e:
+                    print(f"Warnung: Fehler beim Zugriff auf Collection '{collection_name}': {str(e)}")
+                    continue
+            
+            if not all_results:
                 return (
                     f"❌ Keine relevanten Informationen zu '{query}' gefunden. "
+                    f"Durchsuchte Collections: {searched_collections}. "
                     f"Möglicherweise sind noch keine Daten zu diesem Thema "
                     f"in der Universitäts-Wissensdatenbank verfügbar."
                 )
             
+            # Sortiere alle Ergebnisse nach Relevanz (niedrigere Distance = höhere Relevanz)
+            all_results.sort(key=lambda x: x['distance'])
+            
+            # Nehme die besten Ergebnisse (maximal 5)
+            best_results = all_results[:5]
+            
             # Ergebnisse formatieren
             formatted_results = []
-            documents = results['documents'][0]
-            metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(documents)
-            distances = results['distances'][0] if results['distances'] else [0] * len(documents)
             
-            for i, (doc, metadata, distance) in enumerate(zip(documents, metadatas, distances), 1):
+            for i, result in enumerate(best_results, 1):
+                doc = result['document']
+                metadata = result['metadata']
+                distance = result['distance']
+                
                 # Relevanz-Score (niedrigere Distance = höhere Relevanz)
                 relevance = max(0, 1 - distance)
                 
                 # Nur Ergebnisse mit ausreichender Relevanz
                 if relevance > 0.3:  # Schwellwert für deutsche Texte
                     source_info = ""
+                    collection_info = f" [aus: {metadata.get('collection', 'unbekannt')}]"
+                    
                     if metadata:
-                        source_url = metadata.get('source_url', '')
                         title = metadata.get('title', '')
+                        source_url = metadata.get('source_url', '')
                         if title:
                             source_info = f" (Quelle: {title})"
                         elif source_url:
                             source_info = f" (Quelle: {source_url})"
                     
                     formatted_results.append(
-                        f"📄 **Information {i}**{source_info}:\n{doc.strip()}"
+                        f"📄 **Information {i}**{source_info}{collection_info}:\n{doc.strip()}"
                     )
             
             if not formatted_results:
@@ -100,7 +143,8 @@ class UniversityRAGTool(BaseTool):
             
             # Antwort zusammenstellen
             response = (
-                f"🎓 **Informationen aus der Universitäts-Wissensdatenbank:**\n\n"
+                f"🎓 **Informationen aus der Universitäts-Wissensdatenbank** "
+                f"(durchsuchte Collections: {', '.join(searched_collections)}):\n\n"
                 + "\n\n".join(formatted_results)
             )
             
