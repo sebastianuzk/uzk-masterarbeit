@@ -74,6 +74,22 @@ class VectorStoreConfig:
     # Search settings
     similarity_threshold: float = 0.1  # Very low threshold for better recall
     max_results: int = 10
+    
+    def __post_init__(self):
+        """Ensure absolute paths and prevent deprecated paths."""
+        # Check for deprecated paths
+        if "output/vector_db" in self.persist_directory:
+            raise ValueError(
+                f"❌ DEPRECATED PATH DETECTED: '{self.persist_directory}'\n"
+                f"The old path 'output/vector_db' is no longer supported.\n"
+                f"Please use 'src/scraper/vector_db' instead."
+            )
+        
+        # Convert to absolute path
+        self.persist_directory = str(Path(self.persist_directory).resolve())
+        
+        # Ensure directory exists
+        Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
 
 
 class EmbeddingProvider(ABC):
@@ -144,10 +160,8 @@ class ChromaDBBackend(VectorStoreBackend):
             raise ImportError("chromadb is required but not installed")
         
         self.config = config
-        # Convert to absolute path to avoid ChromaDB creating files in wrong location
-        persist_path = Path(config.persist_directory).resolve()
-        persist_path.mkdir(parents=True, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=str(persist_path))
+        # Path is already absolute and validated in VectorStoreConfig.__post_init__
+        self.client = chromadb.PersistentClient(path=config.persist_directory)
         self.collection = self.client.get_or_create_collection(
             name=config.collection_name,
             metadata={"hnsw:space": "cosine"}
