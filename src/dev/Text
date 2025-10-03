@@ -1,0 +1,111 @@
+# --- requirements
+# pip install duckduckgo-search tldextract python-dateutil
+
+from typing import List, Dict, Any, Optional
+from duckduckgo_search import DDGS
+from dateutil import parser as dateparser
+import tldextract
+import time
+import urllib.parse as ul
+
+def normalize_url(u: str) -> str:
+    try:
+        p = ul.urlsplit(u)
+        # UTM/Tracking-Params weg
+        q = ul.parse_qsl(p.query, keep_blank_values=False)
+        q = [(k,v) for (k,v) in q if not k.lower().startswith("utm_")]
+        new_q = ul.urlencode(q, doseq=True)
+        return ul.urlunsplit((p.scheme, p.netloc, p.path, new_q, ""))  # Fragmente entfernen
+    except Exception:
+        return u
+
+def ddg_search_optimized(
+    query: str,
+    k: int = 8,
+    region: str = "de-de",
+    time_range: Optional[str] = None,      # "d","w","m","y"
+    safesearch: str = "moderate",          # "off","moderate","strict"
+    snippet_len: int = 300,
+    max_per_domain: int = 2
+) -> Dict[str, Any]:
+    """
+    Liefert strukturierte, deduplizierte, diversifizierte Ergebnisse mit Diagnostics.
+    """
+    t0 = time.time()
+    results: List[Dict[str, Any]] = []
+    errors = None
+
+    try:
+        with DDGS() as ddgs:
+            raw = ddgs.text(
+                query, region=region, safesearch=safesearch,
+                timelimit=time_range, max_results=max(20, k)  # hol erst mehr, filter danach
+            )
+            domain_count = {}
+            seen_urls = set()
+
+            for r in raw:
+                url = normalize_url(r.get("href") or "")
+                if not url or url in seen_urls:
+                    continue
+
+                domain = ".".join([p for p in tldextract.extract(url) if p]) or "n/a"
+                # Domain-Diversität
+                if domain_count.get(domain, 0) >= max_per_domain:
+                    continue
+
+                # Snippet kürzen
+                snippet = (r.get("body") or "").strip()
+                if len(snippet) > snippet_len:
+                    snippet = snippet[:snippet_len-1].rstrip() + "…"
+
+                # Datum leicht normalisieren
+                published_iso = None
+                if r.get("date"):
+                    try:
+                        published_iso = dateparser.parse(r["date"]).date().isoformat()
+                    except Exception:
+                        published_iso = None
+
+                results.append({
+                    "title": r.get("title") or "",
+                    "url": url,
+                    "snippet": snippet,
+                    "domain": domain,
+                    "published_at": published_iso,
+                    "source": r.get("source")
+                })
+                seen_urls.add(url)
+                domain_count[domain] = domain_count.get(domain, 0) + 1
+
+                if len(results) >= k:
+                    break
+
+    except Exception as e:
+        errors = {"code": "SEARCH_ERROR", "message": str(e)}
+
+    diagnostics = {
+        "query_used": query,
+        "region": region,
+        "time_range": time_range,
+        "safesearch": safesearch,
+        "k": k,
+        "latency_ms": int((time.time() - t0) * 1000),
+        "error": errors
+    }
+
+    return {
+        "results": results if not errors else [],
+        "diagnostics": diagnostics
+    }
+
+# --- Mini-Demo ---------------------------------------------------------------
+if __name__ == "__main__":
+    resp = ddg_search_optimized("Einschreibung Masterarbeit Universität zu Köln PDF", k=6, time_range="y")
+    if resp["diagnostics"]["error"]:
+        print("Fehler:", resp["diagnostics"]["error"])
+    else:
+        for i, r in enumerate(resp["results"], start=1):
+            print(f"{i}. {r['title']} [{r['domain']}] ({r['published_at'] or 'n/a'})")
+            print(f"   {r['url']}")
+            print(f"   {r['snippet']}\n")
