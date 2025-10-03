@@ -37,7 +37,7 @@ class DuckDuckGoTool(BaseTool):
     name: str = "duckduckgo_search"
     description: str = ("Nutze dieses Tool, um das Web zu durchsuchen, falls du keine relevanten Informationen zur Beantwortung der Frage findest. "
                         "Bei der Wiedergabe der Suchergebnisse solltest du die relevantesten und vertrauenswürdigsten Quellen priorisieren und immer einen Link zur Quelle angeben. "
-                        "Für Quellenangaben verwende bitte die vollständige URL. "
+                        "Für Quellenangaben verwende bitte die vollständige URLs aus den Suchergebnissen. "
                         "In jedem Fall musst du den Nutzer explizit darauf aufmerksam machen, dass die Informationen möglicherweise nicht von der Universität zu Köln stammen und nicht aktuell sind. "
     )
     args_schema: Type[BaseModel] = DuckDuckGoSearchInput

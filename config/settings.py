@@ -15,14 +15,14 @@ class Settings:
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
     
     # LLM Konfiguration
-    TEMPERATURE = 0.5
+    TEMPERATURE = 0.7
     
     # Agent Konfiguration
     MAX_ITERATIONS = 10
     MEMORY_SIZE = 100
     
     # Tool Konfiguration
-    ENABLE_WIKIPEDIA = False
+    ENABLE_WIKIPEDIA = True
     ENABLE_WEB_SCRAPER = True
     ENABLE_DUCKDUCKGO = True
     
