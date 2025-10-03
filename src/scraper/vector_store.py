@@ -329,12 +329,15 @@ class VectorStore:
             # Only ChromaDB supported in this simplified implementation
             raise ValueError(f"Only 'chromadb' backend is supported. Got: {self.config.backend}")
     
-    def add_scraped_content(self, scraped_content: List[ScrapedContent]) -> None:
+    def add_scraped_content(self, scraped_content: List[ScrapedContent]) -> int:
         """
         Add scraped content to the vector store.
         
         Args:
             scraped_content: List of ScrapedContent objects
+            
+        Returns:
+            Number of document chunks added
         """
         all_documents = []
         
@@ -379,7 +382,7 @@ class VectorStore:
         
         if not all_documents:
             self.logger.warning("No valid documents to add")
-            return
+            return 0
         
         # Generate embeddings in batches
         self._generate_embeddings(all_documents)
@@ -388,6 +391,8 @@ class VectorStore:
         self.backend.add_documents(all_documents)
         
         self.logger.info(f"Added {len(all_documents)} document chunks from {len(scraped_content)} sources")
+        
+        return len(all_documents)
     
     def _chunk_text(self, text: str) -> List[str]:
         """

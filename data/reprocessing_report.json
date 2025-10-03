@@ -1,0 +1,18 @@
+{
+  "timestamp": "2025-10-03T18:36:32.785461",
+  "input_file": "/mnt/c/Users/Sebastian/Desktop/Coding/uzk-masterarbeit/src/scraper/data_analysis/scraped_data.json",
+  "output_dir": "data",
+  "results": {
+    "total_pages": 50,
+    "successful_pages": 50,
+    "categories_found": 5,
+    "category_distribution": {
+      "services": 14,
+      "studium": 12,
+      "fakultaet": 12,
+      "forschung": 8,
+      "allgemein": 4
+    },
+    "total_documents_stored": 329
+  }
+}

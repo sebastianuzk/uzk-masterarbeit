@@ -49,10 +49,22 @@ class UniversityRAGTool(BaseTool):
             from pathlib import Path
             
             # Verbindung zur ChromaDB mit absolutem Pfad
-            vector_db_path = Path("src/scraper/vector_db").resolve()
-            if not vector_db_path.exists():
+            # Try both possible locations
+            vector_db_paths = [
+                Path("data/vector_db").resolve(),
+                Path("src/scraper/vector_db").resolve()
+            ]
+            
+            vector_db_path = None
+            for path in vector_db_paths:
+                if path.exists():
+                    vector_db_path = path
+                    break
+            
+            if vector_db_path is None:
                 return (
-                    f"❌ Universitäts-Wissensdatenbank nicht gefunden unter: {vector_db_path}. "
+                    f"❌ Universitäts-Wissensdatenbank nicht gefunden. "
+                    f"Gesucht in: {', '.join(str(p) for p in vector_db_paths)}. "
                     f"Bitte stellen Sie sicher, dass die Daten vorher mit dem "
                     f"Web-Scraper erfasst wurden."
                 )
@@ -133,7 +145,8 @@ class UniversityRAGTool(BaseTool):
                 relevance = max(0, 1 - distance)
                 
                 # Nur Ergebnisse mit ausreichender Relevanz
-                if relevance > 0.3:  # Schwellwert für deutsche Texte
+                # Niedrigerer Schwellwert für bessere Recall mit sentence-transformers
+                if relevance > 0.1:  # Angepasster Schwellwert
                     source_info = ""
                     collection_info = f" [aus: {metadata.get('collection', 'unbekannt')}]"
                     
