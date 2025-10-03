@@ -16,7 +16,7 @@ from src.tools.duckduckgo_tool import DuckDuckGoTool
 tool = DuckDuckGoTool()
 
 # Einfache Suche
-query = "Wie bewerbe ich mich auf die Universität Köln"
+query = "Wie bewerbe ich mich auf die Universität Köln?"
 result = tool._run(query)
 
 print(f"Suche: {query}")
