@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from urllib.parse import urlparse
 import re
 
-search_max_k: int = 5  # Maximale Anzahl der Suchergebnisse des DuckDuckGo-Tools
+search_max_k: int = 10  # Maximale Anzahl der Suchergebnisse des DuckDuckGo-Tools
 search_max_len: int = 300  # Maximale Länge des Snippets pro Suchergebnis
 search_max_tail: int = 200  # Maximale Verlängerung über min_len hinaus, um Satzende zu finden
 search_min_len: int = 200  # Minimale Länge des Snippets pro Suchergebnis
@@ -23,7 +23,7 @@ class WebSearchResult(BaseModel):
     
     def __str__(self) -> str:
         """String-Repräsentation des Suchergebnisses"""
-        return f"**{self.titel}**\n{self.snippet}\nDomain: {self.domain}\nQuelle: {self.url}\n"
+        return f"**{self.titel}**\n{self.snippet}\nDomain: {self.domain}\nURL: {self.url}\n"
 
 
 class DuckDuckGoSearchInput(BaseModel):
@@ -35,13 +35,11 @@ class DuckDuckGoTool(BaseTool):
     """Tool für DuckDuckGo Web Search"""
     
     name: str = "duckduckgo_search"
-    description: str = """Nutze dieses Tool, um das Web zu durchsuchen und aktuelle Informationen zur Universität zu Köln, oder einer ihrer Fakultäten zu finden. 
-    Achte dabei darauf, dass nur Seiten welche 'uni-koeln.de' enthalten tatsächlich hierfür relevant sein könnten.
-    
-    Falls du keine relevanten Informationen zur Beantwortung der Frage findest, kannst du auch andere Webseiten hinzuziehen.
-    Allerdings musst du in diesem Fall den Nutzer darauf aufmerksam machen, dass die Informationen nicht von der Universität zu Köln stammen.
-    
-    In jedem Fall sollen nur Informationen genutzt werden, welche tatsächlich zur Beantwortung der Frage relevant sind"""
+    description: str = ("Nutze dieses Tool, um das Web zu durchsuchen, falls du keine relevanten Informationen zur Beantwortung der Frage findest. "
+                        "Bei der Wiedergabe der Suchergebnisse solltest du die relevantesten und vertrauenswürdigsten Quellen priorisieren und immer einen Link zur Quelle angeben. "
+                        "Für Quellenangaben verwende bitte die vollständige URL. "
+                        "In jedem Fall musst du den Nutzer explizit darauf aufmerksam machen, dass die Informationen möglicherweise nicht von der Universität zu Köln stammen und nicht aktuell sind. "
+    )
     args_schema: Type[BaseModel] = DuckDuckGoSearchInput
     
     def _run(self, query: str) -> str:
@@ -61,12 +59,24 @@ class DuckDuckGoTool(BaseTool):
                 url = result.get('href', '')
                 snippet = result.get('body', '')
                 domain = result.get('domain', '')
+
+
+                # Extrahiere Domain aus URL
+                try:
+                    parsed_url = urlparse(url)
+                    if "uni-koeln" in parsed_url.netloc:
+                        domain = "Universität zu Köln"
+                    else:
+                        domain = "Externe Quelle: " + parsed_url.netloc
+                except:
+                    domain = 'Unknown Domain'
                 
+
                 # Begrenze Snippet-Länge
                 if len(snippet) > search_max_len:
                     snippet = trim_snippet(snippet)
 
-                
+                                                    
                 # Erstelle WebSearchResult-Objekt
                 search_result = WebSearchResult(
                     titel=titel,
