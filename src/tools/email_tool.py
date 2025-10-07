@@ -188,19 +188,3 @@ Diese E-Mail wurde automatisch an die Standard-E-Mail-Adresse gesendet."""
 def create_email_tool() -> EmailTool:
     """Factory-Funktion für das E-Mail-Tool"""
     return EmailTool()
-
-
-# Beispiel-Konfiguration für .env-Datei
-EXAMPLE_ENV_CONFIG = """
-# E-Mail-Konfiguration für Gmail
-SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=ihre-email@gmail.com
-SMTP_PASSWORD=ihr-app-passwort
-
-# E-Mail-Konfiguration für Outlook/Hotmail
-# SMTP_SERVER=smtp-mail.outlook.com
-# SMTP_PORT=587
-# SMTP_USERNAME=ihre-email@outlook.com
-# SMTP_PASSWORD=ihr-passwort
-"""
