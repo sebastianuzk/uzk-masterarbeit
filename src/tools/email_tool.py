@@ -24,11 +24,11 @@ class EmailTool(BaseTool):
     
     name: str = "send_email"
     description: str = """
-    Sendet eine E-Mail AUTOMATISCH an die vorkonfigurierte Standard-E-Mail-Adresse.
+    Sendet eine E-Mail an die vorkonfigurierte Standard-E-Mail-Adresse.
     
     🎯 WICHTIG: Ignoriert den recipient-Parameter komplett!
-    🎯 ALLE E-Mails gehen automatisch an die Standard-Adresse aus settings.py!
-    
+    🎯 ALLE E-Mails gehen an die Standard-Adresse aus settings.py!
+
     Verwendung:
     - recipient: WIRD IGNORIERT (E-Mail geht immer an Standard-Adresse)
     - subject: Betreff der E-Mail
@@ -188,19 +188,3 @@ Diese E-Mail wurde automatisch an die Standard-E-Mail-Adresse gesendet."""
 def create_email_tool() -> EmailTool:
     """Factory-Funktion für das E-Mail-Tool"""
     return EmailTool()
-
-
-# Beispiel-Konfiguration für .env-Datei
-EXAMPLE_ENV_CONFIG = """
-# E-Mail-Konfiguration für Gmail
-SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=ihre-email@gmail.com
-SMTP_PASSWORD=ihr-app-passwort
-
-# E-Mail-Konfiguration für Outlook/Hotmail
-# SMTP_SERVER=smtp-mail.outlook.com
-# SMTP_PORT=587
-# SMTP_USERNAME=ihre-email@outlook.com
-# SMTP_PASSWORD=ihr-passwort
-"""
