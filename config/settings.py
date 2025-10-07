@@ -26,6 +26,13 @@ class Settings:
     ENABLE_WEB_SCRAPER = True
     ENABLE_DUCKDUCKGO = True
     
+    # E-Mail-Konfiguration
+    SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "pascalmagerMA@gmail.com")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "dnav zltq fott virr")
+    DEFAULT_RECIPIENT = os.getenv("DEFAULT_RECIPIENT", "pascalmager@aol.com")
+    
     # Streamlit Konfiguration
     PAGE_TITLE = "Autonomer Chatbot Agent"
     PAGE_ICON = "🤖"
@@ -45,3 +52,22 @@ class Settings:
 
 # Globale Instanz
 settings = Settings()
+
+# Module-Level Exports für einfachen Import
+OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+OLLAMA_MODEL = settings.OLLAMA_MODEL
+TEMPERATURE = settings.TEMPERATURE
+MAX_ITERATIONS = settings.MAX_ITERATIONS
+MEMORY_SIZE = settings.MEMORY_SIZE
+ENABLE_WIKIPEDIA = settings.ENABLE_WIKIPEDIA
+ENABLE_WEB_SCRAPER = settings.ENABLE_WEB_SCRAPER
+ENABLE_DUCKDUCKGO = settings.ENABLE_DUCKDUCKGO
+PAGE_TITLE = settings.PAGE_TITLE
+PAGE_ICON = settings.PAGE_ICON
+
+# E-Mail-Konfiguration Exports
+SMTP_SERVER = settings.SMTP_SERVER
+SMTP_PORT = settings.SMTP_PORT
+SMTP_USERNAME = settings.SMTP_USERNAME
+SMTP_PASSWORD = settings.SMTP_PASSWORD
+DEFAULT_RECIPIENT = settings.DEFAULT_RECIPIENT
