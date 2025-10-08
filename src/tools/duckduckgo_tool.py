@@ -79,8 +79,7 @@ class DuckDuckGoTool(BaseTool):
                     titel=titel,
                     url=url,
                     snippet=snippet,
-                    domain=domain,
-                    safesearch="on"
+                    domain=domain
                 )
                 formatted_results.append(search_result)
             
