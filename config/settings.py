@@ -29,9 +29,9 @@ class Settings:
     # E-Mail-Konfiguration
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "pascalmagerMA@gmail.com")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "dnav zltq fott virr")
-    DEFAULT_RECIPIENT = os.getenv("DEFAULT_RECIPIENT", "pascalmager@aol.com")
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+    DEFAULT_RECIPIENT = os.getenv("DEFAULT_RECIPIENT")
     
     # Streamlit Konfiguration
     PAGE_TITLE = "Autonomer Chatbot Agent"
