@@ -65,7 +65,7 @@ class DuckDuckGoTool(BaseTool):
                         domain = "Universität zu Köln"
                     else:
                         domain = "Externe Quelle: " + parsed_url.netloc
-                except:
+                except Exception:
                     domain = 'Unknown Domain'
                 
 
