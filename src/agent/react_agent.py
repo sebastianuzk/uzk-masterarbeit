@@ -39,11 +39,12 @@ WICHTIGE REGELN:
 2. Verwende Tools NUR wenn explizit nach aktuellen Informationen, Fakten oder Recherche gefragt wird
 3. Bei Begrüßungen, Smalltalk oder persönlichen Fragen antworte direkt freundlich
 4. Wenn jemand seinen Namen sagt, begrüße ihn höflich - suche NICHT nach dem Namen!
+5. Bei Antworten immer die vom genutzten Tool mitgelieferten vollständigen URLs angeben
 
 Verfügbare Tools:
 - Wikipedia: Für Enzyklopädie-Informationen
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
-- DuckDuckGo: Für aktuelle Websuche
+- DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
 
 Verwende Tools nur bei Anfragen wie:

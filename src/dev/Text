@@ -1,0 +1,22 @@
+import re
+
+def clip_1000_plus_sentence(text: str, min_len: int = 1000, max_tail: int = 600) -> str:
+    """
+    Schneidet text so, dass er mindestens min_len umfasst und dann
+    bis zum nächsten Satzende (., !, ?, …) verlängert.
+    max_tail begrenzt, wie weit wir höchstens weiterlaufen, falls kein Satzende kommt.
+    """
+    if len(text) <= min_len:
+        return text
+
+    # Suche Satzende ab min_len
+    # Satzende-Heuristik: ., !, ?, …, ggf. gefolgt von schließenden Anführungszeichen/Klammern
+    # und dann Leerraum/Zeilenende.
+    pattern = re.compile(r'[\.!?…](?:[\'")\]]+)?(?=\s|$)')
+    m = pattern.search(text, pos=min_len, endpos=min(len(text), min_len + max_tail))
+
+    if m:
+        return text[:m.end()].rstrip()
+    else:
+        # Kein eindeutiges Satzende im erlaubten Fenster → hart begrenzen
+        return text[:min_len].rstrip() + "…"
