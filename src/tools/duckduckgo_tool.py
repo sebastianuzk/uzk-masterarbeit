@@ -58,9 +58,6 @@ class DuckDuckGoTool(BaseTool):
                 titel = result.get('title', 'Unbekannter Titel')
                 url = result.get('href', '')
                 snippet = result.get('body', '')
-                domain = result.get('domain', '')
-
-
                 # Extrahiere Domain aus URL
                 try:
                     parsed_url = urlparse(url)
