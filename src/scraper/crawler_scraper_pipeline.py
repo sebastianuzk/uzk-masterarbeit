@@ -22,7 +22,6 @@ from datetime import datetime
 from collections import defaultdict
 from urllib.parse import urlparse
 
-import hashlib
 from src.scraper.wiso_crawler import WisoCrawler, CrawlerConfig
 from src.scraper.batch_scraper import BatchScraper, ScrapingConfig, ScrapedContent
 from src.scraper.vector_store import VectorStore, VectorStoreConfig, VectorDocument
