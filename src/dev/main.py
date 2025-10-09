@@ -15,24 +15,18 @@ from src.tools.email_tool import create_email_tool
 # Tool erstellen und testen
 email_tool = create_email_tool()
 
-# Einfache E-Mail senden
-recipient = "test@example.com"
+# Einfache E-Mail senden (nur subject und body erforderlich)
 subject = "Test E-Mail vom Chatbot"
 body = "Dies ist eine Test-E-Mail vom autonomen Chatbot-System."
-sender_name = "Experimenteller Chatbot"
 
 result = email_tool._run(
-    recipient=recipient,
     subject=subject,
-    body=body,
-    sender_name=sender_name
+    body=body
 )
 
 print(f"E-Mail Test")
 print("-" * 40)
-print(f"Empfänger: {recipient}")
 print(f"Betreff: {subject}")
-print(f"Absender: {sender_name}")
 print("-" * 40)
 print("Ergebnis:")
 print(result)

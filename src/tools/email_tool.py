@@ -13,10 +13,8 @@ from config.settings import settings
 
 class EmailInput(BaseModel):
     """Input für das E-Mail-Tool"""
-    recipient: str = Field(description="E-Mail-Adresse des Empfängers (oder 'default' für Standard-E-Mail)")
     subject: str = Field(description="Betreff der E-Mail")
     body: str = Field(description="Inhalt der E-Mail")
-    sender_name: Optional[str] = Field(default=None, description="Name des Absenders (optional)")
 
 
 class EmailTool(BaseTool):
@@ -26,56 +24,54 @@ class EmailTool(BaseTool):
     description: str = """
     Sendet eine E-Mail an die vorkonfigurierte Standard-E-Mail-Adresse.
     
-    🎯 WICHTIG: Ignoriert den recipient-Parameter komplett!
-    🎯 ALLE E-Mails gehen an die Standard-Adresse aus settings.py!
+    🎯 Verwendet automatisch die konfigurierten Umgebungsvariablen:
+    🎯 Empfänger: DEFAULT_RECIPIENT aus .env
+    🎯 Absender: SMTP_USERNAME aus .env
 
     Verwendung:
-    - recipient: WIRD IGNORIERT (E-Mail geht immer an Standard-Adresse)
     - subject: Betreff der E-Mail
     - body: Inhalt der E-Mail
-    - sender_name: Optionaler Name des Absenders
     
-    Beispiel: send_email(recipient="ignoriert", subject="Test", body="Nachricht")
-    ➜ Geht automatisch an die Standard-E-Mail-Adresse!
+    Beispiel: send_email(subject="Test", body="Nachricht")
+    ➜ Geht automatisch an die konfigurierte Standard-E-Mail-Adresse!
     """
     args_schema: type = EmailInput
     
-    def _run(self, recipient: str, subject: str, body: str, sender_name: Optional[str] = None) -> str:
-        """Sende E-Mail über SMTP - IMMER an die Standard-E-Mail-Adresse"""
+    def _run(self, subject: str, body: str) -> str:
+        """Sende E-Mail über SMTP - Verwendet konfigurierte Umgebungsvariablen"""
         try:
-            # IMMER Standard-E-Mail verwenden, egal was als recipient übergeben wird
+            # Standard-E-Mail aus Konfiguration verwenden
             actual_recipient = settings.DEFAULT_RECIPIENT if settings and settings.DEFAULT_RECIPIENT else None
             
             if not actual_recipient:
-                return "❌ Keine Standard-E-Mail-Adresse in settings.py konfiguriert (DEFAULT_RECIPIENT)."
+                return "❌ Keine Standard-E-Mail-Adresse konfiguriert (DEFAULT_RECIPIENT in .env)."
             
             # Validiere Standard-E-Mail-Adresse
             if not self._is_valid_email(actual_recipient):
-                return f"❌ Ungültige Standard-E-Mail-Adresse in settings.py: {actual_recipient}"
+                return f"❌ Ungültige Standard-E-Mail-Adresse: {actual_recipient}"
             
             # Lade E-Mail-Konfiguration aus Settings
             smtp_config = self._get_smtp_config()
             if not smtp_config:
-                return "❌ E-Mail-Konfiguration unvollständig. Prüfen Sie Ihre settings.py."
+                return "❌ E-Mail-Konfiguration unvollständig. Prüfen Sie Ihre .env Datei."
             
             # Erweitere den E-Mail-Body um Systeminfo
             enhanced_body = f"""[AUTOMATISCHE E-MAIL VOM CHATBOT-SYSTEM]
 Empfänger: {actual_recipient}
-Gesendet von: {sender_name or 'Chatbot System'}
+Gesendet von: Autonomer Chatbot
 
 ---
 
 {body}
 
 ---
-Diese E-Mail wurde automatisch an die Standard-E-Mail-Adresse gesendet."""
+Diese E-Mail wurde automatisch vom Chatbot-System gesendet."""
             
             # Erstelle E-Mail-Nachricht
             message = self._create_email_message(
                 recipient=actual_recipient,
                 subject=f"[CHATBOT] {subject}",
                 body=enhanced_body,
-                sender_name=sender_name,
                 smtp_config=smtp_config
             )
             
@@ -83,7 +79,7 @@ Diese E-Mail wurde automatisch an die Standard-E-Mail-Adresse gesendet."""
             success = self._send_email(message, smtp_config)
             
             if success:
-                return f"✅ E-Mail erfolgreich gesendet an Standard-Adresse: {actual_recipient}"
+                return f"✅ E-Mail erfolgreich gesendet an: {actual_recipient}"
             else:
                 return f"❌ Fehler beim Senden der E-Mail an {actual_recipient}"
                 
@@ -119,7 +115,6 @@ Diese E-Mail wurde automatisch an die Standard-E-Mail-Adresse gesendet."""
         recipient: str, 
         subject: str, 
         body: str, 
-        sender_name: Optional[str],
         smtp_config: Dict[str, Any]
     ) -> MIMEMultipart:
         """Erstelle E-Mail-Nachricht"""
@@ -127,11 +122,7 @@ Diese E-Mail wurde automatisch an die Standard-E-Mail-Adresse gesendet."""
         
         # Setze Header
         sender_email = smtp_config["username"]
-        if sender_name:
-            message["From"] = f"{sender_name} <{sender_email}>"
-        else:
-            message["From"] = sender_email
-        
+        message["From"] = f"Autonomer Chatbot <{sender_email}>"
         message["To"] = recipient
         message["Subject"] = subject
         
