@@ -30,6 +30,13 @@ class Settings:
     PAGE_TITLE = "Autonomer Chatbot Agent"
     PAGE_ICON = "🤖"
     
+    # Process Engine Konfiguration
+    ENABLE_PROCESS_ENGINE = os.getenv("ENABLE_PROCESS_ENGINE", "false").lower() == "true"
+    CAMUNDA_ZEEBE_ADDRESS = os.getenv("CAMUNDA_ZEEBE_ADDRESS", "localhost:26500")
+    CAMUNDA_OPERATE_URL = os.getenv("CAMUNDA_OPERATE_URL", "http://localhost:8081")
+    CAMUNDA_TASKLIST_URL = os.getenv("CAMUNDA_TASKLIST_URL", "http://localhost:8082")
+    CAMUNDA_TENANT_ID = os.getenv("CAMUNDA_TENANT_ID", "university")
+    
     @classmethod
     def validate(cls):
         """Validiere erforderliche Konfigurationen"""

@@ -16,9 +16,12 @@ pytest>=7.0.0
 # Web Scraper Dependencies  
 aiohttp>=3.8.0
 chromadb>=0.4.0
-# faiss-cpu>=1.7.4  # Removed - not used in current implementation
 sentence-transformers>=2.2.0
-# numpy>=1.21.0  # Already included with sentence-transformers
 lxml>=4.9.0
-# pandas>=1.5.0  # Removed - not used in current implementation
 tqdm>=4.64.0
+
+# Process Engine Dependencies
+pyzeebe>=3.0.0
+camunda-external-task-client-python3>=3.0.0
+pydantic>=2.0.0
+dataclasses-json>=0.6.0

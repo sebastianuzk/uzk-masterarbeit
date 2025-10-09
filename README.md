@@ -1,53 +1,72 @@
-# Autonomous Chatbot Agent with RAG Web Scraper
+# Autonomous University Chatbot with Process Engine Integration
 
-Ein autonomer Chatbot-Agent basierend auf LangChain und LangGraph mit Open-Source-Komponenten und einem umfassenden Web-Scraping-System für RAG (Retrieval-Augmented Generation).
+Ein autonomer Universitäts-Chatbot mit intelligenter Workflow-Orchestrierung, basierend auf LangChain, LangGraph und Camunda Platform 8. Das System kombiniert Open-Source LLMs mit automatisierter Prozessbearbeitung für Universitätsdienste.
 
 ## Features
 
 ### Core Agent Features
-- **Autonomer Agent**: Verwendet LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
+- **Autonomer Agent**: LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
 - **Ollama Integration**: Vollständig Open-Source LLM ohne API-Kosten
-- **Multiple Tools**: Wikipedia-Suche, Web-Scraping und DuckDuckGo-Websuche
+- **Multiple Tools**: Wikipedia, Web-Scraping, DuckDuckGo-Suche und Universitäts-RAG
 - **Interactive Chat**: Streamlit-basierte Benutzeroberfläche
 - **Memory Management**: Persistente Konversationshistorie
-- **Tool Integration**: Modulare Tool-Architektur für einfache Erweiterung
 - **Privatsphäre**: Keine externen API-Aufrufe erforderlich
+
+### Process Engine Features (NEU!)
+- **BPMN Workflow Automation**: Automatische Bearbeitung von Universitätsprozessen
+- **Intelligent Data Extraction**: Erkennung relevanter Daten aus Unterhaltungen
+- **Camunda Platform 8 Integration**: Zeebe, Operate, Tasklist für komplette Orchestrierung
+- **University Workflows**: Zeugnis-Anfragen, Prüfungsanmeldungen, Notenabfragen
+- **Docker Compose Setup**: Ein-Klick-Deployment der kompletten Process Engine
+- **Real-time Monitoring**: Live-Überwachung von Workflow-Ausführungen
 
 ### RAG Web Scraper Features
 - **Batch Web Scraping**: Asynchrone Verarbeitung mehrerer URLs
-- **Vector Database Integration**: ChromaDB und FAISS Support
-- **Data Structure Analysis**: Dynamische Analyse und Optimierung der Datenstrukturen
+- **Vector Database Integration**: ChromaDB Support für Universitätsdaten
+- **Data Structure Analysis**: Dynamische Analyse und Optimierung
 - **Multiple Output Formats**: JSON, JSONL, Markdown, HTML Reports
 - **Quality Metrics**: Vollständigkeits- und Konsistenz-Analyse
-- **CLI Interface**: Vollständige Kommandozeilen-Steuerung
 
 ## Technologie-Stack
 
+### Core Technologies
 - **LLM**: Ollama (lokal gehostet)
 - **Framework**: LangChain + LangGraph
 - **UI**: Streamlit
+- **Datenbank**: ChromaDB für RAG
+
+### Process Engine Stack
+- **Workflow Engine**: Camunda Platform 8 (Zeebe)
+- **Process Monitoring**: Operate, Tasklist
+- **Data Storage**: Elasticsearch
+- **Containerization**: Docker + Docker Compose
+- **BPMN Generation**: Custom Python BPMN Generator
+
+### Integration Technologies
 - **Suche**: DuckDuckGo (privatsphärefreundlich)
-- **Wissen**: Wikipedia
-- **Vector Databases**: ChromaDB, FAISS
-- **Embeddings**: Sentence Transformers, OpenAI (optional)
+- **Wissen**: Wikipedia + Universitäts-RAG
 - **Web Scraping**: aiohttp, BeautifulSoup
+- **Embeddings**: Sentence Transformers
 
 ## Projektstruktur
 
 ```
 uzk-masterarbeit/
 ├── src/
-│   ├── __init__.py
 │   ├── agent/
-│   │   ├── __init__.py
-│   │   └── react_agent.py       # Hauptagent mit LangGraph
+│   │   └── react_agent.py           # Hauptagent mit Process Engine Integration
 │   ├── tools/
-│   │   ├── __init__.py
-│   │   ├── wikipedia_tool.py    # Wikipedia-Suche
-│   │   ├── web_scraper_tool.py  # Web-Scraping für Agent
-│   │   └── duckduckgo_tool.py   # DuckDuckGo-Suche
-│   ├── scraper/                 # RAG Web Scraper System
-│   │   ├── __init__.py
+│   │   ├── wikipedia_tool.py        # Wikipedia-Suche
+│   │   ├── web_scraper_tool.py      # Web-Scraping
+│   │   ├── duckduckgo_tool.py       # DuckDuckGo-Suche
+│   │   ├── rag_tool.py              # Universitäts-RAG
+│   │   └── process_engine_tool.py   # Process Engine Integration (NEU!)
+│   ├── process_engine/              # Process Engine System (NEU!)
+│   │   ├── data_extractor.py        # Intelligente Datenextraktion
+│   │   ├── process_client.py        # Camunda Platform 8 Client
+│   │   ├── workflow_manager.py      # Workflow-Orchestrierung
+│   │   └── bpmn_generator.py        # BPMN XML Generation
+│   ├── scraper/                     # RAG Web Scraper System
 │   │   ├── batch_scraper.py     # Batch-Webscraper
 │   │   ├── vector_store.py      # Vector Database Integration
 │   │   ├── data_structure_analyzer.py  # Datenstruktur-Analyse
@@ -140,14 +159,52 @@ ollama pull codellama         # Für Code-Aufgaben
 ollama pull llama3.2:1b       # Sehr klein, für schwache Hardware
 ```
 
-### Schritt 6: Konfiguration (Optional)
+### Schritt 6: Process Engine Setup (Optional aber empfohlen)
+
+#### Automatisches Setup:
 ```bash
-# Umgebungsvariablen-Datei erstellen
+# Komplettes Process Engine Setup (Docker + Camunda Platform 8)
+python setup_process_engine.py setup
+```
+
+#### Manuelles Setup:
+```bash
+# 1. Docker installieren (falls nicht vorhanden)
+# Windows: Docker Desktop von docker.com
+# Linux: sudo apt install docker.io docker-compose
+# Mac: Docker Desktop oder brew install docker docker-compose
+
+# 2. .env Datei erstellen
 cp .env.example .env
 
-# .env bearbeiten für benutzerdefinierte Einstellungen:
+# 3. .env bearbeiten und Process Engine aktivieren:
+# ENABLE_PROCESS_ENGINE=true
+# CAMUNDA_ZEEBE_ADDRESS=localhost:26500
+# CAMUNDA_OPERATE_URL=http://localhost:8081
+
+# 4. Camunda Platform 8 starten
+docker-compose up -d
+
+# 5. Warten bis Services bereit sind (ca. 2-3 Minuten)
+python setup_process_engine.py test
+```
+
+#### Process Engine URLs:
+- **Operate**: http://localhost:8081 (Workflow Monitoring)
+- **Tasklist**: http://localhost:8082 (Human Tasks)
+- **Elasticsearch**: http://localhost:9200 (Data Storage)
+- **Zeebe Monitoring**: http://localhost:9600 (Health Check)
+
+### Schritt 7: Konfiguration
+```bash
+# Umgebungsvariablen-Datei bearbeiten
+cp .env.example .env
+
+# Wichtige Einstellungen in .env:
 # OLLAMA_BASE_URL=http://localhost:11434
 # OLLAMA_MODEL=llama3.1
+# ENABLE_PROCESS_ENGINE=true
+# SMTP_SERVER=smtp.gmail.com  # Für E-Mail-Funktionen
 ```
 
 ### 🔧 Verfügbare Installationsoptionen

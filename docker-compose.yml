@@ -1,0 +1,146 @@
+# Camunda Platform 8 - Docker Compose für lokale Entwicklung
+# Startet Zeebe, Operate, Tasklist und Elasticsearch für vollständige Process Engine
+
+version: '3.8'
+
+services:
+  # Zeebe Broker - Core Process Engine
+  zeebe:
+    image: camunda/zeebe:8.6.0
+    container_name: zeebe
+    ports:
+      - "26500:26500"   # gRPC API
+      - "9600:9600"     # HTTP Monitoring
+    environment:
+      - ZEEBE_BROKER_EXPORTERS_ELASTICSEARCH_CLASSNAME=io.camunda.zeebe.exporter.ElasticsearchExporter
+      - ZEEBE_BROKER_EXPORTERS_ELASTICSEARCH_ARGS_URL=http://elasticsearch:9200
+      - ZEEBE_BROKER_EXPORTERS_ELASTICSEARCH_ARGS_BULK_SIZE=1
+      # Clustering disabled for single-node
+      - ZEEBE_BROKER_CLUSTER_CLUSTERNAME=zeebe-cluster
+      - ZEEBE_BROKER_CLUSTER_NODEID=0
+      - ZEEBE_BROKER_CLUSTER_PARTITIONSCOUNT=1
+      - ZEEBE_BROKER_CLUSTER_REPLICATIONFACTOR=1
+      - ZEEBE_BROKER_CLUSTER_CLUSTERSIZE=1
+    volumes:
+      - zeebe_data:/usr/local/zeebe/data
+    depends_on:
+      - elasticsearch
+    networks:
+      - camunda-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 10s bash -c ':> /dev/tcp/127.0.0.1/9600' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # Elasticsearch - Data Storage
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    container_name: elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - cluster.name=camunda-elasticsearch
+      - node.name=elasticsearch
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - camunda-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Operate - Process Instance Monitoring
+  operate:
+    image: camunda/operate:8.6.0
+    container_name: operate
+    ports:
+      - "8081:8080"
+    environment:
+      - CAMUNDA_OPERATE_ZEEBE_GATEWAYADDRESS=zeebe:26500
+      - CAMUNDA_OPERATE_ELASTICSEARCH_URL=http://elasticsearch:9200
+      - CAMUNDA_OPERATE_ZEEBEELASTICSEARCH_URL=http://elasticsearch:9200
+      - SPRING_PROFILES_ACTIVE=dev-data
+      # Authentication disabled for development
+      - CAMUNDA_OPERATE_IDENTITY_ISSUER_URL=http://localhost:18080/auth/realms/camunda-platform
+      - CAMUNDA_OPERATE_IDENTITY_ISSUER_BACKEND_URL=http://keycloak:8080/auth/realms/camunda-platform
+      - CAMUNDA_OPERATE_IDENTITY_CLIENT_ID=operate
+      - CAMUNDA_OPERATE_IDENTITY_CLIENT_SECRET=XALaRPl5qwTEItdwCMiPS62nVpKs7dL7
+      - CAMUNDA_OPERATE_IDENTITY_AUDIENCE=operate-api
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://localhost:18080/auth/realms/camunda-platform
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://localhost:18080/auth/realms/camunda-platform/protocol/openid_connect/certs
+      # Disable authentication for development
+      - CAMUNDA_OPERATE_IDENTITY_TYPE=
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      zeebe:
+        condition: service_healthy
+    networks:
+      - camunda-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Tasklist - Human Task Management
+  tasklist:
+    image: camunda/tasklist:8.6.0
+    container_name: tasklist
+    ports:
+      - "8082:8080"
+    environment:
+      - CAMUNDA_TASKLIST_ZEEBE_GATEWAYADDRESS=zeebe:26500
+      - CAMUNDA_TASKLIST_ELASTICSEARCH_URL=http://elasticsearch:9200
+      - CAMUNDA_TASKLIST_ZEEBEELASTICSEARCH_URL=http://elasticsearch:9200
+      - SPRING_PROFILES_ACTIVE=dev-data
+      # Authentication disabled for development
+      - CAMUNDA_TASKLIST_IDENTITY_ISSUER_URL=http://localhost:18080/auth/realms/camunda-platform
+      - CAMUNDA_TASKLIST_IDENTITY_ISSUER_BACKEND_URL=http://keycloak:8080/auth/realms/camunda-platform
+      - CAMUNDA_TASKLIST_IDENTITY_CLIENT_ID=tasklist
+      - CAMUNDA_TASKLIST_IDENTITY_CLIENT_SECRET=XALaRPl5qwTEItdwCMiPS62nVpKs7dL7
+      - CAMUNDA_TASKLIST_IDENTITY_AUDIENCE=tasklist-api
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://localhost:18080/auth/realms/camunda-platform
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://localhost:18080/auth/realms/camunda-platform/protocol/openid_connect/certs
+      # Disable authentication for development
+      - CAMUNDA_TASKLIST_IDENTITY_TYPE=
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      zeebe:
+        condition: service_healthy
+    networks:
+      - camunda-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  zeebe_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+
+networks:
+  camunda-network:
+    driver: bridge
+    name: camunda-network

@@ -12,14 +12,7 @@ from src.tools.wikipedia_tool import create_wikipedia_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
-
-# Process Engine Tool import mit Fehlerbehandlung
-try:
-    from src.tools.process_engine_tool import ProcessEngineTool
-    PROCESS_ENGINE_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Process Engine Tool nicht verfügbar: {e}")
-    PROCESS_ENGINE_AVAILABLE = False
+from src.tools.process_engine_tool import ProcessEngineTool
 
 
 class ReactAgent:
@@ -52,11 +45,23 @@ WICHTIGE REGELN:
 Verfügbare Tools:
 - Wikipedia: Für Enzyklopädie-Informationen
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
-- DuckDuckGo: Für Websuche
+- DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
 - Process Engine: Für automatische Bearbeitung von Universitätsprozessen
 
-Verwende Tools nur bei Anfragen nach Informationen oder Prozessen."""
+Verwende Tools nur bei Anfragen nach Informationen oder Prozessen.
+- "Was sind die neuesten Nachrichten über..."
+- "Suche mir Informationen über..."
+- "Was steht auf der Webseite..."
+- "Was benötige ich für die Bewerbung..." (nutze university_knowledge_search)
+- "Wie sind die Fristen für..." (nutze university_knowledge_search)
+- "Erkläre mir das Thema..."
+
+NICHT bei:
+- Begrüßungen ("Hallo", "Hi")
+- Persönlichen Vorstellungen ("Ich heiße...")
+- Smalltalk
+- Allgemeinen Fragen ohne Recherchebedarf"""
 
         # Erstelle React Agent mit System-Prompt
         self.agent = create_langgraph_agent(
@@ -81,23 +86,14 @@ Verwende Tools nur bei Anfragen nach Informationen oder Prozessen."""
         if settings.ENABLE_DUCKDUCKGO:
             tools.append(create_duckduckgo_tool())
         
-        # RAG-Tool für Universitäts-Wissensdatenbank
+        # RAG-Tool für Universitäts-Wissensdatenbank immer hinzufügen
         try:
             rag_tool = create_university_rag_tool()
             tools.append(rag_tool)
             print("✅ Universitäts-RAG-Tool erfolgreich geladen")
         except Exception as e:
-            print(f"⚠️ Universitäts-RAG-Tool konnte nicht geladen werden: {e}")
+            print(f"⚠️  Universitäts-RAG-Tool konnte nicht geladen werden: {e}")
             print("   → Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal")
-        
-        # Process Engine Tool
-        try:
-            process_tool = ProcessEngineTool()
-            tools.append(process_tool)
-            print("✅ Process Engine Tool erfolgreich geladen")
-        except Exception as e:
-            print(f"⚠️ Process Engine Tool konnte nicht geladen werden: {e}")
-            print("   → Automatisierte Universitätsprozesse sind eingeschränkt verfügbar")
         
         return tools
     

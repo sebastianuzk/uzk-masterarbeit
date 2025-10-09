@@ -1,0 +1,45 @@
+<?xml version="1.0" ?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="Definitions_exam-registration" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Zeebe Modeler" exporterVersion="0.11.0">
+  <bpmn:process id="exam-registration" name="Exam Registration Process" isExecutable="true">
+    <bpmn:startEvent id="start_exam_registration" name="Exam Registration Started"/>
+    <bpmn:serviceTask id="validate_registration_data" name="Validate Registration Data">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="validate-student-data"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="check_exam_eligibility" name="Check Exam Eligibility">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="database-query"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="eligibility_check" name="Eligible for Exam?"/>
+    <bpmn:serviceTask id="register_for_exam" name="Register Student for Exam">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="database-query"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="send_confirmation_email" name="Send Registration Confirmation">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="send-email"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="send_rejection_email" name="Send Rejection Notification">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="send-email"/>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="end_exam_registration" name="Exam Registration Completed"/>
+    <bpmn:sequenceFlow id="Flow_001" sourceRef="start_exam_registration" targetRef="validate_registration_data"/>
+    <bpmn:sequenceFlow id="Flow_002" sourceRef="validate_registration_data" targetRef="check_exam_eligibility"/>
+    <bpmn:sequenceFlow id="Flow_003" sourceRef="check_exam_eligibility" targetRef="eligibility_check"/>
+    <bpmn:sequenceFlow id="Flow_004" sourceRef="eligibility_check" targetRef="register_for_exam">
+      <bpmn:conditionExpression xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="bpmn:tFormalExpression">${eligible == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_005" sourceRef="eligibility_check" targetRef="send_rejection_email">
+      <bpmn:conditionExpression xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="bpmn:tFormalExpression">${eligible == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_006" sourceRef="register_for_exam" targetRef="send_confirmation_email"/>
+    <bpmn:sequenceFlow id="Flow_007" sourceRef="send_confirmation_email" targetRef="end_exam_registration"/>
+    <bpmn:sequenceFlow id="Flow_008" sourceRef="send_rejection_email" targetRef="end_exam_registration"/>
+  </bpmn:process>
+</bpmn:definitions>
