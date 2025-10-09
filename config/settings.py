@@ -29,9 +29,9 @@ class Settings:
     # E-Mail-Konfiguration
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "pascalmagerMA@gmail.com")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "dnav zltq fott virr")
-    DEFAULT_RECIPIENT = os.getenv("DEFAULT_RECIPIENT", "pascalmager@aol.com")
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    DEFAULT_RECIPIENT = os.getenv("DEFAULT_RECIPIENT", "")
     
     # Streamlit Konfiguration
     PAGE_TITLE = "Autonomer Chatbot Agent"
@@ -49,6 +49,16 @@ class Settings:
                 print("⚠️ Warnung: Ollama-Server nicht erreichbar. Stellen Sie sicher, dass Ollama läuft.")
         except requests.RequestException:
             print("⚠️ Warnung: Ollama-Server nicht erreichbar. Starten Sie Ollama mit: ollama serve")
+        
+        # E-Mail-Konfiguration prüfen
+        if not cls.SMTP_USERNAME or not cls.SMTP_PASSWORD:
+            print("⚠️ Warnung: E-Mail-Konfiguration unvollständig.")
+            print("   Bitte konfigurieren Sie SMTP_USERNAME und SMTP_PASSWORD in der .env Datei.")
+            print("   Siehe EMAIL_SETUP.md für Anweisungen.")
+        
+        if not cls.DEFAULT_RECIPIENT:
+            print("⚠️ Warnung: DEFAULT_RECIPIENT nicht konfiguriert.")
+            print("   E-Mails können nicht gesendet werden ohne Empfänger-Adresse.")
 
 # Globale Instanz
 settings = Settings()
