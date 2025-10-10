@@ -13,12 +13,12 @@ from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
 
-# Process Engine Tool import mit Fehlerbehandlung
+# Process Engine Tools import mit Fehlerbehandlung
 try:
-    from src.tools.process_engine_tool import ProcessEngineTool
+    from src.tools.process_engine_tool import get_process_engine_tools
     PROCESS_ENGINE_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️ Process Engine Tool nicht verfügbar: {e}")
+    print(f"⚠️ Process Engine Tools nicht verfügbar: {e}")
     PROCESS_ENGINE_AVAILABLE = False
 
 
@@ -48,17 +48,31 @@ WICHTIGE REGELN:
 3. Bei Begrüßungen, Smalltalk oder persönlichen Fragen antworte direkt freundlich
 4. Wenn jemand seinen Namen sagt, begrüße ihn höflich - suche NICHT nach dem Namen!
 5. Bei Antworten immer die vom genutzten Tool mitgelieferten vollständigen URLs angeben
+6. Verwende die Process Engine Tools für Bewerbungsprozesse
+7. Wenn du ein Tool benutzt, erkläre kurz WARUM du es benutzt
+8. Wenn dir Informationen fehlen, gib das offen zu - erfinde keine Informationen. Frage den Benutzer nach mehr Details.
 
 Verfügbare Tools:
 - Wikipedia: Für Enzyklopädie-Informationen
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
 - DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
+- Process Engine: Zum Starten von Prozessen an der Universität. Aktuell nur Bewerbung möglich (start_bewerbung_process, complete_angaben_pruefen, process_engine_status)
 
-WICHTIG: 
-- Sammle IMMER zuerst alle benötigten Daten (Matrikelnummer, E-Mail, Name) bevor du einen Workflow startest
+BEWERBUNGSPROZESS-MANAGEMENT:
+- start_bewerbung_process: Startet neuen Bewerbungsprozess mit Name + Studiengang
+- complete_angaben_pruefen: Schließt Angaben-Prüfung mit E-Mail ab
+- process_engine_status: Zeigt Status der Process Engine und laufende Prozesse
+- get_process_instance: Holt Details einer spezifischen Process Instance
+
+WICHTIG FÜR BEWERBUNGSPROZESSE: 
+- MEHRERE BEWERBUNGSPROZESSE sind gleichzeitig möglich - es gibt KEINE Beschränkung
+- Jeder Student kann mehrere Bewerbungen für verschiedene Studiengänge haben
+- Ein Bewerbungsprozess darf erst gestartet werden wenn alle benötigten Daten (Name, Studiengang) bekannt sind
+- Wenn dir die Daten fehlen, frage den Benutzer höflich danach
 - Erkläre dem Studierenden WAS der automatische Prozess machen wird
 - Informiere über den Status und nächste Schritte
+- Process Instance IDs sind wichtig für die Verfolgung von Prozessen
 
 Normale Recherche-Tools verwenden bei:
 - "Was sind die neuesten Nachrichten über..."
@@ -68,7 +82,7 @@ Normale Recherche-Tools verwenden bei:
 - "Wie sind die Fristen für..." (nutze university_knowledge_search)
 - "Erkläre mir das Thema..."
 
-NICHT bei:
+Keine Tools verwenden bei:
 - Begrüßungen ("Hallo", "Hi")
 - Persönlichen Vorstellungen ("Ich heiße...")
 - Smalltalk
@@ -106,14 +120,15 @@ NICHT bei:
             print(f"⚠️ Universitäts-RAG-Tool konnte nicht geladen werden: {e}")
             print("   → Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal")
         
-        # Process Engine Tool
-        try:
-            process_tool = ProcessEngineTool()
-            tools.append(process_tool)
-            print("✅ Process Engine Tool erfolgreich geladen")
-        except Exception as e:
-            print(f"⚠️ Process Engine Tool konnte nicht geladen werden: {e}")
-            print("   → Automatisierte Universitätsprozesse sind eingeschränkt verfügbar")
+        # Process Engine Tools
+        if PROCESS_ENGINE_AVAILABLE:
+            try:
+                process_tools = get_process_engine_tools()
+                tools.extend(process_tools)
+                print("✅ Process Engine Tools erfolgreich geladen")
+            except Exception as e:
+                print(f"⚠️ Process Engine Tools konnten nicht geladen werden: {e}")
+                print("   → Automatisierte Universitätsprozesse sind eingeschränkt verfügbar")
         
         return tools
     

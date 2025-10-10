@@ -1,9 +1,10 @@
 """
-Streamlit Web Interface für den Autonomen Chatbot-Agenten
+Streamlit Web Interface für den Autonomen Chatbot-Agenten mit CAMUNDA Process Engine
 """
 import streamlit as st
 import sys
 import os
+import logging
 
 # Füge das Projekt-Root-Verzeichnis zum Python-Pfad hinzu
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,9 +12,24 @@ sys.path.insert(0, project_root)
 
 from src.agent.react_agent import create_react_agent
 from config.settings import settings
+from src.process_engine.camunda_engine import start_engine, get_engine
+from src.process_engine.streamlit_interface import display_process_engine_interface
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 
 def initialize_session_state():
     """Initialisiere Session State"""
+    # Starte Process Engine automatisch
+    if 'process_engine_initialized' not in st.session_state:
+        try:
+            start_engine()
+            st.session_state.process_engine_initialized = True
+            st.session_state.process_engine_error = None
+        except Exception as e:
+            st.session_state.process_engine_initialized = False
+            st.session_state.process_engine_error = str(e)
+    
     if 'agent' not in st.session_state:
         try:
             st.session_state.agent = create_react_agent()
@@ -70,9 +86,26 @@ def display_chat_interface():
 def display_sidebar():
     """Zeige Seitenspalte mit Informationen"""
     with st.sidebar:
-        st.title("🔧 Einstellungen")
+        st.title("🔧 System Status")
+        
+        # Process Engine Status
+        st.subheader("🔄 Process Engine")
+        if st.session_state.get('process_engine_initialized', False):
+            engine = get_engine()
+            status = engine.get_status()
+            st.success("✅ CAMUNDA Engine aktiv")
+            st.write(f"Typ: {status['engine_type']}")
+            st.write(f"Aktive Prozesse: {status['active_instances']}")
+            st.write(f"Gesamt Prozesse: {status['total_instances']}")
+        else:
+            st.error("❌ Process Engine Fehler")
+            if 'process_engine_error' in st.session_state:
+                st.error(f"Fehler: {st.session_state.process_engine_error}")
+        
+        st.markdown("---")
         
         # Agent-Informationen
+        st.subheader("🤖 Chatbot Agent")
         if st.session_state.get('initialized', False):
             st.success("✅ Agent initialisiert")
             
@@ -100,6 +133,8 @@ def display_sidebar():
             if 'error' in st.session_state:
                 st.error(f"Fehler: {st.session_state.error}")
         
+        st.markdown("---")
+        
         # Konfiguration anzeigen
         st.subheader("⚙️ Konfiguration")
         st.write(f"Modell: {settings.OLLAMA_MODEL}")
@@ -107,7 +142,7 @@ def display_sidebar():
         st.write(f"Temperatur: {settings.TEMPERATURE}")
         
         # Ollama-Status
-        st.subheader("� Ollama Status")
+        st.subheader("🦙 Ollama Status")
         try:
             import requests
             response = requests.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3)
@@ -130,14 +165,14 @@ def main():
     """Hauptfunktion der Streamlit App"""
     # Seitenkonfiguration
     st.set_page_config(
-        page_title=settings.PAGE_TITLE,
+        page_title=settings.PAGE_TITLE + " + CAMUNDA",
         page_icon=settings.PAGE_ICON,
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
     # Titel
-    st.title(f"{settings.PAGE_ICON} {settings.PAGE_TITLE}")
+    st.title(f"{settings.PAGE_ICON} {settings.PAGE_TITLE} + CAMUNDA Process Engine")
     st.markdown("---")
     
     # Initialisiere Session State
@@ -146,6 +181,18 @@ def main():
     # Zeige Seitenspalte
     display_sidebar()
     
+    # Tabs für verschiedene Bereiche
+    tab1, tab2 = st.tabs(["💬 Chatbot", "🔄 Process Engine"])
+    
+    with tab1:
+        display_chat_tab()
+    
+    with tab2:
+        display_process_engine_interface()
+
+
+def display_chat_tab():
+    """Zeige Chat-Tab"""
     # Hauptinhalt
     if st.session_state.get('initialized', False):
         st.markdown("### 💬 Chat mit dem Agenten")
@@ -177,6 +224,7 @@ def main():
         - **Wikipedia**: Kostenlose Wissensdatenbank
         - **Web Scraper**: Direkter Zugriff auf Webseiten
         - **DuckDuckGo**: Privatsphärefreundliche Websuche
+        - **CAMUNDA Process Engine**: Lokale Prozessautomatisierung
         """)
 
 

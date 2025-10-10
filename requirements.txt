@@ -21,7 +21,9 @@ lxml>=4.9.0
 tqdm>=4.64.0
 
 # Process Engine Dependencies
-pyzeebe>=3.0.0
-camunda-external-task-client-python3>=3.0.0
+# pyzeebe>=3.0.0  # Optional - für echte Zeebe Engine
+# camunda-external-task-client-python3>=3.0.0  # Optional
+pandas>=2.0.0  # Für Streamlit Datenvisualisierung
+# sqlite3  # Built-in Python - für lokale Process Database
 pydantic>=2.0.0
 dataclasses-json>=0.6.0
