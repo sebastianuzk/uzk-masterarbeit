@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # Zeebe Broker
+  zeebe:
+    image: camunda/zeebe:latest
+    container_name: zeebe-broker
+    ports:
+      - "26500:26500"  # gRPC API
+    environment:
+      - ZEEBE_BROKER_GATEWAY_ENABLE=true
+      - ZEEBE_BROKER_NETWORK_HOST=0.0.0.0
+    volumes:
+      - zeebe-data:/usr/local/zeebe/data
+    networks:
+      - camunda-platform
+
+  # Camunda Operate (Web UI für Prozess-Monitoring)
+  operate:
+    image: camunda/operate:latest
+    container_name: camunda-operate
+    ports:
+      - "8081:8080"
+    environment:
+      - CAMUNDA_OPERATE_ZEEBE_GATEWAYADDRESS=zeebe:26500
+      - CAMUNDA_OPERATE_ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+      - zeebe
+      - elasticsearch
+    networks:
+      - camunda-platform
+
+  # Camunda Tasklist (Web UI für User Tasks)
+  tasklist:
+    image: camunda/tasklist:latest
+    container_name: camunda-tasklist
+    ports:
+      - "8082:8080"
+    environment:
+      - CAMUNDA_TASKLIST_ZEEBE_GATEWAYADDRESS=zeebe:26500
+      - CAMUNDA_TASKLIST_ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+      - zeebe
+      - elasticsearch
+    networks:
+      - camunda-platform
+
+  # Elasticsearch (für Operate und Tasklist)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    container_name: elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - camunda-platform
+
+volumes:
+  zeebe-data:
+  elasticsearch-data:
+
+networks:
+  camunda-platform:
