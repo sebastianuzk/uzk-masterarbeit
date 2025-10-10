@@ -12,43 +12,6 @@ sys.path.insert(0, project_root)
 from src.agent.react_agent import create_react_agent
 from config.settings import settings
 
-# Process Engine automatisch starten
-from src.process_engine.service import auto_start_process_engine, get_process_engine_service
-auto_start_process_engine()
-
-
-def display_process_engine_status():
-    """Zeigt Process Engine Status in der Sidebar"""
-    st.sidebar.markdown("### 🏢 Process Engine")
-    
-    try:
-        service = get_process_engine_service()
-        status = service.get_status()
-        
-        if status["is_initializing"]:
-            st.sidebar.warning("🔄 Initialisierung läuft...")
-        elif status["initialization_complete"]:
-            if status.get("mock_mode", True):
-                st.sidebar.info("⚙️ Mock-Modus aktiv")
-                st.sidebar.caption("Für echte Camunda: `docker-compose up -d`")
-            else:
-                st.sidebar.success("✅ Camunda aktiv")
-                st.sidebar.caption(f"Gateway: {status.get('gateway_address', 'N/A')}")
-            
-            # Aktive Prozesse anzeigen
-            active_count = status.get("active_processes", 0)
-            if active_count > 0:
-                st.sidebar.metric("Aktive Prozesse", active_count)
-        elif status["initialization_error"]:
-            st.sidebar.error("❌ Initialisierung fehlgeschlagen")
-            st.sidebar.caption(status["initialization_error"])
-        else:
-            st.sidebar.warning("⏳ Warte auf Initialisierung...")
-            
-    except Exception as e:
-        st.sidebar.error(f"❌ Status-Fehler: {e}")
-
-
 def initialize_session_state():
     """Initialisiere Session State"""
     if 'agent' not in st.session_state:
@@ -179,10 +142,7 @@ def main():
     
     # Initialisiere Session State
     initialize_session_state()
-    
-    # Process Engine Status anzeigen
-    display_process_engine_status()
-    
+      
     # Zeige Seitenspalte
     display_sidebar()
     
