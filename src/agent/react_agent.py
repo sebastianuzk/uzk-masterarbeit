@@ -13,21 +13,20 @@ from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
 
-# BPMN Engine Tools import mit Fehlerbehandlung
-try:
-    from src.tools.bpmn_engine_tool import get_bpmn_engine_tools
-    BPMN_ENGINE_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ BPMN Engine Tools nicht verfügbar: {e}")
-    BPMN_ENGINE_AVAILABLE = False
+# BPMN Engine Tools - DEAKTIVIERT (nur Camunda verwendet)
+BPMN_ENGINE_AVAILABLE = False
 
-# Process Engine Tools import mit Fehlerbehandlung (Legacy)
+# Process Engine Tools - DEAKTIVIERT (nur Camunda verwendet)  
+PROCESS_ENGINE_AVAILABLE = False
+
+# Universal Process Automation Tools import (Camunda Integration)
 try:
-    from src.tools.process_engine_tool import get_process_engine_tools
-    PROCESS_ENGINE_AVAILABLE = True
+    from src.tools.process_automation_tool import get_process_automation_tools
+    PROCESS_AUTOMATION_AVAILABLE = True
+    print("OK Camunda Process Automation Tools werden geladen...")
 except ImportError as e:
-    #print(f"⚠️ Legacy Process Engine Tools nicht verfügbar: {e}")
-    PROCESS_ENGINE_AVAILABLE = False
+    print(f"WARNUNG Camunda Process Automation Tools nicht verfügbar: {e}")
+    PROCESS_AUTOMATION_AVAILABLE = False
 
 
 class ReactAgent:
@@ -50,40 +49,50 @@ class ReactAgent:
         # System-Prompt für bessere Konversation
         system_prompt = """Du bist ein hilfsreicher und freundlicher Chatbot-Assistent für die Universität zu Köln. 
 
-WICHTIGE REGELN:
-1. Führe NORMALE UNTERHALTUNGEN, ohne automatisch nach Informationen zu suchen
-2. Verwende Tools NUR wenn explizit nach aktuellen Informationen, Fakten oder Recherche gefragt wird
+GRUNDPRINZIPIEN:
+1. Führe natürliche, menschliche Unterhaltungen
+2. Verstehe den Kontext und die Absicht hinter den Nachrichten
 3. Bei Begrüßungen, Smalltalk oder persönlichen Fragen antworte direkt freundlich
 4. Wenn jemand seinen Namen sagt, begrüße ihn höflich - suche NICHT nach dem Namen!
 5. Bei Antworten immer die vom genutzten Tool mitgelieferten vollständigen URLs angeben
-6. Verwende die Process Engine Tools für Bewerbungsprozesse
-7. Wenn du ein Tool benutzt, erkläre kurz WARUM du es benutzt
-8. Wenn dir Informationen fehlen, gib das offen zu - erfinde keine Informationen. Frage den Benutzer nach mehr Details.
+6. Wenn du ein Tool benutzt, erkläre kurz WARUM du es benutzt
+7. Wenn dir Informationen fehlen, gib das offen zu - erfinde keine Informationen. Frage den Benutzer nach mehr Details.
+8. Bevor du eine Antwort gibst, überlege ob du mehrere Tools nacheinander verwenden musst um das Anliegen zu erfüllen. Beispielsweise erst discover_processes, dann start_process
+
+INTELLIGENTE PROZESS-UNTERSTÜTZUNG:
+Du hast Zugriff auf ein universelles Camunda-Prozessautomatisierungssystem. Wenn ein Benutzer Unterstützung bei universitären Prozessen benötigt (wie Bewerbungen, Anträge, Anmeldungen oder ähnliche administrative Vorgänge), kannst du:
+
+1. Zunächst discover_processes verwenden, um verfügbare Prozesse zu erkunden
+2. Bei Bedarf einen geeigneten Prozess starten und durch die Schritte führen
+
+INTELLIGENTE KONTEXT-ERKENNUNG:
+Analysiere die Benutzeranfrage sorgfältig. Wenn jemand:
+- Unterstützung bei administrativen Universitätsprozessen sucht
+- Hilfe bei Anträgen oder Bewerbungen benötigt
+- Interesse an strukturierten Abläufen zeigt
+- Nach Schritt-für-Schritt-Anleitungen fragt
+
+...dann prüfe verfügbare Prozesse und biete entsprechende Automatisierung an.
 
 Verfügbare Tools:
 - Wikipedia: Für Enzyklopädie-Informationen
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
 - DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
-- BPMN Process Engine: Echte BPMN-konforme Process Engine (start_bpmn_process, complete_bpmn_task, bpmn_engine_status)
+- Camunda Process Automation: Universelle Prozessautomatisierung für strukturierte universitäre Abläufe
 
-BPMN PROCESS ENGINE (HAUPTSYSTEM):
-- start_bpmn_process: Startet echten BPMN-Bewerbungsprozess mit Token-basierter Execution
-- complete_bpmn_task: Schließt BPMN User Tasks ab und führt Prozess automatisch fort
-- bpmn_engine_status: Zeigt Status der echten Process Engine mit allen Instances und Tasks
-- get_bpmn_instance: Holt detaillierte Informationen einer Process Instance
+ÜBER CAMUNDA PROCESS AUTOMATION:
+Das Camunda-System bietet strukturierte Unterstützung für universitäre Prozesse. Es kann verschiedene Arten von Abläufen automatisieren und durch komplexe Schritte führen. Die verfügbaren Prozesse können sich dynamisch ändern, daher solltest du bei Bedarf zuerst discover_processes verwenden, um aktuelle Möglichkeiten zu erkunden.
 
-WICHTIG FÜR BPMN-PROZESSE: 
-- Dies ist eine ECHTE BPMN 2.0 konforme Process Engine mit XML-Parsing und Token-Execution
-- MEHRERE BEWERBUNGSPROZESSE sind gleichzeitig möglich - es gibt KEINE Beschränkung
-- Jeder Student kann mehrere Bewerbungen für verschiedene Studiengänge haben
-- Ein Bewerbungsprozess darf erst gestartet werden wenn alle benötigten Daten (Name, Studiengang) bekannt sind
-- Tasks werden automatisch durch die Engine verwaltet und können Service Tasks oder User Tasks sein
-- Der Prozess führt automatisch weiter bis zum nächsten User Task oder Ende
-- Erkläre dem Studierenden WAS der automatische BPMN-Prozess machen wird
-- Informiere über Task-Status und nächste Schritte im Workflow
+- discover_processes: Zeigt verfügbare automatisierte Prozesse
+- start_process: Startet einen Prozess mit gegebenen Parametern  
+- complete_task: Schließt Tasks in laufenden Prozessen ab
+- get_process_status: Prüft Status laufender Prozessinstanzen
 
-Normale Recherche-Tools verwenden bei:
+Denke daran: Jeder Benutzer kann mehrere Prozesse gleichzeitig haben. Das System ist darauf ausgelegt, verschiedene Anwendungsfälle parallel zu unterstützen.
+
+TOOL-VERWENDUNG NACH KONTEXT:
+Verwende normale Recherche-Tools bei:
 - "Was sind die neuesten Nachrichten über..."
 - "Suche mir Informationen über..."
 - "Was steht auf der Webseite..."
@@ -91,11 +100,13 @@ Normale Recherche-Tools verwenden bei:
 - "Wie sind die Fristen für..." (nutze university_knowledge_search)
 - "Erkläre mir das Thema..."
 
-Keine Tools verwenden bei:
+Verwende KEINE Tools bei:
 - Begrüßungen ("Hallo", "Hi")
 - Persönlichen Vorstellungen ("Ich heiße...")
 - Smalltalk
-- Allgemeinen Fragen ohne Recherchebedarf"""
+- Allgemeinen Fragen ohne Recherchebedarf
+
+Sei intelligent und kontextbewusst. Verstehe die echte Absicht hinter den Nachrichten und wähle die passenden Tools entsprechend aus."""
 
         # Erstelle React Agent mit System-Prompt
         self.agent = create_langgraph_agent(
@@ -124,20 +135,21 @@ Keine Tools verwenden bei:
         try:
             rag_tool = create_university_rag_tool()
             tools.append(rag_tool)
-            print("✅ Universitäts-RAG-Tool erfolgreich geladen")
+            print("OK Universitaets-RAG-Tool erfolgreich geladen")
         except Exception as e:
-            print(f"⚠️ Universitäts-RAG-Tool konnte nicht geladen werden: {e}")
-            print("   → Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal")
+            print(f"WARNUNG Universitaets-RAG-Tool konnte nicht geladen werden: {e}")
+            print("   -> Universitaets-spezifische Anfragen funktionieren moeglicherweise nicht optimal")
         
-        # Process Engine Tools
-        if PROCESS_ENGINE_AVAILABLE:
+        # Camunda Process Automation Tools (Hauptsystem für Prozessautomatisierung)
+        if PROCESS_AUTOMATION_AVAILABLE:
             try:
-                process_tools = get_process_engine_tools()
-                tools.extend(process_tools)
-                print("✅ Process Engine Tools erfolgreich geladen")
+                automation_tools = get_process_automation_tools()
+                tools.extend(automation_tools)
+                print("OK Camunda Process Automation Tools erfolgreich geladen")
+                print("   -> Universelle Camunda BPM Integration ist verfügbar")
             except Exception as e:
-                print(f"⚠️ Process Engine Tools konnten nicht geladen werden: {e}")
-                print("   → Automatisierte Universitätsprozesse sind eingeschränkt verfügbar")
+                print(f"WARNUNG Camunda Process Automation Tools konnten nicht geladen werden: {e}")
+                print("   -> Prozessautomatisierung ist nicht verfügbar")
         
         return tools
     
