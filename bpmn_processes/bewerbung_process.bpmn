@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_1"
+                  targetNamespace="http://bpmn.io/schema/bpmn"
+                  exporter="bpmn-js"
+                  exporterVersion="17.7.1">
+  
+  <bpmn:process id="bewerbung_process" name="Universitäts-Bewerbungsprozess" isExecutable="true">
+    
+    <!-- Start Event -->
+    <bpmn:startEvent id="start_bewerbung" name="Bewerbung eingegangen">
+      <bpmn:outgoing>flow_start_to_pruefen</bpmn:outgoing>
+    </bpmn:startEvent>
+    
+    <!-- User Task: Angaben prüfen -->
+    <bpmn:userTask id="angaben_pruefen" name="Angaben prüfen" camunda:assignee="sachbearbeiter">
+      <bpmn:incoming>flow_start_to_pruefen</bpmn:incoming>
+      <bpmn:outgoing>flow_pruefen_to_gateway</bpmn:outgoing>
+    </bpmn:userTask>
+    
+    <!-- Exclusive Gateway: Entscheidung -->
+    <bpmn:exclusiveGateway id="entscheidung_gateway" name="Bewerbung gültig?">
+      <bpmn:incoming>flow_pruefen_to_gateway</bpmn:incoming>
+      <bpmn:outgoing>flow_gateway_to_akzeptiert</bpmn:outgoing>
+      <bpmn:outgoing>flow_gateway_to_abgelehnt</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    
+    <!-- Service Task: Akzeptierung verarbeiten -->
+    <bpmn:serviceTask id="bewerbung_akzeptiert" name="Bewerbung akzeptieren" camunda:class="AcceptApplicationService">
+      <bpmn:incoming>flow_gateway_to_akzeptiert</bpmn:incoming>
+      <bpmn:outgoing>flow_akzeptiert_to_end</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- User Task: Ablehnung begründen -->
+    <bpmn:userTask id="bewerbung_ablehnen" name="Ablehnung begründen" camunda:assignee="sachbearbeiter">
+      <bpmn:incoming>flow_gateway_to_abgelehnt</bpmn:incoming>
+      <bpmn:outgoing>flow_abgelehnt_to_end</bpmn:outgoing>
+    </bpmn:userTask>
+    
+    <!-- End Events -->
+    <bpmn:endEvent id="end_akzeptiert" name="Bewerbung akzeptiert">
+      <bpmn:incoming>flow_akzeptiert_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+    
+    <bpmn:endEvent id="end_abgelehnt" name="Bewerbung abgelehnt">
+      <bpmn:incoming>flow_abgelehnt_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+    
+    <!-- Sequence Flows -->
+    <bpmn:sequenceFlow id="flow_start_to_pruefen" 
+                       sourceRef="start_bewerbung" 
+                       targetRef="angaben_pruefen" />
+    
+    <bpmn:sequenceFlow id="flow_pruefen_to_gateway" 
+                       sourceRef="angaben_pruefen" 
+                       targetRef="entscheidung_gateway" />
+    
+    <bpmn:sequenceFlow id="flow_gateway_to_akzeptiert" 
+                       name="Bewerbung gültig" 
+                       sourceRef="entscheidung_gateway" 
+                       targetRef="bewerbung_akzeptiert">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${bewerbung_gueltig == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    
+    <bpmn:sequenceFlow id="flow_gateway_to_abgelehnt" 
+                       name="Bewerbung ungültig" 
+                       sourceRef="entscheidung_gateway" 
+                       targetRef="bewerbung_ablehnen">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${bewerbung_gueltig == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    
+    <bpmn:sequenceFlow id="flow_akzeptiert_to_end" 
+                       sourceRef="bewerbung_akzeptiert" 
+                       targetRef="end_akzeptiert" />
+    
+    <bpmn:sequenceFlow id="flow_abgelehnt_to_end" 
+                       sourceRef="bewerbung_ablehnen" 
+                       targetRef="end_abgelehnt" />
+    
+  </bpmn:process>
+  
+  <!-- BPMN Diagram Information -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="bewerbung_process">
+      
+      <!-- Start Event -->
+      <bpmndi:BPMNShape id="BPMNShape_start_bewerbung" bpmnElement="start_bewerbung">
+        <dc:Bounds x="179" y="99" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="158" y="142" width="78" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <!-- User Task: Angaben prüfen -->
+      <bpmndi:BPMNShape id="BPMNShape_angaben_pruefen" bpmnElement="angaben_pruefen">
+        <dc:Bounds x="270" y="77" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      
+      <!-- Exclusive Gateway -->
+      <bpmndi:BPMNShape id="BPMNShape_entscheidung_gateway" bpmnElement="entscheidung_gateway" isMarkerVisible="true">
+        <dc:Bounds x="425" y="92" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="407" y="62" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <!-- Service Task: Akzeptieren -->
+      <bpmndi:BPMNShape id="BPMNShape_bewerbung_akzeptiert" bpmnElement="bewerbung_akzeptiert">
+        <dc:Bounds x="530" y="77" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      
+      <!-- User Task: Ablehnen -->
+      <bpmndi:BPMNShape id="BPMNShape_bewerbung_ablehnen" bpmnElement="bewerbung_ablehnen">
+        <dc:Bounds x="530" y="200" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      
+      <!-- End Event: Akzeptiert -->
+      <bpmndi:BPMNShape id="BPMNShape_end_akzeptiert" bpmnElement="end_akzeptiert">
+        <dc:Bounds x="692" y="99" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="672" y="142" width="76" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <!-- End Event: Abgelehnt -->
+      <bpmndi:BPMNShape id="BPMNShape_end_abgelehnt" bpmnElement="end_abgelehnt">
+        <dc:Bounds x="692" y="222" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="674" y="265" width="72" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      
+      <!-- Sequence Flows -->
+      <bpmndi:BPMNEdge id="BPMNEdge_flow_start_to_pruefen" bpmnElement="flow_start_to_pruefen">
+        <di:waypoint x="215" y="117" />
+        <di:waypoint x="270" y="117" />
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="BPMNEdge_flow_pruefen_to_gateway" bpmnElement="flow_pruefen_to_gateway">
+        <di:waypoint x="370" y="117" />
+        <di:waypoint x="425" y="117" />
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="BPMNEdge_flow_gateway_to_akzeptiert" bpmnElement="flow_gateway_to_akzeptiert">
+        <di:waypoint x="475" y="117" />
+        <di:waypoint x="530" y="117" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="482" y="99" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="BPMNEdge_flow_gateway_to_abgelehnt" bpmnElement="flow_gateway_to_abgelehnt">
+        <di:waypoint x="450" y="142" />
+        <di:waypoint x="450" y="240" />
+        <di:waypoint x="530" y="240" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="456" y="188" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="BPMNEdge_flow_akzeptiert_to_end" bpmnElement="flow_akzeptiert_to_end">
+        <di:waypoint x="630" y="117" />
+        <di:waypoint x="692" y="117" />
+      </bpmndi:BPMNEdge>
+      
+      <bpmndi:BPMNEdge id="BPMNEdge_flow_abgelehnt_to_end" bpmnElement="flow_abgelehnt_to_end">
+        <di:waypoint x="630" y="240" />
+        <di:waypoint x="692" y="240" />
+      </bpmndi:BPMNEdge>
+      
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  
+</bpmn:definitions>

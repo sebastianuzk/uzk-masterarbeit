@@ -54,6 +54,105 @@ class BPMNParser:
         except ET.ParseError as e:
             raise ValueError(f"Invalid BPMN XML: {e}")
     
+    def parse_directory(self, directory_path: str) -> Dict[str, ProcessDefinition]:
+        """
+        Parse alle BPMN-Dateien aus einem Ordner
+        
+        Args:
+            directory_path: Pfad zum Ordner mit BPMN-Dateien
+            
+        Returns:
+            Dictionary mit Prozess-ID als Key und ProcessDefinition als Value
+        """
+        processes = {}
+        directory = Path(directory_path)
+        
+        if not directory.exists():
+            logger.warning(f"BPMN directory does not exist: {directory_path}")
+            return processes
+        
+        if not directory.is_dir():
+            raise ValueError(f"Path is not a directory: {directory_path}")
+        
+        # Suche nach .bpmn und .xml Dateien
+        bpmn_files = list(directory.glob("*.bpmn")) + list(directory.glob("*.xml"))
+        
+        if not bpmn_files:
+            logger.info(f"No BPMN files found in directory: {directory_path}")
+            return processes
+        
+        logger.info(f"Found {len(bpmn_files)} BPMN files in {directory_path}")
+        
+        for bpmn_file in bpmn_files:
+            try:
+                logger.info(f"Parsing BPMN file: {bpmn_file.name}")
+                process_def = self.parse_file(str(bpmn_file))
+                
+                # Verwende Process-ID als Key, falls schon vorhanden, füge Suffix hinzu
+                process_id = process_def.id
+                original_id = process_id
+                counter = 1
+                
+                while process_id in processes:
+                    process_id = f"{original_id}_{counter}"
+                    counter += 1
+                
+                if process_id != original_id:
+                    logger.warning(f"Process ID '{original_id}' already exists, using '{process_id}' instead")
+                    process_def.id = process_id
+                
+                processes[process_id] = process_def
+                logger.info(f"Successfully loaded process '{process_def.name}' (ID: {process_id}) from {bpmn_file.name}")
+                
+            except Exception as e:
+                logger.error(f"Failed to parse BPMN file {bpmn_file.name}: {e}")
+                continue
+        
+        logger.info(f"Successfully loaded {len(processes)} processes from {directory_path}")
+        return processes
+    
+    def get_available_processes(self, directory_path: str) -> List[Dict[str, str]]:
+        """
+        Hole Informationen über verfügbare Prozesse ohne sie zu parsen
+        
+        Args:
+            directory_path: Pfad zum Ordner mit BPMN-Dateien
+            
+        Returns:
+            Liste mit Prozess-Informationen (id, name, file)
+        """
+        processes_info = []
+        directory = Path(directory_path)
+        
+        if not directory.exists() or not directory.is_dir():
+            return processes_info
+        
+        bpmn_files = list(directory.glob("*.bpmn")) + list(directory.glob("*.xml"))
+        
+        for bpmn_file in bpmn_files:
+            try:
+                # Minimale XML-Analyse nur für Prozess-Informationen
+                tree = ET.parse(str(bpmn_file))
+                root = tree.getroot()
+                
+                processes = root.findall('.//bpmn:process', self.namespaces)
+                for process_element in processes:
+                    process_id = process_element.get('id', 'unknown')
+                    process_name = process_element.get('name', process_id)
+                    
+                    processes_info.append({
+                        'id': process_id,
+                        'name': process_name,
+                        'file': bpmn_file.name,
+                        'path': str(bpmn_file)
+                    })
+                    
+            except Exception as e:
+                logger.warning(f"Could not read process info from {bpmn_file.name}: {e}")
+                continue
+        
+        return processes_info
+    
     def _parse_tree(self, tree: ET.ElementTree) -> ProcessDefinition:
         """Parse ElementTree zu ProcessDefinition"""
         root = tree.getroot()

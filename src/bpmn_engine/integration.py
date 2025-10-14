@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 class BPMNEngineManager:
     """Manager für die BPMN Engine Integration"""
     
-    def __init__(self, db_path: str = "bpmn_engine.db"):
+    def __init__(self, db_path: str = "bpmn_engine.db", processes_directory: str = "bpmn_processes"):
         self.parser = BPMNParser()
         self.execution_engine = ProcessExecutionEngine(db_path)
+        self.processes_directory = processes_directory
         self.running = False
+        self._last_modified_times: Dict[str, float] = {}
         
         # Callbacks für Integration
         self._setup_callbacks()
@@ -31,8 +33,13 @@ class BPMNEngineManager:
         
         self.running = True
         
-        # Deploy Standard-Bewerbungsprozess
-        self._deploy_sample_processes()
+        # Lade Prozesse aus Ordner falls vorhanden
+        self._load_processes_from_directory()
+        
+        # Falls keine Prozesse geladen wurden, deploye Standard-Bewerbungsprozess
+        deployed_processes = self.execution_engine.process_definitions
+        if not deployed_processes:
+            self._deploy_sample_processes()
         
         logger.info("BPMN Engine gestartet")
     
@@ -44,6 +51,86 @@ class BPMNEngineManager:
         self.running = False
         logger.info("BPMN Engine gestoppt")
     
+    def _load_processes_from_directory(self):
+        """Lädt alle BPMN-Prozesse aus dem konfigurierten Ordner"""
+        logger.info(f"Loading processes from directory: {self.processes_directory}")
+        
+        try:
+            processes = self.parser.parse_directory(self.processes_directory)
+            
+            for process_id, process_def in processes.items():
+                try:
+                    self.execution_engine.deploy_process(process_def)
+                    logger.info(f"Deployed process from directory: {process_def.name} (ID: {process_id})")
+                except Exception as e:
+                    logger.error(f"Failed to deploy process {process_id}: {e}")
+            
+            self._update_modification_times()
+            logger.info(f"Successfully loaded {len(processes)} processes from directory")
+            
+        except Exception as e:
+            logger.warning(f"Could not load processes from directory {self.processes_directory}: {e}")
+    
+    def reload_processes_from_directory(self):
+        """Lädt alle Prozesse aus dem Ordner neu"""
+        if not self.running:
+            raise RuntimeError("BPMN Engine not running")
+        
+        logger.info("Reloading processes from directory")
+        self._load_processes_from_directory()
+    
+    def get_available_process_files(self) -> List[Dict[str, str]]:
+        """
+        Hole Informationen über verfügbare BPMN-Dateien
+        
+        Returns:
+            Liste mit Datei-Informationen (id, name, file, path)
+        """
+        return self.parser.get_available_processes(self.processes_directory)
+    
+    def check_for_process_updates(self) -> List[str]:
+        """
+        Prüft ob BPMN-Dateien im Ordner geändert wurden
+        
+        Returns:
+            Liste der geänderten Dateien
+        """
+        changed_files = []
+        directory = Path(self.processes_directory)
+        
+        if not directory.exists():
+            return changed_files
+        
+        bpmn_files = list(directory.glob("*.bpmn")) + list(directory.glob("*.xml"))
+        
+        for bpmn_file in bpmn_files:
+            try:
+                current_mtime = bpmn_file.stat().st_mtime
+                last_mtime = self._last_modified_times.get(str(bpmn_file), 0)
+                
+                if current_mtime > last_mtime:
+                    changed_files.append(str(bpmn_file))
+                    
+            except Exception as e:
+                logger.warning(f"Could not check modification time for {bpmn_file}: {e}")
+        
+        return changed_files
+    
+    def _update_modification_times(self):
+        """Aktualisiert die gespeicherten Änderungszeiten der BPMN-Dateien"""
+        directory = Path(self.processes_directory)
+        
+        if not directory.exists():
+            return
+        
+        bpmn_files = list(directory.glob("*.bpmn")) + list(directory.glob("*.xml"))
+        
+        for bpmn_file in bpmn_files:
+            try:
+                self._last_modified_times[str(bpmn_file)] = bpmn_file.stat().st_mtime
+            except Exception as e:
+                logger.warning(f"Could not get modification time for {bpmn_file}: {e}")
+
     def _deploy_sample_processes(self):
         """Deploy Beispiel-Prozesse"""
         try:
@@ -253,6 +340,42 @@ class BPMNEngineManager:
         
         return base_status
     
+    def get_process_statistics(self) -> Dict[str, Any]:
+        """
+        Hole Statistiken über geladene Prozesse und Engine-Status
+        
+        Returns:
+            Dictionary mit detaillierten Statistiken
+        """
+        if not self.running:
+            return {
+                'running': False,
+                'total_processes': 0,
+                'processes_directory': self.processes_directory,
+                'available_files': []
+            }
+        
+        # Basis-Statistiken von der Engine
+        engine_status = self.execution_engine.get_engine_status()
+        
+        # Verfügbare Dateien im Ordner
+        available_files = self.get_available_process_files()
+        
+        # Geänderte Dateien
+        changed_files = self.check_for_process_updates()
+        
+        return {
+            'running': True,
+            'processes_directory': self.processes_directory,
+            'deployed_processes': engine_status.get('deployed_processes', 0),
+            'active_instances': engine_status.get('active_instances', 0),
+            'active_tasks': engine_status.get('active_tasks', 0),
+            'available_files': len(available_files),
+            'file_details': available_files,
+            'changed_files': changed_files,
+            'engine_status': engine_status
+        }
+
     # Convenience Methods für Bewerbungsprozess
     def start_bewerbung_process(self, student_name: str, studiengang: str, email: str = None,
                                additional_variables: Dict[str, Any] = None) -> Dict[str, Any]:
