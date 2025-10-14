@@ -27,3 +27,10 @@ pandas>=2.0.0  # Für Streamlit Datenvisualisierung
 # sqlite3  # Built-in Python - für lokale Process Database
 pydantic>=2.0.0
 dataclasses-json>=0.6.0
+
+# Camunda Platform 7 Integration
+pycamunda>=0.14.0  # Python REST client for Camunda Platform 7
+docker>=6.1.0  # Docker Python SDK for container management
+python-multipart>=0.0.6  # For file uploads to Camunda
+xmltodict>=0.13.0  # XML parsing for BPMN files
+typing-extensions>=4.0.0  # Enhanced type hints

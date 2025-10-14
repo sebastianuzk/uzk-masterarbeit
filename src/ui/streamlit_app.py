@@ -14,6 +14,7 @@ from src.agent.react_agent import create_react_agent
 from config.settings import settings
 from src.process_automation.process_engine.integration import get_bpmn_engine
 from src.ui.bpmn_interface import display_bpmn_engine_interface
+from src.ui.camunda_interface import display_camunda_engine_interface
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +34,27 @@ def initialize_session_state():
         except Exception as e:
             st.session_state.bpmn_engine_initialized = False
             st.session_state.bpmn_engine_error = str(e)
+    
+    # Initialisiere Camunda Service (ohne sofortige Verbindung)
+    if 'camunda_initialized' not in st.session_state:
+        try:
+            # Import hier um zirkuläre Imports zu vermeiden
+            from src.camunda_integration.services.camunda_service import CamundaService
+            from src.camunda_integration.services.docker_manager import DockerManager
+            
+            # Erstelle Services ohne sofortige Verbindungstests
+            auto_deploy_dir = "src/process_automation/deployed_processes"
+            camunda_service = CamundaService(auto_deploy_dir=auto_deploy_dir)
+            docker_manager = DockerManager()
+            
+            st.session_state.camunda_service = camunda_service
+            st.session_state.docker_manager = docker_manager
+            st.session_state.camunda_initialized = True
+            st.session_state.camunda_error = None
+            
+        except Exception as e:
+            st.session_state.camunda_initialized = False
+            st.session_state.camunda_error = str(e)
     
     if 'agent' not in st.session_state:
         try:
@@ -200,13 +222,16 @@ def main():
     display_sidebar()
     
     # Tabs für verschiedene Bereiche
-    tab1, tab2 = st.tabs(["💬 Chatbot", "🔄 BPMN Process Engine"])
+    tab1, tab2, tab3 = st.tabs(["💬 Chatbot", "🔄 BPMN Process Engine", "🏗️ Camunda Engine"])
     
     with tab1:
         display_chat_tab()
     
     with tab2:
         display_bpmn_engine_interface()
+        
+    with tab3:
+        display_camunda_engine_interface()
 
 
 def display_chat_tab():
