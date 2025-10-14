@@ -16,13 +16,12 @@ Features:
 import asyncio
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, Dict, Any
 import json
 from datetime import datetime
 from collections import defaultdict
 from urllib.parse import urlparse
 
-import hashlib
 from src.scraper.wiso_crawler import WisoCrawler, CrawlerConfig
 from src.scraper.batch_scraper import BatchScraper, ScrapingConfig, ScrapedContent
 from src.scraper.vector_store import VectorStore, VectorStoreConfig, VectorDocument
