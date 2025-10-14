@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
-from .parser import BPMNParser, create_sample_bpmn
+from .parser import BPMNParser
 from .engine import ProcessExecutionEngine, ProcessInstance, TaskInstance
 from .elements import ProcessDefinition
 
@@ -36,10 +36,10 @@ class BPMNEngineManager:
         # Lade Prozesse aus Ordner falls vorhanden
         self._load_processes_from_directory()
         
-        # Falls keine Prozesse geladen wurden, deploye Standard-Bewerbungsprozess
+        # Falls keine Prozesse geladen wurden, zeige Warnung
         deployed_processes = self.execution_engine.process_definitions
         if not deployed_processes:
-            self._deploy_sample_processes()
+            logger.warning("No processes loaded from directory and no fallback process deployed")
         
         logger.info("BPMN Engine gestartet")
     
@@ -131,80 +131,6 @@ class BPMNEngineManager:
             except Exception as e:
                 logger.warning(f"Could not get modification time for {bpmn_file}: {e}")
 
-    def _deploy_sample_processes(self):
-        """Deploy Beispiel-Prozesse"""
-        try:
-            # Erstelle und deploye Beispiel-Bewerbungsprozess
-            sample_bpmn = create_sample_bpmn()
-            process_def = self.parser.parse_string(sample_bpmn)
-            
-            # Validiere Process (aber deploye trotzdem wenn nur Warnings)
-            errors = process_def.validate()
-            if errors:
-                logger.warning(f"Process validation warnings: {errors}")
-            
-            self.execution_engine.deploy_process(process_def)
-            
-            # Registriere Service Handlers
-            self._register_service_handlers()
-            
-            logger.info(f"Sample process '{process_def.id}' deployed successfully")
-        except Exception as e:
-            logger.error(f"Error deploying sample processes: {e}")
-            # Deploye einen vereinfachten Prozess als Fallback
-            self._deploy_fallback_process()
-    
-    def _register_service_handlers(self):
-        """Registriere Service Task Handlers"""
-        
-        def accept_application_handler(context):
-            """Handler für Bewerbungsannahme"""
-            student_name = context.get_variable('student_name', 'Unknown')
-            studiengang = context.get_variable('studiengang', 'Unknown')
-            
-            logger.info(f"Bewerbung akzeptiert: {student_name} für {studiengang}")
-            
-            return {
-                'acceptance_date': '2025-10-10',
-                'acceptance_status': 'ACCEPTED',
-                'notification_sent': True
-            }
-        
-        self.execution_engine.register_service_handler(
-            'AcceptApplicationService', 
-            accept_application_handler
-        )
-    
-    def _deploy_fallback_process(self):
-        """Deploy vereinfachten Fallback-Prozess"""
-        from .elements import ProcessDefinition, StartEvent, UserTask, EndEvent, SequenceFlow
-        
-        # Erstelle einfachen Prozess programmatisch
-        process_def = ProcessDefinition(id="bewerbung_process", name="Vereinfachter Bewerbungsprozess")
-        
-        # Elemente erstellen
-        start_event = StartEvent("start_bewerbung", "Bewerbung eingegangen")
-        user_task = UserTask("angaben_pruefen", "Angaben prüfen")
-        user_task.assignee = "sachbearbeiter"
-        user_task.add_form_field("student_email", "email", "E-Mail Adresse", True)
-        
-        end_event = EndEvent("end_bewerbung", "Bewerbung bearbeitet")
-        
-        # Elemente hinzufügen
-        process_def.add_element(start_event)
-        process_def.add_element(user_task)
-        process_def.add_element(end_event)
-        
-        # SequenceFlows erstellen
-        flow1 = SequenceFlow("flow1", start_event, user_task)
-        flow2 = SequenceFlow("flow2", user_task, end_event)
-        process_def.add_element(flow1)
-        process_def.add_element(flow2)
-        
-        # Deploy
-        self.execution_engine.deploy_process(process_def)
-        logger.info("Fallback process deployed successfully")
-    
     def _setup_callbacks(self):
         """Setup Event Callbacks"""
         
@@ -375,61 +301,6 @@ class BPMNEngineManager:
             'changed_files': changed_files,
             'engine_status': engine_status
         }
-
-    # Convenience Methods für Bewerbungsprozess
-    def start_bewerbung_process(self, student_name: str, studiengang: str, email: str = None,
-                               additional_variables: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Starte Bewerbungsprozess (convenience method)"""
-        variables = {
-            'student_name': student_name,
-            'studiengang': studiengang,
-            'start_time': '2025-10-10T16:00:00'
-        }
-        
-        if email:
-            variables['email'] = email
-        
-        if additional_variables:
-            variables.update(additional_variables)
-        
-        instance_id = self.start_process_instance('bewerbung_process', variables, f"{student_name}_{studiengang}")
-        
-        return {
-            'success': True,
-            'instance_id': instance_id,
-            'student_name': student_name,
-            'studiengang': studiengang,
-            'email': email,
-            'message': f'Bewerbungsprozess für {student_name} ({studiengang}) erfolgreich gestartet'
-        }
-    
-    def complete_angaben_pruefen(self, task_id: str, student_email: str, bewerbung_gueltig: bool = True, 
-                                 bemerkung: str = "") -> Dict[str, Any]:
-        """Schließe Angaben-Prüfung Task ab (convenience method)"""
-        variables = {
-            'student_email': student_email,
-            'bewerbung_gueltig': bewerbung_gueltig,
-            'bemerkung': bemerkung,
-            'checked_at': '2025-10-10T16:00:00',
-            'checked_by': 'chatbot_agent'
-        }
-        
-        success = self.complete_task(task_id, variables)
-        
-        return {
-            'success': success,
-            'task_id': task_id,
-            'student_email': student_email,
-            'bewerbung_gueltig': bewerbung_gueltig,
-            'bemerkung': bemerkung,
-            'message': f'Angaben-Prüfung {"erfolgreich" if success else "fehlgeschlagen"} abgeschlossen'
-        }
-    
-    def get_bewerbung_tasks(self) -> List[TaskInstance]:
-        """Hole alle Bewerbungs-Tasks"""
-        all_tasks = self.get_active_tasks()
-        return [task for task in all_tasks 
-                if task.task_definition.id in ['angaben_pruefen', 'bewerbung_ablehnen']]
 
 
 # Globale Engine Instance
