@@ -1,0 +1,42 @@
+# Staging environment (feat/deploy_mas-64 branch)
+version: '3.8'
+
+services:
+  chatbot-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wiso-chatbot-staging
+    ports:
+      - "8502:8501"  # Different port for staging
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=staging
+      - OLLAMA_BASE_URL=http://ollama-staging:11434
+    volumes:
+      - staging-data:/app/data
+      - ./config:/app/config
+    restart: unless-stopped
+    networks:
+      - staging-network
+    depends_on:
+      - ollama-staging
+
+  ollama-staging:
+    image: ollama/ollama:latest
+    container_name: ollama-staging
+    ports:
+      - "11435:11434"  # Different port for staging
+    volumes:
+      - ollama-staging-data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - staging-network
+
+volumes:
+  staging-data:
+  ollama-staging-data:
+
+networks:
+  staging-network:
+    driver: bridge

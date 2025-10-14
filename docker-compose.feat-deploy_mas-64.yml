@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wiso-chatbot-feat-deploy_mas-64
+    ports:
+      - "8547:8501"
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=feature
+      - BRANCH_NAME=feat/deploy_mas-64
+      - OLLAMA_BASE_URL=http://ollama-feat-deploy_mas-64:11434
+    volumes:
+      - feat-deploy_mas-64-data:/app/data
+      - ./config:/app/config
+    restart: unless-stopped
+    networks:
+      - chatbot-feat-deploy_mas-64-network
+    depends_on:
+      - ollama
+    labels:
+      - "branch=feat/deploy_mas-64"
+      - "deployment=feature"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-feat-deploy_mas-64
+    volumes:
+      - feat-deploy_mas-64-ollama-data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - chatbot-feat-deploy_mas-64-network
+    labels:
+      - "branch=feat/deploy_mas-64"
+
+volumes:
+  feat-deploy_mas-64-data:
+  feat-deploy_mas-64-ollama-data:
+
+networks:
+  chatbot-feat-deploy_mas-64-network:
+    driver: bridge
