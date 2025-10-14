@@ -23,7 +23,6 @@ except ImportError:
 
 from ..models.camunda_models import (
     CamundaEngine, ProcessDefinition, ProcessInstance, Task, 
-    Deployment, Variable, StartProcessRequest, CompleteTaskRequest,
     DeploymentResult, HistoryProcessInstance
 )
 

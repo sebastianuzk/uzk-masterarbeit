@@ -138,7 +138,7 @@ class TaskInstance:
 class ProcessExecutionEngine:
     """BPMN Process Execution Engine"""
     
-    def __init__(self, db_path: str = "bpmn_engine.db"):
+    def __init__(self, db_path: str = "src/camunda_integration/bpmn_engine.db"):
         self.db_path = db_path
         self.process_definitions: Dict[str, ProcessDefinition] = {}
         self.active_instances: Dict[str, ProcessInstance] = {}

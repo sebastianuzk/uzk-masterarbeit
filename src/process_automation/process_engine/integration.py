@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class BPMNEngineManager:
     """Manager für die BPMN Engine Integration"""
     
-    def __init__(self, db_path: str = "bpmn_engine.db", processes_directory: str = "src/process_automation/deployed_processes"):
+    def __init__(self, db_path: str = "src/camunda_integration/bpmn_engine.db", processes_directory: str = "src/process_automation/deployed_processes"):
         self.parser = BPMNParser()
         self.execution_engine = ProcessExecutionEngine(db_path)
         self.processes_directory = processes_directory

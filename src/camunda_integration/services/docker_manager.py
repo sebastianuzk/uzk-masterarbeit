@@ -7,7 +7,6 @@ Manages Docker containers for Camunda Platform 7 using docker-compose.
 import logging
 import subprocess
 import time
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
