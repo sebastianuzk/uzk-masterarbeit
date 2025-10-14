@@ -6,8 +6,8 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from src.bpmn_engine.integration import get_bpmn_engine
-from src.bpmn_engine.engine import ProcessInstance, TaskInstance
+from src.process_automation.process_engine.integration import get_bpmn_engine
+from src.process_automation.process_engine.engine import ProcessInstance, TaskInstance
 
 
 def display_bpmn_engine_interface():

@@ -5,7 +5,7 @@ Echte Process Engine Integration mit LangChain
 from langchain_core.tools import BaseTool
 from typing import Dict, Any, Optional, List
 import json
-from src.bpmn_engine.integration import get_bpmn_engine, start_bpmn_engine
+from src.process_automation.process_engine.integration import get_bpmn_engine, start_bpmn_engine
 
 
 class BPMNEngineStartTool(BaseTool):

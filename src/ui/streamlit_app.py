@@ -12,7 +12,7 @@ sys.path.insert(0, project_root)
 
 from src.agent.react_agent import create_react_agent
 from config.settings import settings
-from src.bpmn_engine.integration import get_bpmn_engine
+from src.process_automation.process_engine.integration import get_bpmn_engine
 from src.ui.bpmn_interface import display_bpmn_engine_interface
 
 # Setup logging
