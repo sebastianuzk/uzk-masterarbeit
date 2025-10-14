@@ -203,43 +203,20 @@ def display_process_management(camunda_service: CamundaService):
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### 📤 BPMN Deployment")
+        st.markdown("#### � Auto-Deployed Processes")
+        st.info("� BPMN files are automatically deployed when Docker container starts.")
         
-        # Auto-deploy from directory
-        if st.button("🔄 Auto-Deploy from Directory", type="primary"):
-            with st.spinner("Deploying BPMN files..."):
-                try:
-                    results = camunda_service.deploy_from_directory()
-                    if results:
-                        st.success(f"✅ {len(results)} BPMN files deployed!")
-                        for result in results:
-                            st.write(f"- {result.name} (ID: {result.id})")
-                    else:
-                        st.info("No BPMN files found in deployment directory")
-                except Exception as e:
-                    st.error(f"Deployment failed: {str(e)}")
-        
-        # Manual file upload
-        uploaded_file = st.file_uploader("Upload BPMN file", type=['bpmn', 'xml'])
-        if uploaded_file is not None:
-            if st.button("Deploy Uploaded File"):
-                with st.spinner("Deploying..."):
-                    try:
-                        # Save uploaded file temporarily
-                        import tempfile
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.bpmn') as tmp_file:
-                            tmp_file.write(uploaded_file.read())
-                            tmp_file_path = tmp_file.name
-                        
-                        result = camunda_service.deploy_file(tmp_file_path, uploaded_file.name)
-                        st.success(f"✅ Deployed: {result.name}")
-                        
-                        # Cleanup
-                        import os
-                        os.unlink(tmp_file_path)
-                        
-                    except Exception as e:
-                        st.error(f"Deployment failed: {str(e)}")
+        # Show deployed processes
+        try:
+            process_definitions = camunda_service.get_process_definitions()
+            if process_definitions:
+                st.success(f"✅ {len(process_definitions)} processes deployed automatically:")
+                for proc in process_definitions:
+                    st.write(f"- **{proc.key}**: {proc.name}")
+            else:
+                st.warning("No processes deployed. Check BPMN files in bpmn_processes/ directory.")
+        except Exception as e:
+            st.error(f"Failed to get process definitions: {str(e)}")
     
     with col2:
         st.markdown("#### 🚀 Process Starting")
