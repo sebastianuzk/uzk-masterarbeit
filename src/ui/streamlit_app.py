@@ -5,6 +5,8 @@ import streamlit as st
 import sys
 import os
 import logging
+import time
+import subprocess
 
 # Füge das Projekt-Root-Verzeichnis zum Python-Pfad hinzu
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,12 +17,89 @@ from config.settings import settings
 from src.process_automation.process_engine.integration import get_bpmn_engine
 from src.ui.bpmn_interface import display_bpmn_engine_interface
 from src.ui.camunda_interface import display_camunda_engine_interface
+from src.camunda_integration.services.docker_manager import DockerManager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 
+def auto_start_docker_camunda():
+    """Automatischer Start des Camunda Docker Containers"""
+    if 'docker_auto_started' not in st.session_state:
+        st.session_state.docker_auto_started = False
+        
+    if not st.session_state.docker_auto_started:
+        try:
+            docker_manager = DockerManager()
+            
+            # Prüfe ob Container bereits läuft
+            status_result = docker_manager.get_status()
+            if status_result.get("success") and "camunda-platform-clean" in status_result.get("output", ""):
+                # Container läuft bereits, prüfe auch API
+                try:
+                    import requests
+                    response = requests.get("http://localhost:8080/engine-rest/engine", timeout=5)
+                    if response.status_code == 200:
+                        st.session_state.docker_auto_started = True
+                        st.session_state.docker_status = "✅ Camunda Docker Container bereits aktiv und erreichbar"
+                        return
+                except:
+                    pass  # API noch nicht bereit
+                
+                st.session_state.docker_status = "🔄 Container läuft, warte auf API..."
+                return
+            
+            # Zeige Status während Start
+            status_placeholder = st.empty()
+            
+            with status_placeholder.container():
+                st.info("🚀 Starte Camunda Docker Container automatisch...")
+                
+                # Starte Container
+                result = docker_manager.start_camunda(detached=True)
+                
+                if result.get("success", False):
+                    st.success("✅ Camunda Docker Container erfolgreich gestartet!")
+                    st.info("⏳ Warte auf Camunda-Initialisierung und Auto-Deployment...")
+                    
+                    # Warte auf Camunda-Start mit Progress Bar
+                    progress_bar = st.progress(0)
+                    for i in range(60):  # 60 Sekunden warten
+                        time.sleep(1)
+                        progress_bar.progress((i + 1) / 60)
+                        
+                        # Prüfe API-Verfügbarkeit
+                        if i > 20:  # Nach 20 Sekunden API prüfen
+                            try:
+                                import requests
+                                response = requests.get("http://localhost:8080/engine-rest/engine", timeout=2)
+                                if response.status_code == 200:
+                                    progress_bar.progress(1.0)
+                                    break
+                            except:
+                                continue
+                    
+                    st.success("🎉 Camunda ist bereit! Auto-Deployment abgeschlossen.")
+                    st.session_state.docker_auto_started = True
+                    st.session_state.docker_status = "✅ Camunda automatisch gestartet mit Auto-Deployment"
+                    
+                    # Entferne Status-Container nach erfolgreichem Start
+                    time.sleep(2)
+                    status_placeholder.empty()
+                else:
+                    error_msg = result.get("error", "Unbekannter Fehler")
+                    st.error(f"❌ Docker-Start fehlgeschlagen: {error_msg}")
+                    st.session_state.docker_status = f"❌ Docker-Start fehlgeschlagen: {error_msg}"
+                    
+        except Exception as e:
+            st.error(f"❌ Docker Auto-Start Fehler: {str(e)}")
+            st.session_state.docker_status = f"❌ Fehler: {str(e)}"
+
+
 def initialize_session_state():
     """Initialisiere Session State"""
+    # AUTO-START: Camunda Docker Container
+    auto_start_docker_camunda()
+    
     # Starte BPMN Process Engine automatisch
     if 'bpmn_engine_initialized' not in st.session_state:
         try:
@@ -92,6 +171,20 @@ def display_sidebar():
     """Zeige Seitenspalte mit Informationen"""
     with st.sidebar:
         st.title("🔧 System Status")
+        
+        # Docker Camunda Status (neu hinzugefügt)
+        st.subheader("🐳 Camunda Docker Container")
+        if 'docker_status' in st.session_state:
+            if "✅" in st.session_state.docker_status:
+                st.success(st.session_state.docker_status)
+            elif "❌" in st.session_state.docker_status:
+                st.error(st.session_state.docker_status)
+            else:
+                st.info(st.session_state.docker_status)
+        else:
+            st.info("🔄 Docker-Status wird geprüft...")
+        
+        st.markdown("---")
         
         # BPMN Process Engine Status
         st.subheader("🔄 BPMN Process Engine")
