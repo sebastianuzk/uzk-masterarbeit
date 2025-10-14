@@ -235,7 +235,7 @@ class BPMNEngineManager:
         
         # Filter alle aktiven Tasks nach Instance ID
         all_tasks = self.execution_engine.get_active_tasks()
-        return [task for task in all_tasks if task.instance_id == instance_id]
+        return [task for task in all_tasks if task.process_instance_id == instance_id]
     
     def get_engine_status(self) -> Dict[str, Any]:
         """Hole Engine Status"""
@@ -255,7 +255,7 @@ class BPMNEngineManager:
     
     # Convenience Methods für Bewerbungsprozess
     def start_bewerbung_process(self, student_name: str, studiengang: str, email: str = None,
-                               additional_variables: Dict[str, Any] = None) -> str:
+                               additional_variables: Dict[str, Any] = None) -> Dict[str, Any]:
         """Starte Bewerbungsprozess (convenience method)"""
         variables = {
             'student_name': student_name,
@@ -269,10 +269,19 @@ class BPMNEngineManager:
         if additional_variables:
             variables.update(additional_variables)
         
-        return self.start_process_instance('bewerbung_process', variables, f"{student_name}_{studiengang}")
+        instance_id = self.start_process_instance('bewerbung_process', variables, f"{student_name}_{studiengang}")
+        
+        return {
+            'success': True,
+            'instance_id': instance_id,
+            'student_name': student_name,
+            'studiengang': studiengang,
+            'email': email,
+            'message': f'Bewerbungsprozess für {student_name} ({studiengang}) erfolgreich gestartet'
+        }
     
     def complete_angaben_pruefen(self, task_id: str, student_email: str, bewerbung_gueltig: bool = True, 
-                                 bemerkung: str = "") -> bool:
+                                 bemerkung: str = "") -> Dict[str, Any]:
         """Schließe Angaben-Prüfung Task ab (convenience method)"""
         variables = {
             'student_email': student_email,
@@ -282,7 +291,16 @@ class BPMNEngineManager:
             'checked_by': 'chatbot_agent'
         }
         
-        return self.complete_task(task_id, variables)
+        success = self.complete_task(task_id, variables)
+        
+        return {
+            'success': success,
+            'task_id': task_id,
+            'student_email': student_email,
+            'bewerbung_gueltig': bewerbung_gueltig,
+            'bemerkung': bemerkung,
+            'message': f'Angaben-Prüfung {"erfolgreich" if success else "fehlgeschlagen"} abgeschlossen'
+        }
     
     def get_bewerbung_tasks(self) -> List[TaskInstance]:
         """Hole alle Bewerbungs-Tasks"""

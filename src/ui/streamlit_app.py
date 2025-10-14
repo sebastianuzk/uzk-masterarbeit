@@ -111,7 +111,7 @@ def display_sidebar():
                 if active_instances:
                     st.markdown("**Aktive Prozess-Instanzen:**")
                     for inst in active_instances[:3]:  # Nur die ersten 3 anzeigen
-                        st.write(f"• {inst.instance_id[:8]}... ({inst.process_definition_id})")
+                        st.write(f"• {inst.id[:8]}... ({inst.process_definition.id})")
                         
             except Exception as e:
                 st.warning(f"⚠️ Status-Fehler: {str(e)}")

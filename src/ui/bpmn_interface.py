@@ -69,7 +69,7 @@ def display_dashboard(bpmn_manager):
             all_tasks = []
             for instance in instances:
                 if instance.status == 'ACTIVE':
-                    tasks = bpmn_manager.get_tasks_for_instance(instance.instance_id)
+                    tasks = bpmn_manager.get_tasks_for_instance(instance.id)
                     all_tasks.extend([t for t in tasks if t.status == 'ACTIVE'])
             st.metric("Offene Tasks", len(all_tasks))
         
@@ -82,12 +82,12 @@ def display_dashboard(bpmn_manager):
             # Erstelle DataFrame für bessere Darstellung
             instance_data = []
             for instance in instances:
-                tasks = bpmn_manager.get_tasks_for_instance(instance.instance_id)
+                tasks = bpmn_manager.get_tasks_for_instance(instance.id)
                 active_tasks = [t for t in tasks if t.status == 'ACTIVE']
                 
                 instance_data.append({
-                    "Instance ID": instance.instance_id[:12] + "...",
-                    "Prozess": instance.process_definition_id,
+                    "Instance ID": instance.id[:12] + "...",
+                    "Prozess": instance.process_definition.id,
                     "Status": instance.status,
                     "Gestartet": instance.start_time.strftime("%Y-%m-%d %H:%M") if instance.start_time else "N/A",
                     "Aktive Tasks": len(active_tasks),
@@ -213,7 +213,7 @@ def display_task_management(bpmn_manager):
         
         for instance in instances:
             if instance.status == 'ACTIVE':
-                tasks = bpmn_manager.get_tasks_for_instance(instance.instance_id)
+                tasks = bpmn_manager.get_tasks_for_instance(instance.id)
                 for task in tasks:
                     if task.status == 'ACTIVE':
                         all_active_tasks.append((instance, task))
@@ -231,7 +231,7 @@ def display_task_management(bpmn_manager):
                 
                 with col1:
                     st.write(f"**Task ID:** `{task.id}`")
-                    st.write(f"**Prozess Instance:** `{instance.instance_id}`")
+                    st.write(f"**Prozess Instance:** `{instance.id}`")
                     st.write(f"**Task Type:** {task.task_definition.id}")
                     st.write(f"**Status:** {task.status}")
                     if task.created_at:
@@ -310,7 +310,7 @@ def display_engine_details(bpmn_manager):
             "parser": "XML ElementTree Parser",
             "execution_model": "Token-based",
             "persistence": "SQLite Database",
-            "database_file": str(bpmn_manager.execution_engine.db_file)
+            "database_file": str(bpmn_manager.execution_engine.db_path)
         })
         
         # Verfügbare Prozesse
@@ -343,8 +343,8 @@ def display_engine_details(bpmn_manager):
                     instances_data = []
                     for inst in instances:
                         instances_data.append({
-                            "ID": inst.instance_id[:12] + "...",
-                            "Process": inst.process_definition_id,
+                            "ID": inst.id[:12] + "...",
+                            "Process": inst.process_definition.id,
                             "Status": inst.status,
                             "Started": inst.start_time.isoformat() if inst.start_time else None,
                             "Variables": str(inst.variables)[:50] + "..." if inst.variables else None
@@ -355,7 +355,7 @@ def display_engine_details(bpmn_manager):
                     st.markdown("**Task Instances:**")
                     all_tasks = []
                     for instance in instances:
-                        tasks = bpmn_manager.get_tasks_for_instance(instance.instance_id)
+                        tasks = bpmn_manager.get_tasks_for_instance(instance.id)
                         for task in tasks:
                             all_tasks.append({
                                 "Task ID": task.id[:12] + "...",
