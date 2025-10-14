@@ -1,3 +1,0 @@
-"""
-CAMUNDA Process Engine Package
-"""

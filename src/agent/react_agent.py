@@ -13,12 +13,20 @@ from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
 
-# Process Engine Tools import mit Fehlerbehandlung
+# BPMN Engine Tools import mit Fehlerbehandlung
+try:
+    from src.tools.bpmn_engine_tool import get_bpmn_engine_tools
+    BPMN_ENGINE_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ BPMN Engine Tools nicht verfügbar: {e}")
+    BPMN_ENGINE_AVAILABLE = False
+
+# Process Engine Tools import mit Fehlerbehandlung (Legacy)
 try:
     from src.tools.process_engine_tool import get_process_engine_tools
     PROCESS_ENGINE_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️ Process Engine Tools nicht verfügbar: {e}")
+    #print(f"⚠️ Legacy Process Engine Tools nicht verfügbar: {e}")
     PROCESS_ENGINE_AVAILABLE = False
 
 
@@ -57,22 +65,23 @@ Verfügbare Tools:
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
 - DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
-- Process Engine: Zum Starten von Prozessen an der Universität. Aktuell nur Bewerbung möglich (start_bewerbung_process, complete_angaben_pruefen, process_engine_status)
+- BPMN Process Engine: Echte BPMN-konforme Process Engine (start_bpmn_process, complete_bpmn_task, bpmn_engine_status)
 
-BEWERBUNGSPROZESS-MANAGEMENT:
-- start_bewerbung_process: Startet neuen Bewerbungsprozess mit Name + Studiengang
-- complete_angaben_pruefen: Schließt Angaben-Prüfung mit E-Mail ab
-- process_engine_status: Zeigt Status der Process Engine und laufende Prozesse
-- get_process_instance: Holt Details einer spezifischen Process Instance
+BPMN PROCESS ENGINE (HAUPTSYSTEM):
+- start_bpmn_process: Startet echten BPMN-Bewerbungsprozess mit Token-basierter Execution
+- complete_bpmn_task: Schließt BPMN User Tasks ab und führt Prozess automatisch fort
+- bpmn_engine_status: Zeigt Status der echten Process Engine mit allen Instances und Tasks
+- get_bpmn_instance: Holt detaillierte Informationen einer Process Instance
 
-WICHTIG FÜR BEWERBUNGSPROZESSE: 
+WICHTIG FÜR BPMN-PROZESSE: 
+- Dies ist eine ECHTE BPMN 2.0 konforme Process Engine mit XML-Parsing und Token-Execution
 - MEHRERE BEWERBUNGSPROZESSE sind gleichzeitig möglich - es gibt KEINE Beschränkung
 - Jeder Student kann mehrere Bewerbungen für verschiedene Studiengänge haben
 - Ein Bewerbungsprozess darf erst gestartet werden wenn alle benötigten Daten (Name, Studiengang) bekannt sind
-- Wenn dir die Daten fehlen, frage den Benutzer höflich danach
-- Erkläre dem Studierenden WAS der automatische Prozess machen wird
-- Informiere über den Status und nächste Schritte
-- Process Instance IDs sind wichtig für die Verfolgung von Prozessen
+- Tasks werden automatisch durch die Engine verwaltet und können Service Tasks oder User Tasks sein
+- Der Prozess führt automatisch weiter bis zum nächsten User Task oder Ende
+- Erkläre dem Studierenden WAS der automatische BPMN-Prozess machen wird
+- Informiere über Task-Status und nächste Schritte im Workflow
 
 Normale Recherche-Tools verwenden bei:
 - "Was sind die neuesten Nachrichten über..."

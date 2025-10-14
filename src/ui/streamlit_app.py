@@ -12,23 +12,27 @@ sys.path.insert(0, project_root)
 
 from src.agent.react_agent import create_react_agent
 from config.settings import settings
-from src.process_engine.camunda_engine import start_engine, get_engine
-from src.process_engine.streamlit_interface import display_process_engine_interface
+from src.bpmn_engine.integration import get_bpmn_engine
+from src.ui.bpmn_interface import display_bpmn_engine_interface
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 
 def initialize_session_state():
     """Initialisiere Session State"""
-    # Starte Process Engine automatisch
-    if 'process_engine_initialized' not in st.session_state:
+    # Starte BPMN Process Engine automatisch
+    if 'bpmn_engine_initialized' not in st.session_state:
         try:
-            start_engine()
-            st.session_state.process_engine_initialized = True
-            st.session_state.process_engine_error = None
+            bpmn_manager = get_bpmn_engine()
+            # Engine automatisch starten
+            if not bpmn_manager.running:
+                bpmn_manager.start()
+            st.session_state.bpmn_engine_initialized = True
+            st.session_state.bpmn_engine_error = None
+            st.session_state.bpmn_manager = bpmn_manager
         except Exception as e:
-            st.session_state.process_engine_initialized = False
-            st.session_state.process_engine_error = str(e)
+            st.session_state.bpmn_engine_initialized = False
+            st.session_state.bpmn_engine_error = str(e)
     
     if 'agent' not in st.session_state:
         try:
@@ -88,19 +92,33 @@ def display_sidebar():
     with st.sidebar:
         st.title("🔧 System Status")
         
-        # Process Engine Status
-        st.subheader("🔄 Process Engine")
-        if st.session_state.get('process_engine_initialized', False):
-            engine = get_engine()
-            status = engine.get_status()
-            st.success("✅ CAMUNDA Engine aktiv")
-            st.write(f"Typ: {status['engine_type']}")
-            st.write(f"Aktive Prozesse: {status['active_instances']}")
-            st.write(f"Gesamt Prozesse: {status['total_instances']}")
+        # BPMN Process Engine Status
+        st.subheader("🔄 BPMN Process Engine")
+        if st.session_state.get('bpmn_engine_initialized', False):
+            bpmn_manager = st.session_state.bpmn_manager
+            
+            # Hole Engine-Status
+            try:
+                instances = bpmn_manager.execution_engine.get_active_instances()
+                active_instances = [inst for inst in instances if inst.status == 'ACTIVE']
+                
+                st.success("✅ BPMN Engine aktiv")
+                st.write(f"Typ: BPMN 2.0 Process Engine")
+                st.write(f"Aktive Prozesse: {len(active_instances)}")
+                st.write(f"Gesamt Prozesse: {len(instances)}")
+                
+                # Zeige aktive Prozesse
+                if active_instances:
+                    st.markdown("**Aktive Prozess-Instanzen:**")
+                    for inst in active_instances[:3]:  # Nur die ersten 3 anzeigen
+                        st.write(f"• {inst.instance_id[:8]}... ({inst.process_definition_id})")
+                        
+            except Exception as e:
+                st.warning(f"⚠️ Status-Fehler: {str(e)}")
         else:
-            st.error("❌ Process Engine Fehler")
-            if 'process_engine_error' in st.session_state:
-                st.error(f"Fehler: {st.session_state.process_engine_error}")
+            st.error("❌ BPMN Engine Fehler")
+            if 'bpmn_engine_error' in st.session_state:
+                st.error(f"Fehler: {st.session_state.bpmn_engine_error}")
         
         st.markdown("---")
         
@@ -165,14 +183,14 @@ def main():
     """Hauptfunktion der Streamlit App"""
     # Seitenkonfiguration
     st.set_page_config(
-        page_title=settings.PAGE_TITLE + " + CAMUNDA",
+        page_title=settings.PAGE_TITLE + " + BPMN Engine",
         page_icon=settings.PAGE_ICON,
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
     # Titel
-    st.title(f"{settings.PAGE_ICON} {settings.PAGE_TITLE} + CAMUNDA Process Engine")
+    st.title(f"{settings.PAGE_ICON} {settings.PAGE_TITLE} + BPMN 2.0 Process Engine")
     st.markdown("---")
     
     # Initialisiere Session State
@@ -182,13 +200,13 @@ def main():
     display_sidebar()
     
     # Tabs für verschiedene Bereiche
-    tab1, tab2 = st.tabs(["💬 Chatbot", "🔄 Process Engine"])
+    tab1, tab2 = st.tabs(["💬 Chatbot", "🔄 BPMN Process Engine"])
     
     with tab1:
         display_chat_tab()
     
     with tab2:
-        display_process_engine_interface()
+        display_bpmn_engine_interface()
 
 
 def display_chat_tab():
@@ -196,7 +214,7 @@ def display_chat_tab():
     # Hauptinhalt
     if st.session_state.get('initialized', False):
         st.markdown("### 💬 Chat mit dem Agenten")
-        st.markdown("Stellen Sie Fragen oder bitten Sie um Hilfe. Der Agent kann Wikipedia durchsuchen, Webseiten scrapen und aktuelle Informationen finden.")
+        st.markdown("Stellen Sie Fragen oder bitten Sie um Hilfe. Der Agent kann Wikipedia durchsuchen, Webseiten scrapen, aktuelle Informationen finden und echte BPMN-Prozesse verwalten.")
         
         display_chat_interface()
     
@@ -224,7 +242,7 @@ def display_chat_tab():
         - **Wikipedia**: Kostenlose Wissensdatenbank
         - **Web Scraper**: Direkter Zugriff auf Webseiten
         - **DuckDuckGo**: Privatsphärefreundliche Websuche
-        - **CAMUNDA Process Engine**: Lokale Prozessautomatisierung
+        - **BPMN Process Engine**: Echte BPMN 2.0 konforme Process Engine
         """)
 
 
