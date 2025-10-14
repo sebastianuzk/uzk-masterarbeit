@@ -34,7 +34,7 @@ class CrawlerConfig:
     """Configuration for the WiSo crawler."""
     seed_url: str = "https://wiso.uni-koeln.de/"
     allowed_domains: Set[str] = None
-    max_pages: int = 1000
+    max_pages: int = 6000
     crawl_delay: float = 1.0
     max_depth: int = 5
     concurrent_requests: int = 10
@@ -54,6 +54,7 @@ class WisoCrawler:
         self.visited_urls: Set[str] = set()
         self.queue: Set[str] = {config.seed_url}
         self.found_urls: Set[str] = set()
+        self.pdf_urls: Set[str] = set()  # Separate collection for PDFs
         self.robots_parser = robotexclusionrulesparser.RobotFileParserLookalike()
         self.session: Optional[aiohttp.ClientSession] = None
         
@@ -90,9 +91,9 @@ class WisoCrawler:
         if not self.robots_parser.is_allowed("*", url):
             return False
             
-        # Filter out non-HTML resources and certain patterns
+        # Filter out non-HTML resources and certain patterns (but keep PDFs!)
         excluded_patterns = [
-            r'\.(pdf|jpg|jpeg|png|gif|css|js|ico|xml)$',
+            r'\.(jpg|jpeg|png|gif|css|js|ico|xml)$',  # Removed pdf from here
             r'(calendar|print|rss|feed)',
             r'/(de|en)/api/',
         ]
@@ -114,8 +115,14 @@ class WisoCrawler:
             normalized_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
             if parsed.query:
                 normalized_url += f"?{parsed.query}"
-                
-            if self.is_allowed_url(normalized_url):
+            
+            # Check if it's a PDF
+            if normalized_url.lower().endswith('.pdf'):
+                # Add to PDF collection
+                if parsed.netloc in self.config.allowed_domains:
+                    self.pdf_urls.add(normalized_url)
+                    logger.debug(f"Found PDF: {normalized_url}")
+            elif self.is_allowed_url(normalized_url):
                 links.add(normalized_url)
                 
         return links

@@ -1,17 +1,17 @@
 """
-Batch Web Scraper for RAG Data Collection
+Batch Web Scraper für RAG Datensammlung
 =========================================
 
-This module provides comprehensive web scraping capabilities for collecting
-data to feed into a RAG system. It supports multiple URL processing,
-content extraction, and data structuring for vector database storage.
+Dieses Modul bietet umfassende Web-Scraping-Funktionen zum Sammeln von
+Daten für ein RAG-System. Es unterstützt die Verarbeitung mehrerer URLs,
+Inhaltsextraktion und Datenstrukturierung für die Vektordatenbank-Speicherung.
 
-Features:
-- Batch processing of multiple URLs
-- Configurable content extraction
-- Error handling and retry logic
-- Progress tracking
-- Structured data output for vector storage
+Funktionen:
+- Batch-Verarbeitung mehrerer URLs
+- Konfigurierbare Inhaltsextraktion
+- Fehlerbehandlung und Wiederholungslogik
+- Fortschrittsüberwachung
+- Strukturierte Datenausgabe für Vektorspeicherung
 """
 
 import asyncio
@@ -38,7 +38,7 @@ from .hyperparameters import (
 
 @dataclass
 class ScrapedContent:
-    """Data structure for scraped web content."""
+    """Datenstruktur für gescrapte Webinhalte."""
     url: str
     title: str
     content: str
@@ -50,7 +50,7 @@ class ScrapedContent:
 
 @dataclass
 class ScrapingConfig:
-    """Configuration for web scraping operations."""
+    """Konfiguration für Web-Scraping-Operationen."""
     max_concurrent_requests: int = SCRAPER_MAX_CONCURRENT_REQUESTS
     request_delay: float = SCRAPER_REQUEST_DELAY
     timeout: int = SCRAPER_TIMEOUT
@@ -64,18 +64,18 @@ class ScrapingConfig:
 
 class BatchScraper:
     """
-    Batch web scraper for collecting data for RAG systems.
+    Batch Web Scraper zum Sammeln von Daten für RAG-Systeme.
     
-    This scraper processes multiple URLs asynchronously, extracts content,
-    and structures it for vector database storage.
+    Dieser Scraper verarbeitet mehrere URLs asynchron, extrahiert Inhalte
+    und strukturiert sie für die Vektordatenbank-Speicherung.
     """
     
     def __init__(self, config: Optional[ScrapingConfig] = None):
         """
-        Initialize the batch scraper.
+        Initialisiere den Batch Scraper.
         
         Args:
-            config: Scraping configuration. Uses defaults if None.
+            config: Scraping-Konfiguration. Verwendet Standardwerte falls None.
         """
         self.config = config or ScrapingConfig()
         self.logger = self._setup_logger()
@@ -98,7 +98,7 @@ class BatchScraper:
             ]
     
     def _setup_logger(self) -> logging.Logger:
-        """Setup logging for the scraper."""
+        """Konfiguriere Logging für den Scraper."""
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
         
@@ -112,17 +112,60 @@ class BatchScraper:
         
         return logger
     
+    async def scrape_single(self, session: aiohttp.ClientSession, url: str) -> ScrapedContent:
+        """
+        Scrape eine einzelne URL (ohne Semaphore für externe Verwendung).
+        
+        Args:
+            session: aiohttp ClientSession
+            url: Zu scrapende URL
+            
+        Returns:
+            ScrapedContent-Objekt
+        """
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.config.timeout)) as response:
+                response.raise_for_status()
+                html = await response.text()
+                
+                # Extrahiere strukturierte Inhalte
+                content = self._extract_content(html, url)
+                return content
+                
+        except aiohttp.ClientError as e:
+            self.logger.error(f"HTTP error scraping {url}: {e}")
+            return ScrapedContent(
+                url=url,
+                title="",
+                content="",
+                metadata={},
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error_message=f"HTTP error: {str(e)}"
+            )
+        except Exception as e:
+            self.logger.error(f"Unexpected error scraping {url}: {e}")
+            return ScrapedContent(
+                url=url,
+                title="",
+                content="",
+                metadata={},
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error_message=f"Error: {str(e)}"
+            )
+    
     async def scrape_urls(self, urls: List[str], 
                          progress_callback: Optional[Callable] = None) -> List[ScrapedContent]:
         """
-        Scrape multiple URLs asynchronously.
+        Scrape mehrere URLs asynchron.
         
         Args:
-            urls: List of URLs to scrape
-            progress_callback: Optional callback function for progress updates
+            urls: Liste der zu scrapenden URLs
+            progress_callback: Optionale Callback-Funktion für Fortschrittsupdates
             
         Returns:
-            List of ScrapedContent objects
+            Liste von ScrapedContent-Objekten
         """
         self.logger.info(f"Starting batch scraping of {len(urls)} URLs")
         
@@ -149,16 +192,16 @@ class BatchScraper:
                                 semaphore: asyncio.Semaphore,
                                 progress_callback: Optional[Callable] = None) -> ScrapedContent:
         """
-        Scrape a single URL with retry logic.
+        Scrape eine einzelne URL mit Wiederholungslogik.
         
         Args:
-            session: aiohttp session
-            url: URL to scrape
-            semaphore: Concurrency control
-            progress_callback: Optional progress callback
+            session: aiohttp-Session
+            url: Zu scrapende URL
+            semaphore: Nebenläufigkeitskontrolle
+            progress_callback: Optionaler Fortschritts-Callback
             
         Returns:
-            ScrapedContent object
+            ScrapedContent-Objekt
         """
         async with semaphore:
             for attempt in range(self.config.retry_attempts):
@@ -198,32 +241,32 @@ class BatchScraper:
     
     def _extract_content(self, html: str, url: str) -> ScrapedContent:
         """
-        Extract structured content from HTML.
+        Extrahiere strukturierte Inhalte aus HTML.
         
         Args:
-            html: Raw HTML content
-            url: Source URL
+            html: Rohe HTML-Inhalte
+            url: Quell-URL
             
         Returns:
-            ScrapedContent object
+            ScrapedContent-Objekt
         """
         soup = BeautifulSoup(html, 'html.parser')
         
-        # Remove unwanted elements
+        # Entferne unerwünschte Elemente
         for selector in self.config.exclude_selectors:
             for element in soup.select(selector):
                 element.decompose()
         
-        # Extract title
+        # Extrahiere den Titel
         title_element = soup.select_one(self.config.content_selectors['title'])
         title = title_element.get_text(strip=True) if title_element else ""
         
-        # Extract main content
+        # Extrahiere den Hauptinhalt
         content_elements = soup.select(self.config.content_selectors['content'])
         content_texts = [elem.get_text(strip=True) for elem in content_elements]
         content = '\n\n'.join(text for text in content_texts if text)
         
-        # Extract metadata
+        # Extrahiere Metadaten
         metadata = self._extract_metadata(soup, url)
         
         return ScrapedContent(
@@ -237,14 +280,14 @@ class BatchScraper:
     
     def _extract_metadata(self, soup: BeautifulSoup, url: str) -> Dict[str, Any]:
         """
-        Extract metadata from the HTML document.
+        Extrahiere Metadaten aus dem HTML-Dokument.
         
         Args:
-            soup: BeautifulSoup object
-            url: Source URL
+            soup: BeautifulSoup-Objekt
+            url: Quell-URL
             
         Returns:
-            Dictionary containing metadata
+            Dictionary mit Metadaten
         """
         metadata = {
             'domain': urlparse(url).netloc,
@@ -253,21 +296,21 @@ class BatchScraper:
             'images': [],
         }
         
-        # Extract description
+        # Extrahiere Beschreibung
         desc_element = soup.select_one(self.config.content_selectors['description'])
         if desc_element:
             metadata['description'] = desc_element.get('content', '')
         
-        # Extract keywords
+        # Extrahiere Schlüsselwörter
         keywords_element = soup.select_one(self.config.content_selectors['keywords'])
         if keywords_element:
             metadata['keywords'] = keywords_element.get('content', '').split(',')
         
-        # Count words in main content
+        # Zähle Wörter im Hauptinhalt
         content_text = soup.get_text()
         metadata['word_count'] = len(content_text.split()) if content_text else 0
         
-        # Extract links
+        # Extrahiere Links
         for link in soup.find_all('a', href=True):
             full_url = urljoin(url, link['href'])
             metadata['links'].append({
@@ -275,7 +318,7 @@ class BatchScraper:
                 'text': link.get_text(strip=True)
             })
         
-        # Extract images
+        # Extrahiere Bilder
         for img in soup.find_all('img', src=True):
             full_url = urljoin(url, img['src'])
             metadata['images'].append({
@@ -288,11 +331,11 @@ class BatchScraper:
     
     def save_results(self, filepath: str, format: str = 'json') -> None:
         """
-        Save scraping results to file.
+        Speichere Scraping-Ergebnisse in Datei.
         
         Args:
-            filepath: Output file path
-            format: Output format ('json' or 'jsonl')
+            filepath: Ausgabe-Dateipfad
+            format: Ausgabeformat ('json' oder 'jsonl')
         """
         filepath = Path(filepath)
         filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -311,15 +354,15 @@ class BatchScraper:
         self.logger.info(f"Results saved to {filepath}")
     
     def get_successful_results(self) -> List[ScrapedContent]:
-        """Get only successful scraping results."""
+        """Erhalte nur erfolgreiche Scraping-Ergebnisse."""
         return [result for result in self.results if result.success]
     
     def get_failed_results(self) -> List[ScrapedContent]:
-        """Get only failed scraping results."""
+        """Erhalte nur fehlgeschlagene Scraping-Ergebnisse."""
         return [result for result in self.results if not result.success]
     
     def get_statistics(self) -> Dict[str, Any]:
-        """Get scraping statistics."""
+        """Erhalte Scraping-Statistiken."""
         total = len(self.results)
         successful = len(self.get_successful_results())
         failed = len(self.get_failed_results())
@@ -351,7 +394,7 @@ class BatchScraper:
         }
 
 
-# Example usage and CLI interface
+# Beispielnutzung und CLI-Schnittstelle
 if __name__ == "__main__":
     import argparse
     
@@ -382,13 +425,13 @@ if __name__ == "__main__":
         
         scraper = BatchScraper(config)
         
-        # Run scraping
+        # Starte Scraping
         results = await scraper.scrape_urls(args.urls, progress_callback)
         
-        # Save results
+        # Speichere Ergebnisse
         scraper.save_results(args.output, args.format)
         
-        # Print statistics
+        # Zeige Statistiken an
         stats = scraper.get_statistics()
         print(f"\nScraping Statistics:")
         print(f"Total URLs: {stats['total_urls']}")

@@ -1,16 +1,16 @@
 """
-Data Structure Analyzer for RAG System
-======================================
+Datenstruktur-Analyzer für RAG-System
+=====================================
 
-This module provides dynamic analysis and documentation of data structures
-stored in the vector database. It helps understand and optimize the data
-organization for the RAG system.
+Dieses Modul bietet dynamische Analyse und Dokumentation von Datenstrukturen,
+die in der Vektordatenbank gespeichert sind. Es hilft, die Datenorganisation
+für das RAG-System zu verstehen und zu optimieren.
 
-Features:
-- Dynamic schema analysis
-- Data quality metrics
-- Structure optimization suggestions
-- Export documentation in multiple formats
+Funktionen:
+- Dynamische Schema-Analyse
+- Datenqualitätsmetriken
+- Vorschläge zur Strukturoptimierung
+- Export-Dokumentation in mehreren Formaten
 """
 
 import json
@@ -28,13 +28,13 @@ from ..batch_scraper import ScrapedContent
 
 @dataclass
 class FieldAnalysis:
-    """Analysis of a single field in the data structure."""
+    """Analyse eines einzelnen Feldes in der Datenstruktur."""
     field_name: str
     data_type: str
-    presence_rate: float  # Percentage of documents that have this field
+    presence_rate: float  # Prozentsatz der Dokumente, die dieses Feld haben
     unique_values: int
     sample_values: List[Any]
-    avg_length: Optional[float] = None  # For string fields
+    avg_length: Optional[float] = None  # Für String-Felder
     min_value: Optional[Any] = None
     max_value: Optional[Any] = None
     null_count: int = 0
@@ -42,7 +42,7 @@ class FieldAnalysis:
 
 @dataclass
 class DataStructureReport:
-    """Complete data structure analysis report."""
+    """Vollständiger Datenstruktur-Analysebericht."""
     collection_name: str
     total_documents: int
     analysis_timestamp: str
@@ -54,24 +54,24 @@ class DataStructureReport:
 
 class DataStructureAnalyzer:
     """
-    Analyzer for vector database data structures.
+    Analyzer für Vektordatenbank-Datenstrukturen.
     
-    Provides insights into the data organization, quality metrics,
-    and optimization suggestions for the RAG system.
+    Bietet Einblicke in die Datenorganisation, Qualitätsmetriken
+    und Optimierungsvorschläge für das RAG-System.
     """
     
     def __init__(self, vector_store: VectorStore):
         """
-        Initialize the analyzer.
+        Initialisiere den Analyzer.
         
         Args:
-            vector_store: VectorStore instance to analyze
+            vector_store: Zu analysierende VectorStore-Instanz
         """
         self.vector_store = vector_store
         self.logger = self._setup_logger()
     
     def _setup_logger(self) -> logging.Logger:
-        """Setup logging for the analyzer."""
+        """Konfiguriere Logging für den Analyzer."""
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
         
@@ -87,32 +87,32 @@ class DataStructureAnalyzer:
     
     def analyze_structure(self, sample_size: Optional[int] = None) -> DataStructureReport:
         """
-        Analyze the data structure of stored documents.
+        Analysiere die Datenstruktur der gespeicherten Dokumente.
         
         Args:
-            sample_size: Number of documents to sample for analysis
+            sample_size: Anzahl der zu analysierenden Dokumente
             
         Returns:
-            DataStructureReport with complete analysis
+            DataStructureReport mit vollständiger Analyse
         """
         self.logger.info("Starting data structure analysis...")
         
-        # Get sample documents
+        # Hole Beispieldokumente
         documents = self._get_sample_documents(sample_size)
         
         if not documents:
             raise ValueError("No documents found in vector store")
         
-        # Analyze fields
+        # Analysiere Felder
         fields_analysis = self._analyze_fields(documents)
         
-        # Calculate data quality metrics
+        # Berechne Datenqualitätsmetriken
         quality_metrics = self._calculate_quality_metrics(documents, fields_analysis)
         
-        # Generate optimization suggestions
+        # Generiere Optimierungsvorschläge
         suggestions = self._generate_suggestions(fields_analysis, quality_metrics)
         
-        # Create sample documents for the report
+        # Erstelle Beispieldokumente für den Bericht
         sample_docs = [self._document_to_dict(doc) for doc in documents[:5]]
         
         report = DataStructureReport(
@@ -130,13 +130,13 @@ class DataStructureAnalyzer:
     
     def _get_sample_documents(self, sample_size: Optional[int]) -> List[VectorDocument]:
         """
-        Get a sample of documents from the vector store.
+        Hole eine Stichprobe von Dokumenten aus dem Vector Store.
         
         Args:
-            sample_size: Number of documents to sample
+            sample_size: Anzahl der zu stichprobierenden Dokumente
             
         Returns:
-            List of VectorDocument objects
+            Liste von VectorDocument-Objekten
         """
         # Since we don't have a direct way to get all documents,
         # we'll use a broad search to get a representative sample
@@ -175,13 +175,13 @@ class DataStructureAnalyzer:
     
     def _analyze_fields(self, documents: List[VectorDocument]) -> List[FieldAnalysis]:
         """
-        Analyze all fields across documents.
+        Analysiere alle Felder über die Dokumente hinweg.
         
         Args:
-            documents: List of documents to analyze
+            documents: Liste der zu analysierenden Dokumente
             
         Returns:
-            List of FieldAnalysis objects
+            Liste von FieldAnalysis-Objekten
         """
         # Collect all field information
         field_data = defaultdict(list)
@@ -224,33 +224,33 @@ class DataStructureAnalyzer:
                              types: Set[str], presence_count: int, 
                              total_docs: int) -> FieldAnalysis:
         """
-        Analyze a single field.
+        Analysiere ein einzelnes Feld.
         
         Args:
-            field_name: Name of the field
-            values: All values for this field
-            types: Set of data types found
-            presence_count: Number of documents with this field
-            total_docs: Total number of documents
+            field_name: Name des Feldes
+            values: Alle Werte für dieses Feld
+            types: Set der gefundenen Datentypen
+            presence_count: Anzahl der Dokumente mit diesem Feld
+            total_docs: Gesamtanzahl der Dokumente
             
         Returns:
-            FieldAnalysis object
+            FieldAnalysis-Objekt
         """
         # Determine primary data type
         type_counts = Counter(type(v).__name__ for v in values if v is not None)
         primary_type = type_counts.most_common(1)[0][0] if type_counts else "unknown"
         
-        # Filter out None values for analysis
+        # Filtere None-Werte für die Analyse aus
         non_null_values = [v for v in values if v is not None]
         null_count = len(values) - len(non_null_values)
         
-        # Calculate unique values
+        # Berechne eindeutige Werte
         unique_values = len(set(str(v) for v in non_null_values))
         
-        # Get sample values
+        # Hole Beispielwerte
         sample_values = list(set(non_null_values))[:10]
         
-        # Calculate statistics based on data type
+        # Berechne Statistiken basierend auf Datentyp
         avg_length = None
         min_value = None
         max_value = None
@@ -284,28 +284,28 @@ class DataStructureAnalyzer:
     def _calculate_quality_metrics(self, documents: List[VectorDocument],
                                   fields: List[FieldAnalysis]) -> Dict[str, Any]:
         """
-        Calculate data quality metrics.
+        Berechne Datenqualitätsmetriken.
         
         Args:
-            documents: List of documents
-            fields: List of field analyses
+            documents: Liste der Dokumente
+            fields: Liste der Feldanalysen
             
         Returns:
-            Dictionary with quality metrics
+            Dictionary mit Qualitätsmetriken
         """
         total_docs = len(documents)
         
-        # Calculate completeness metrics
+        # Berechne Vollständigkeitsmetriken
         completeness_scores = [field.presence_rate for field in fields]
         avg_completeness = statistics.mean(completeness_scores)
         
-        # Calculate consistency metrics
+        # Berechne Konsistenzmetriken
         consistency_issues = []
         for field in fields:
             if field.presence_rate < 0.5:  # Less than 50% presence
                 consistency_issues.append(f"Field '{field.field_name}' is missing in {100-field.presence_rate*100:.1f}% of documents")
         
-        # Calculate content quality metrics
+        # Berechne Inhaltsqualitätsmetriken
         text_fields = [f for f in fields if f.field_name in ['text', 'content', 'title']]
         avg_text_length = 0
         if text_fields:
@@ -319,7 +319,7 @@ class DataStructureAnalyzer:
             if text_lengths:
                 avg_text_length = statistics.mean(text_lengths)
         
-        # Calculate diversity metrics
+        # Berechne Diversitätsmetriken
         source_urls = [doc.source_url for doc in documents]
         unique_sources = len(set(source_urls))
         source_diversity = unique_sources / total_docs if total_docs > 0 else 0
@@ -595,7 +595,7 @@ class DataStructureAnalyzer:
         if not values:
             return None
         
-        # Calculate statistics
+        # Berechne Statistiken
         stats = {
             'total_count': len(values),
             'unique_count': len(set(str(v) for v in values)),
@@ -618,14 +618,14 @@ class DataStructureAnalyzer:
         return stats
 
 
-# Example usage
+# Beispielnutzung
 if __name__ == "__main__":
     import asyncio
     from batch_scraper import BatchScraper, ScrapingConfig
     from vector_store import VectorStore, VectorStoreConfig
     
     async def main():
-        # Example: Analyze existing vector store
+        # Beispiel: Analysiere vorhandene Vektordatenbank
         vector_config = VectorStoreConfig(
             backend="chromadb",
             collection_name="example_collection"

@@ -56,7 +56,7 @@ except ImportError:
         timestamp: str
         success: bool
 
-# Import hyperparameters
+# Importiere Hyperparameter
 try:
     from .hyperparameters import (
         VECTOR_BACKEND,
@@ -92,7 +92,7 @@ def get_default_vector_config():
 
 @dataclass
 class VectorDocument:
-    """Document structure for vector storage."""
+    """Dokumentstruktur für Vektorspeicherung."""
     id: str
     text: str
     embedding: Optional[List[float]]
@@ -104,7 +104,7 @@ class VectorDocument:
 
 @dataclass
 class VectorStoreConfig:
-    """Configuration for vector store operations."""
+    """Konfiguration für Vektorspeicher-Operationen."""
     # Database settings
     backend: str = "chromadb"  # chromadb, faiss (open source only)
     collection_name: str = "scraped_content"
@@ -123,7 +123,7 @@ class VectorStoreConfig:
     max_results: int = 10
     
     def __post_init__(self):
-        """Ensure absolute paths and prevent deprecated paths."""
+        """Stelle absolute Pfade sicher und verhindere veraltete Pfade."""
         # Check for deprecated paths
         if "output/vector_db" in self.persist_directory:
             raise ValueError(
@@ -140,21 +140,21 @@ class VectorStoreConfig:
 
 
 class EmbeddingProvider(ABC):
-    """Abstract base class for embedding providers."""
+    """Abstrakte Basisklasse für Embedding-Provider."""
     
     @abstractmethod
     def encode(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for a list of texts."""
+        """Generiere Embeddings für eine Liste von Texten."""
         pass
     
     @abstractmethod
     def get_dimension(self) -> int:
-        """Get the dimension of the embeddings."""
+        """Erhalte die Dimension der Embeddings."""
         pass
 
 
 class SentenceTransformerProvider(EmbeddingProvider):
-    """Sentence Transformers embedding provider."""
+    """Sentence Transformers Embedding-Provider."""
     
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         if not SENTENCE_TRANSFORMERS_AVAILABLE:
@@ -175,32 +175,32 @@ class SentenceTransformerProvider(EmbeddingProvider):
 
 
 class VectorStoreBackend(ABC):
-    """Abstract base class for vector store backends."""
+    """Abstrakte Basisklasse für Vektorspeicher-Backends."""
     
     @abstractmethod
     def add_documents(self, documents: List[VectorDocument]) -> None:
-        """Add documents to the vector store."""
+        """Füge Dokumente zum Vektorspeicher hinzu."""
         pass
     
     @abstractmethod
     def search(self, query_embedding: List[float], 
               k: int = 10, metadata_filter: Optional[Dict] = None) -> List[Tuple[VectorDocument, float]]:
-        """Search for similar documents."""
+        """Suche nach ähnlichen Dokumenten."""
         pass
     
     @abstractmethod
     def delete_by_source(self, source_url: str) -> None:
-        """Delete all documents from a specific source URL."""
+        """Lösche alle Dokumente von einer bestimmten Quell-URL."""
         pass
     
     @abstractmethod
     def get_document_count(self) -> int:
-        """Get the total number of documents in the store."""
+        """Erhalte die Gesamtanzahl der Dokumente im Speicher."""
         pass
 
 
 class ChromaDBBackend(VectorStoreBackend):
-    """ChromaDB vector store backend."""
+    """ChromaDB Vektorspeicher-Backend."""
     
     def __init__(self, config: VectorStoreConfig):
         if not CHROMADB_AVAILABLE:
@@ -513,13 +513,13 @@ class VectorStore:
         }
 
 
-# Example usage
+# Beispielnutzung
 if __name__ == "__main__":
     import asyncio
     from batch_scraper import BatchScraper, ScrapingConfig
     
     async def main():
-        # Example URLs to scrape
+        # Beispiel-URLs zum Scrapen
         urls = [
             "https://en.wikipedia.org/wiki/Machine_learning",
             "https://en.wikipedia.org/wiki/Natural_language_processing"
@@ -545,7 +545,7 @@ if __name__ == "__main__":
         print("Adding content to vector store...")
         vector_store.add_scraped_content(scraped_content)
         
-        # Test search
+        # Teste Suche
         print("\nSearching for 'machine learning algorithms'...")
         results = vector_store.search("machine learning algorithms", k=3)
         

@@ -1,12 +1,12 @@
 """
-Reprocess Existing Scraped Data
-================================
+Erneute Verarbeitung vorhandener gescrapeter Daten
+==================================================
 
-This utility script takes existing scraped data and reprocesses it with
-enhanced categorization, metadata enrichment, and better organization.
+Dieses Hilfsskript nimmt vorhandene gescrapete Daten und verarbeitet sie erneut mit
+verbesserter Kategorisierung, Metadaten-Anreicherung und besserer Organisation.
 
-Use this to upgrade data that was scraped with the old pipeline to the
-new enhanced format without having to re-scrape everything.
+Verwenden Sie dies, um Daten zu aktualisieren, die mit der alten Pipeline gescraped wurden,
+auf das neue erweiterte Format, ohne alles neu scrapen zu müssen.
 """
 
 import asyncio
@@ -18,7 +18,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 from collections import defaultdict
 
-# Add parent directory to path for imports
+# Füge übergeordnetes Verzeichnis zum Pfad für Imports hinzu
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.scraper.batch_scraper import ScrapedContent
@@ -30,20 +30,20 @@ logger = logging.getLogger(__name__)
 
 def load_scraped_data(filepath: Path) -> List[ScrapedContent]:
     """
-    Load scraped data from JSON file.
+    Lade gescrapete Daten aus JSON-Datei.
     
     Args:
-        filepath: Path to scraped_data.json file
+        filepath: Pfad zur scraped_data.json-Datei
         
     Returns:
-        List of ScrapedContent objects
+        Liste von ScrapedContent-Objekten
     """
     with filepath.open('r', encoding='utf-8') as f:
         data = json.load(f)
     
     scraped_contents = []
     for item in data:
-        # Handle both dict and object formats
+        # Verarbeite sowohl Dict- als auch Objekt-Formate
         if isinstance(item, dict):
             scraped_contents.append(ScrapedContent(**item))
         else:
@@ -58,27 +58,27 @@ def reprocess_data(
     organize_by_category: bool = True
 ) -> Dict[str, Any]:
     """
-    Reprocess existing scraped data with enhanced features.
+    Verarbeite vorhandene gescrapete Daten erneut mit erweiterten Funktionen.
     
     Args:
-        input_file: Path to existing scraped_data.json
-        output_dir: Directory to store reprocessed data
-        organize_by_category: Whether to organize by category
+        input_file: Pfad zur vorhandenen scraped_data.json
+        output_dir: Verzeichnis zum Speichern der neu verarbeiteten Daten
+        organize_by_category: Ob nach Kategorie organisiert werden soll
         
     Returns:
-        Statistics dictionary
+        Statistik-Dictionary
     """
     logger.info("=" * 80)
     logger.info("Starting Data Reprocessing")
     logger.info("=" * 80)
     
-    # Load existing data
+    # Lade vorhandene Daten
     logger.info(f"\n[Stage 1/3] Loading data from {input_file}...")
     scraped_data = load_scraped_data(input_file)
     successful_scrapes = [content for content in scraped_data if content.success]
     logger.info(f"✓ Loaded {len(successful_scrapes)} successful scrapes")
     
-    # Categorize and enrich
+    # Kategorisiere und reichere an
     logger.info("\n[Stage 2/3] Categorizing and Enriching Content...")
     categorized_content = defaultdict(list)
     category_stats = defaultdict(int)
@@ -87,10 +87,10 @@ def reprocess_data(
         category = categorize_url(content.url)
         enriched_metadata = enrich_metadata(content, category)
         
-        # Update content metadata
+        # Aktualisiere Content-Metadaten
         content.metadata.update(enriched_metadata)
         
-        # Organize by category
+        # Organisiere nach Kategorie
         categorized_content[category].append(content)
         category_stats[category] += 1
     
@@ -98,13 +98,13 @@ def reprocess_data(
     for category, count in sorted(category_stats.items()):
         logger.info(f"  - {category}: {count} pages")
     
-    # Store in vector database
+    # Speichere in Vektordatenbank
     logger.info("\n[Stage 3/3] Storing in Vector Database...")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     total_docs = 0
     if organize_by_category:
-        # Create separate collection for each category
+        # Erstelle separate Collection für jede Kategorie
         for category, contents in categorized_content.items():
             if not contents:
                 continue
@@ -121,7 +121,7 @@ def reprocess_data(
             
             logger.info(f"  ✓ Stored {doc_count} documents in collection '{collection_name}'")
     else:
-        # Single collection
+        # Einzelne Collection
         vector_config = VectorStoreConfig(
             persist_directory=str(output_dir / "vector_db"),
             collection_name="wiso_scraped_content"
@@ -131,7 +131,7 @@ def reprocess_data(
         total_docs = vector_store.add_scraped_content(successful_scrapes)
         logger.info(f"  ✓ Stored {total_docs} documents in single collection")
     
-    # Generate report
+    # Erstelle Bericht
     stats = {
         "timestamp": datetime.now().isoformat(),
         "input_file": str(input_file),
@@ -145,7 +145,7 @@ def reprocess_data(
         }
     }
     
-    # Save report
+    # Speichere Bericht
     report_file = output_dir / "reprocessing_report.json"
     with report_file.open('w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
@@ -197,7 +197,7 @@ def main():
     
     args = parser.parse_args()
     
-    # Setup logging
+    # Konfiguriere Logging
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
