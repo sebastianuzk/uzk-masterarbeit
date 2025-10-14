@@ -35,27 +35,6 @@ def initialize_session_state():
             st.session_state.bpmn_engine_initialized = False
             st.session_state.bpmn_engine_error = str(e)
     
-    # Initialisiere Camunda Service (ohne sofortige Verbindung)
-    if 'camunda_initialized' not in st.session_state:
-        try:
-            # Import hier um zirkuläre Imports zu vermeiden
-            from src.camunda_integration.services.camunda_service import CamundaService
-            from src.camunda_integration.services.docker_manager import DockerManager
-            
-            # Erstelle Services ohne sofortige Verbindungstests
-            auto_deploy_dir = "src/process_automation/deployed_processes"
-            camunda_service = CamundaService(auto_deploy_dir=auto_deploy_dir)
-            docker_manager = DockerManager()
-            
-            st.session_state.camunda_service = camunda_service
-            st.session_state.docker_manager = docker_manager
-            st.session_state.camunda_initialized = True
-            st.session_state.camunda_error = None
-            
-        except Exception as e:
-            st.session_state.camunda_initialized = False
-            st.session_state.camunda_error = str(e)
-    
     if 'agent' not in st.session_state:
         try:
             st.session_state.agent = create_react_agent()

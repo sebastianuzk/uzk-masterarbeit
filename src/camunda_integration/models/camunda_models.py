@@ -113,16 +113,16 @@ class DeploymentResult(BaseModel):
     deployment_time: datetime = Field(alias="deploymentTime")
     source: Optional[str] = None
     tenant_id: Optional[str] = Field(alias="tenantId", default=None)
-    deployed_process_definitions: Dict[str, ProcessDefinition] = Field(
+    deployed_process_definitions: Optional[Dict[str, ProcessDefinition]] = Field(
         alias="deployedProcessDefinitions", default_factory=dict
     )
-    deployed_case_definitions: Dict[str, Any] = Field(
+    deployed_case_definitions: Optional[Dict[str, Any]] = Field(
         alias="deployedCaseDefinitions", default_factory=dict
     )
-    deployed_decision_definitions: Dict[str, Any] = Field(
+    deployed_decision_definitions: Optional[Dict[str, Any]] = Field(
         alias="deployedDecisionDefinitions", default_factory=dict
     )
-    deployed_decision_requirements_definitions: Dict[str, Any] = Field(
+    deployed_decision_requirements_definitions: Optional[Dict[str, Any]] = Field(
         alias="deployedDecisionRequirementsDefinitions", default_factory=dict
     )
 

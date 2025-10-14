@@ -19,33 +19,32 @@ logger = logging.getLogger(__name__)
 
 def get_camunda_service() -> CamundaService:
     """
-    Get Camunda service instance from session state
+    Get or create Camunda service instance
     
     Returns:
         CamundaService instance
     """
-    if 'camunda_service' in st.session_state:
-        return st.session_state.camunda_service
-    else:
-        st.error("Camunda Service nicht initialisiert. Bitte laden Sie die App neu.")
-        # Fallback
-        auto_deploy_dir = "src/process_automation/deployed_processes"
-        return CamundaService(auto_deploy_dir=auto_deploy_dir)
+    if 'camunda_service' not in st.session_state:
+        # Use camunda_integration bpmn_processes directory for auto-deployment
+        auto_deploy_dir = "src/camunda_integration/bpmn_processes"
+        st.session_state.camunda_service = CamundaService(
+            auto_deploy_dir=auto_deploy_dir
+        )
+    
+    return st.session_state.camunda_service
 
 
 def get_docker_manager() -> DockerManager:
     """
-    Get Docker manager instance from session state
+    Get or create Docker manager instance
     
     Returns:
         DockerManager instance
     """
-    if 'docker_manager' in st.session_state:
-        return st.session_state.docker_manager
-    else:
-        st.error("Docker Manager nicht initialisiert. Bitte laden Sie die App neu.")
-        # Fallback
-        return DockerManager()
+    if 'docker_manager' not in st.session_state:
+        st.session_state.docker_manager = DockerManager()
+    
+    return st.session_state.docker_manager
 
 
 def display_camunda_engine_interface():

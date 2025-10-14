@@ -45,7 +45,13 @@ class CamundaService:
             auto_deploy_dir: Directory to auto-deploy BPMN files from
         """
         self.client = CamundaClient(base_url)
-        self.auto_deploy_dir = auto_deploy_dir
+        # Handle string as first argument (backwards compatibility)
+        if isinstance(base_url, str) and base_url.startswith("src/"):
+            # First argument is actually auto_deploy_dir
+            self.auto_deploy_dir = base_url
+            self.client = CamundaClient()  # Use default URL
+        else:
+            self.auto_deploy_dir = auto_deploy_dir
         self._deployed_files: Dict[str, str] = {}  # file_path -> deployment_id
         
     def is_engine_running(self) -> bool:

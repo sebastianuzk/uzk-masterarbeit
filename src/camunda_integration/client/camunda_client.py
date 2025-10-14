@@ -13,12 +13,13 @@ from datetime import datetime
 
 try:
     import pycamunda
-    # pycamunda doesn't have Engine class, use direct imports
-    HAS_PYCAMUNDA = True
+    # Note: pycamunda 0.6.1 has different API structure than newer versions
+    # We'll use direct HTTP calls with requests for better compatibility
+    PYCAMUNDA_AVAILABLE = True
 except ImportError:
     # Fallback für development ohne pycamunda
     pycamunda = None
-    HAS_PYCAMUNDA = False
+    PYCAMUNDA_AVAILABLE = False
 
 from ..models.camunda_models import (
     CamundaEngine, ProcessDefinition, ProcessInstance, Task, 
@@ -62,17 +63,10 @@ class CamundaClient:
         self._session = requests.Session()
         self._session.timeout = 30
         
-        # Initialize pycamunda if available
-        if HAS_PYCAMUNDA:
-            try:
-                # pycamunda doesn't use Engine class, use module directly
-                self.engine_client = pycamunda
-            except Exception as e:
-                logger.warning(f"Failed to initialize pycamunda client: {e}")
-                self.engine_client = None
-        else:
-            self.engine_client = None
-            logger.warning("pycamunda not available, using fallback HTTP client")
+        # For now, we use direct HTTP requests for better compatibility
+        # pycamunda 0.6.1 has different API structure than documented
+        self.engine_client = None
+        logger.info("Using direct HTTP client for Camunda REST API")
     
     def is_connected(self) -> bool:
         """
@@ -82,11 +76,10 @@ class CamundaClient:
             True if connected, False otherwise
         """
         try:
-            response = self._session.get(f"{self.base_url}/engine", timeout=3)
+            response = self._session.get(f"{self.base_url}/engine", timeout=5)
             return response.status_code == 200
         except Exception as e:
-            # Only log detailed errors in debug mode
-            logger.debug(f"Camunda connection check failed: {e}")
+            logger.error(f"Connection check failed: {e}")
             return False
     
     def get_engine_info(self) -> CamundaEngine:
@@ -150,33 +143,10 @@ class CamundaClient:
             deployment_name = f"Deployment_{file_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         try:
-            # Use pycamunda if available
-            if self.engine_client and HAS_PYCAMUNDA:
-                try:
-                    with open(file_path, 'rb') as f:
-                        deployment = pycamunda.deployment.create(
-                            url=self.base_url,
-                            deployment_name=deployment_name,
-                            files={file_path.name: f.read()}
-                        )
-                    
-                    # Convert to our model
-                    return DeploymentResult(
-                        id=deployment.id,
-                        name=deployment.name,
-                        deploymentTime=deployment.deployment_time,
-                        source=deployment.source,
-                        tenantId=deployment.tenant_id,
-                        deployedProcessDefinitions=deployment.deployed_process_definitions or {}
-                    )
-                except Exception as pycamunda_error:
-                    logger.warning(f"pycamunda deployment failed, falling back to HTTP: {pycamunda_error}")
-                    # Fall through to HTTP method
-            
-            # HTTP fallback method
+            # Use proper multipart form data for Camunda deployment
             with open(file_path, 'rb') as f:
                 files = {
-                    'upload': (file_path.name, f, 'application/xml')
+                    'data': (file_path.name, f.read(), 'application/xml')
                 }
                 data = {
                     'deployment-name': deployment_name,
@@ -188,6 +158,12 @@ class CamundaClient:
                     files=files,
                     data=data
                 )
+                
+                # Debug information
+                if response.status_code != 200:
+                    logger.error(f"Deployment failed with status {response.status_code}")
+                    logger.error(f"Response: {response.text}")
+                
                 response.raise_for_status()
                 
                 result = response.json()
