@@ -174,3 +174,48 @@ env/
 # Additional helper scripts
 start_streamlit.bat
 start_streamlit.ps1
+
+# Project data directories
+data/
+!data/.gitkeep
+data/scraped/
+data/pdfs/
+data/vector_db/
+data/pipeline_*/
+data/test_*/
+data/enhanced_*/
+
+# Cache and database files
+*.db
+*.sqlite
+*.sqlite3
+url_cache.db
+chroma.sqlite3
+
+# Scraped content
+scraped_data.json
+discovered_urls.json
+pipeline_report.json
+
+# Metrics and reports
+*_metrics.json
+*_statistics.json
+*_report.json
+cache_statistics.json
+scraper_metrics.json
+deduplication_report.json
+content_changes.json
+failed_urls.json
+pdf_metadata.json
+
+# Temporary run scripts
+run_pipeline_*.py
+
+# Downloaded PDFs
+*.pdf
+!docs/*.pdf
+
+# Large model files
+*.bin
+*.safetensors
+*.gguf
