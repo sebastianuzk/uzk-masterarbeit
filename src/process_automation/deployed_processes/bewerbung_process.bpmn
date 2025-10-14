@@ -10,15 +10,58 @@
                   exporter="bpmn-js"
                   exporterVersion="17.7.1">
   
-  <bpmn:process id="bewerbung_process" name="Universitäts-Bewerbungsprozess" isExecutable="true">
+  <bpmn:process id="bewerbung_process" name="Universitäts-Bewerbungsprozess" isExecutable="true" camunda:historyTimeToLive="30">
+    
+    <bpmn:extensionElements>
+      <camunda:inputOutput>
+        <camunda:inputParameter name="student_name">${student_name}</camunda:inputParameter>
+        <camunda:inputParameter name="studiengang">${studiengang}</camunda:inputParameter>
+        <camunda:inputParameter name="email">${email}</camunda:inputParameter>
+      </camunda:inputOutput>
+    </bpmn:extensionElements>
     
     <!-- Start Event -->
     <bpmn:startEvent id="start_bewerbung" name="Bewerbung eingegangen">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="student_name" label="Name des Studenten" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required" />
+              <camunda:constraint name="minlength" config="2" />
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="studiengang" label="Studiengang" type="string">
+            <camunda:validation>
+              <camunda:constraint name="required" />
+              <camunda:constraint name="minlength" config="2" />
+            </camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
       <bpmn:outgoing>flow_start_to_pruefen</bpmn:outgoing>
     </bpmn:startEvent>
     
     <!-- User Task: Angaben prüfen -->
     <bpmn:userTask id="angaben_pruefen" name="Angaben prüfen" camunda:assignee="sachbearbeiter">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="student_name" label="Name des Studenten" type="string" defaultValue="${student_name}">
+            <camunda:validation>
+              <camunda:constraint name="readonly" />
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="studiengang" label="Studiengang" type="string" defaultValue="${studiengang}">
+            <camunda:validation>
+              <camunda:constraint name="readonly" />
+            </camunda:validation>
+          </camunda:formField>
+          <camunda:formField id="email" label="E-Mail des Studenten (optional)" type="string" defaultValue="${email}">
+            <camunda:validation>
+              <camunda:constraint name="maxlength" config="100" />
+            </camunda:validation>
+          </camunda:formField>
+        </camunda:formData>
+      </bpmn:extensionElements>
       <bpmn:incoming>flow_start_to_pruefen</bpmn:incoming>
       <bpmn:outgoing>flow_pruefen_to_gateway</bpmn:outgoing>
     </bpmn:userTask>
@@ -31,16 +74,16 @@
     </bpmn:exclusiveGateway>
     
     <!-- Service Task: Akzeptierung verarbeiten -->
-    <bpmn:serviceTask id="bewerbung_akzeptiert" name="Bewerbung akzeptieren" camunda:class="AcceptApplicationService">
+    <bpmn:serviceTask id="bewerbung_akzeptiert" name="Bewerbung akzeptieren" camunda:expression="${true}">
       <bpmn:incoming>flow_gateway_to_akzeptiert</bpmn:incoming>
       <bpmn:outgoing>flow_akzeptiert_to_end</bpmn:outgoing>
     </bpmn:serviceTask>
     
-    <!-- User Task: Ablehnung begründen -->
-    <bpmn:userTask id="bewerbung_ablehnen" name="Ablehnung begründen" camunda:assignee="sachbearbeiter">
+    <!-- Service Task: Ablehnung verarbeiten -->
+    <bpmn:serviceTask id="bewerbung_ablehnen" name="Bewerbung automatisch ablehnen" camunda:expression="${true}">
       <bpmn:incoming>flow_gateway_to_abgelehnt</bpmn:incoming>
       <bpmn:outgoing>flow_abgelehnt_to_end</bpmn:outgoing>
-    </bpmn:userTask>
+    </bpmn:serviceTask>
     
     <!-- End Events -->
     <bpmn:endEvent id="end_akzeptiert" name="Bewerbung akzeptiert">
@@ -61,17 +104,17 @@
                        targetRef="entscheidung_gateway" />
     
     <bpmn:sequenceFlow id="flow_gateway_to_akzeptiert" 
-                       name="Bewerbung gültig" 
+                       name="E-Mail vorhanden" 
                        sourceRef="entscheidung_gateway" 
                        targetRef="bewerbung_akzeptiert">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${bewerbung_gueltig == true}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${execution.hasVariable('email') &amp;&amp; email != null &amp;&amp; email != ""}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     
     <bpmn:sequenceFlow id="flow_gateway_to_abgelehnt" 
-                       name="Bewerbung ungültig" 
+                       name="Keine E-Mail" 
                        sourceRef="entscheidung_gateway" 
                        targetRef="bewerbung_ablehnen">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${bewerbung_gueltig == false}</bpmn:conditionExpression>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${!execution.hasVariable('email') || email == null || email == ""}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     
     <bpmn:sequenceFlow id="flow_akzeptiert_to_end" 
@@ -153,7 +196,7 @@
         <di:waypoint x="475" y="117" />
         <di:waypoint x="530" y="117" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="482" y="99" width="84" height="14" />
+          <dc:Bounds x="478" y="99" width="84" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       
@@ -162,7 +205,7 @@
         <di:waypoint x="450" y="240" />
         <di:waypoint x="530" y="240" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="456" y="188" width="88" height="14" />
+          <dc:Bounds x="456" y="188" width="66" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       
