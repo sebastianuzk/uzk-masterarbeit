@@ -562,3 +562,8 @@ Falls Sie Probleme haben, verwenden Sie diesen direkten Befehl:
 cd "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit"
 .\Masterarbeit\Scripts\python.exe -m streamlit run src/ui/streamlit_app.py
 ```
+
+
+
+
+Final remarks to process-automation: NOT feasible
