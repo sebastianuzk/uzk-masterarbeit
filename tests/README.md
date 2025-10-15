@@ -11,10 +11,10 @@ Das Test-System besteht aus vier fokussierten Test-Dateien, die verschiedene Ber
 
 | Datei | Beschreibung |
 |-------|-------------|
-| `test_tools.py` | Tests für alle Tools (Wikipedia, DuckDuckGo, Web-Scraper, RAG) |
+| `test_tools.py` | Tests für aktuelle Tools (DuckDuckGo, Web-Scraper, RAG, E-Mail) |
 | `test_agent.py` | Tests für den React Agent |
 | `test_scraper.py` | Tests für das Web-Scraper-System |
-| `test_system_.py` | **Vollständige System-Integration-Tests** |
+| `test_system.py` | **Vollständige System-Integration-Tests** |
 
 ## Testausführung
 
@@ -36,13 +36,13 @@ Sie haben zwei Möglichkeiten, die Tests auszuführen:
 & "Masterarbeit\Scripts\python.exe" tests\test_scraper.py
 
 # Vollständiger System-Test
-& "Masterarbeit\Scripts\python.exe" tests\test_system_.py
+& "Masterarbeit\Scripts\python.exe" tests\test_system.py
 
 # Mit pytest (detaillierte Ausgabe)
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_tools.py -v
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_agent.py -v
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_scraper.py -v
-& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_system_.py -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_system.py -v
 
 # Alle Tests ausführen
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\ -v
@@ -99,12 +99,12 @@ python -m pytest tests/ -v
 ## Test-Kategorien
 
 ### 1. Komponenten-Tests
-- **test_tools.py**: ~10 Sekunden - Unit Tests für alle Tools
+- **test_tools.py**: ~10 Sekunden - Unit Tests für aktuelle Tools (DuckDuckGo, Web-Scraper, RAG, E-Mail)
 - **test_agent.py**: ~20 Sekunden - React Agent Funktionalität  
 - **test_scraper.py**: ~30 Sekunden - Web-Scraping System
 
 ### 2. System-Test
-- **test_system_.py**: 2-5 Minuten - Vollständige End-to-End Integration
+- **test_system.py**: 2-5 Minuten - Vollständige End-to-End Integration mit E-Mail-Tool
 
 ## Abhängigkeiten
 
@@ -119,8 +119,9 @@ python -m pytest tests/ -v
 | test_agent.py | Ollama Server läuft |
 | test_tools.py (RAG-Tests) | ChromaDB mit Daten verfügbar |
 | test_tools.py (externe Tools) | Internet-Verbindung |
+| test_tools.py (E-Mail-Tests) | E-Mail-Konfiguration (optional) |
 | test_scraper.py | Internet-Verbindung |
-| test_system_.py | Alle oben genannten |
+| test_system.py | Alle oben genannten + Streamlit verfügbar |
 
 ## Test-Beispiele
 
@@ -148,12 +149,17 @@ python tests\test_agent.py
 
 # Agent spezifisch testen
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_agent.py::TestReactAgent::test_simple_chat -v -s
+
+# E-Mail-Tool spezifisch testen
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_tools.py::TestTools::test_email_tool_creation -v -s
+```
 ```
 
 **Ohne venv:**
 ```bash
 python -m pytest tests\test_tools.py::TestTools::test_rag_search -v -s
 python -m pytest tests\test_agent.py::TestReactAgent::test_simple_chat -v -s
+python -m pytest tests\test_tools.py::TestTools::test_email_tool_creation -v -s
 ```
 
 ### Beispiel 3: Integration vor Deployment
@@ -161,12 +167,12 @@ python -m pytest tests\test_agent.py::TestReactAgent::test_simple_chat -v -s
 **Mit venv:**
 ```bash
 # Vollständige System-Validation
-& "Masterarbeit\Scripts\python.exe" tests\test_system_.py
+& "Masterarbeit\Scripts\python.exe" tests\test_system.py
 ```
 
 **Ohne venv:**
 ```bash
-python tests\test_system_.py
+python tests\test_system.py
 ```
 
 ### Beispiel 4: Alle Tests für Release

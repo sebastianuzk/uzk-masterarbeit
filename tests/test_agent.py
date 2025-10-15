@@ -39,7 +39,7 @@ class TestReactAgent(unittest.TestCase):
             self.fail(f"Agent-Initialisierung fehlgeschlagen: {str(e)}")
     
     def test_available_tools(self):
-        """Teste verfügbare Tools"""
+        """Teste verfügbare Tools (ohne Wikipedia)"""
         try:
             agent = ReactAgent()
             tools = agent.get_available_tools()
@@ -47,18 +47,24 @@ class TestReactAgent(unittest.TestCase):
             self.assertIsInstance(tools, list)
             self.assertGreater(len(tools), 0)
             
-            # Überprüfe erwartete Tools
-            if settings.ENABLE_WIKIPEDIA:
-                self.assertIn("wikipedia_search", tools)
+            # Überprüfe erwartete Tools (Wikipedia wird entfernt)
+            expected_tools = []
             
             if settings.ENABLE_WEB_SCRAPER:
-                self.assertIn("web_scraper", tools)
+                expected_tools.append("web_scraper")
             
             if settings.ENABLE_DUCKDUCKGO:
-                self.assertIn("duckduckgo_search", tools)
+                expected_tools.append("duckduckgo_search")
+            
+            # RAG-Tool für Universitätswissen
+            expected_tools.append("university_knowledge_search")
             
             # E-Mail-Tool sollte immer verfügbar sein
-            self.assertIn("send_email", tools)
+            expected_tools.append("send_email")
+            
+            # Überprüfe, dass alle erwarteten Tools vorhanden sind
+            for tool in expected_tools:
+                self.assertIn(tool, tools, f"Tool {tool} nicht gefunden")
                 
         except Exception as e:
             self.fail(f"Tool-Test fehlgeschlagen: {str(e)}")
