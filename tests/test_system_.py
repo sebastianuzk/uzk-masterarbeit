@@ -41,9 +41,6 @@ class TestSystemIntegration(unittest.TestCase):
             self.assertGreater(len(tools), 0)
             
             # Überprüfe spezifische Tools
-            if settings.ENABLE_WIKIPEDIA:
-                self.assertIn("wikipedia_search", tools)
-            
             if settings.ENABLE_DUCKDUCKGO:
                 self.assertIn("duckduckgo_search", tools)
             

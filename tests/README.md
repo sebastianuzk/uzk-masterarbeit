@@ -11,7 +11,7 @@ Das Test-System besteht aus vier fokussierten Test-Dateien, die verschiedene Ber
 
 | Datei | Beschreibung |
 |-------|-------------|
-| `test_tools.py` | Tests für alle Tools (Wikipedia, DuckDuckGo, Web-Scraper, RAG) |
+| `test_tools.py` | Tests für alle Tools (DuckDuckGo, Web-Scraper, RAG) |
 | `test_agent.py` | Tests für den React Agent |
 | `test_scraper.py` | Tests für das Web-Scraper-System |
 | `test_system_.py` | **Vollständige System-Integration-Tests** |

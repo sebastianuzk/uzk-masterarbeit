@@ -7,7 +7,7 @@ Ein autonomer Chatbot-Agent basierend auf LangChain und LangGraph mit Open-Sourc
 ### Core Agent Features
 - **Autonomer Agent**: Verwendet LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
 - **Ollama Integration**: Vollständig Open-Source LLM ohne API-Kosten
-- **Multiple Tools**: Wikipedia-Suche, Web-Scraping und DuckDuckGo-Websuche
+- **Multiple Tools**: Web-Scraping und DuckDuckGo-Websuche
 - **Interactive Chat**: Streamlit-basierte Benutzeroberfläche
 - **Memory Management**: Persistente Konversationshistorie
 - **Tool Integration**: Modulare Tool-Architektur für einfache Erweiterung
@@ -27,7 +27,6 @@ Ein autonomer Chatbot-Agent basierend auf LangChain und LangGraph mit Open-Sourc
 - **Framework**: LangChain + LangGraph
 - **UI**: Streamlit
 - **Suche**: DuckDuckGo (privatsphärefreundlich)
-- **Wissen**: Wikipedia
 - **Vector Databases**: ChromaDB, FAISS
 - **Embeddings**: Sentence Transformers, OpenAI (optional)
 - **Web Scraping**: aiohttp, BeautifulSoup
@@ -43,7 +42,6 @@ uzk-masterarbeit/
 │   │   └── react_agent.py       # Hauptagent mit LangGraph
 │   ├── tools/
 │   │   ├── __init__.py
-│   │   ├── wikipedia_tool.py    # Wikipedia-Suche
 │   │   ├── web_scraper_tool.py  # Web-Scraping für Agent
 │   │   └── duckduckgo_tool.py   # DuckDuckGo-Suche
 │   ├── scraper/                 # RAG Web Scraper System
@@ -156,7 +154,7 @@ cp .env.example .env
 Wenn Sie nur den Chatbot ohne Web-Scraper benötigen:
 ```bash
 pip install langchain langgraph langchain-community langchain-core langchain-ollama
-pip install streamlit python-dotenv duckduckgo-search wikipedia requests
+pip install streamlit python-dotenv duckduckgo-search requests
 ```
 
 #### Vollständige Installation (Agent + RAG Scraper):
@@ -318,9 +316,8 @@ Der Agent verwendet LangGraph's `create_react_agent` Funktionalität für:
 - Memory Management für Kontext
 
 ### Verfügbare Tools
-1. **Wikipedia Tool**: Suche nach Informationen in Wikipedia
-2. **Web Scraper Tool**: Extrahierung von Inhalten aus Webseiten (für Agent)
-3. **DuckDuckGo Tool**: Privatsphärefreundliche Websuche ohne Tracking
+1. **Web Scraper Tool**: Extrahierung von Inhalten aus Webseiten (für Agent)
+2. **DuckDuckGo Tool**: Privatsphärefreundliche Websuche ohne Tracking
 
 ### RAG Web Scraper System
 Das separate Scraper-System bietet:
