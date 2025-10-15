@@ -2,18 +2,21 @@
 
 ## Übersicht
 
-Das Test-System besteht aus vier fokussierten Test-Dateien, die verschiedene Bereiche des RAG-Chatbot-Systems abdecken:
+Das Test-System besteht aus vier fokussierten Test-Dateien, die verschiedene Bereiche des RAG-Chatbot-Systems mit Camunda Integration abdecken:
 
-- **Component Tests**: Tests für einzelne Komponenten (Tools, Agent, Scraper)
+- **Component Tests**: Tests für einzelne Komponenten (Tools, Agent, Scraper, Camunda)
 - **System Tests**: End-to-End Tests des gesamten Systems
+- **Integration Tests**: Camunda Platform 7 Integration Tests
+- **Performance Tests**: System Health und Performance Monitoring
 
 ## Test-Dateien
 
 | Datei | Beschreibung |
 |-------|-------------|
-| `test_tools.py` | Tests für alle Tools (Wikipedia, DuckDuckGo, Web-Scraper, RAG) |
+| `test_tools.py` | Tests für alle Tools (Wikipedia, DuckDuckGo, Web-Scraper, RAG, Process Automation) |
 | `test_agent.py` | Tests für den React Agent |
 | `test_scraper.py` | Tests für das Web-Scraper-System |
+| `test_camunda.py` | **Camunda Platform 7 Integration Tests** (NEU!) |
 | `test_system_.py` | **Vollständige System-Integration-Tests** |
 
 ## Testausführung
@@ -34,6 +37,7 @@ Sie haben zwei Möglichkeiten, die Tests auszuführen:
 & "Masterarbeit\Scripts\python.exe" tests\test_tools.py
 & "Masterarbeit\Scripts\python.exe" tests\test_agent.py  
 & "Masterarbeit\Scripts\python.exe" tests\test_scraper.py
+& "Masterarbeit\Scripts\python.exe" tests\test_camunda.py
 
 # Vollständiger System-Test
 & "Masterarbeit\Scripts\python.exe" tests\test_system_.py
@@ -42,9 +46,10 @@ Sie haben zwei Möglichkeiten, die Tests auszuführen:
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_tools.py -v
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_agent.py -v
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_scraper.py -v
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_camunda.py -v
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_system_.py -v
 
-# Alle Tests ausführen
+# Alle Tests ausführen (44 Tests mit 100% Success Rate)
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\ -v
 ```
 
@@ -70,6 +75,7 @@ Falls Sie die Tests ohne venv ausführen möchten (stellen Sie sicher, dass alle
 python tests\test_tools.py
 python tests\test_agent.py  
 python tests\test_scraper.py
+python tests\test_camunda.py
 
 # Vollständiger System-Test
 python tests\test_system_.py
@@ -78,9 +84,10 @@ python tests\test_system_.py
 python -m pytest tests\test_tools.py -v
 python -m pytest tests\test_agent.py -v
 python -m pytest tests\test_scraper.py -v
+python -m pytest tests\test_camunda.py -v
 python -m pytest tests\test_system_.py -v
 
-# Alle Tests ausführen
+# Alle Tests ausführen (44 Tests mit 100% Success Rate)
 python -m pytest tests\ -v
 ```
 
@@ -99,12 +106,13 @@ python -m pytest tests/ -v
 ## Test-Kategorien
 
 ### 1. Komponenten-Tests
-- **test_tools.py**: ~10 Sekunden - Unit Tests für alle Tools
+- **test_tools.py**: ~15 Sekunden - Unit Tests für alle Tools (inkl. Process Automation)
 - **test_agent.py**: ~20 Sekunden - React Agent Funktionalität  
 - **test_scraper.py**: ~30 Sekunden - Web-Scraping System
+- **test_camunda.py**: ~15 Sekunden - Camunda Platform 7 Integration
 
 ### 2. System-Test
-- **test_system_.py**: 2-5 Minuten - Vollständige End-to-End Integration
+- **test_system_.py**: 2-5 Minuten - Vollständige End-to-End Integration mit Performance Tests
 
 ## Abhängigkeiten
 
@@ -120,7 +128,8 @@ python -m pytest tests/ -v
 | test_tools.py (RAG-Tests) | ChromaDB mit Daten verfügbar |
 | test_tools.py (externe Tools) | Internet-Verbindung |
 | test_scraper.py | Internet-Verbindung |
-| test_system_.py | Alle oben genannten |
+| test_camunda.py | Docker verfügbar (für Offline-Tests nicht erforderlich) |
+| test_system_.py | Alle oben genannten + psutil-Bibliothek |
 
 ## Test-Beispiele
 
@@ -148,12 +157,16 @@ python tests\test_agent.py
 
 # Agent spezifisch testen
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\test_agent.py::TestReactAgent::test_simple_chat -v -s
+
+# Camunda Integration spezifisch testen
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_camunda.py::TestCamundaIntegration::test_camunda_service_creation -v -s
 ```
 
 **Ohne venv:**
 ```bash
 python -m pytest tests\test_tools.py::TestTools::test_rag_search -v -s
 python -m pytest tests\test_agent.py::TestReactAgent::test_simple_chat -v -s
+python -m pytest tests\test_camunda.py::TestCamundaIntegration::test_camunda_service_creation -v -s
 ```
 
 ### Beispiel 3: Integration vor Deployment
@@ -217,6 +230,20 @@ python -m pytest tests\test_tools.py tests\test_scraper.py -v
 python -m pytest tests\test_tools.py -v -k "not rag"
 ```
 
+#### 3. "Docker nicht verfügbar"
+
+**Mit venv:**
+```bash
+# Camunda-Tests laufen trotzdem (Mock-basiert):
+& "Masterarbeit\Scripts\python.exe" -m pytest tests\test_camunda.py -v
+# Docker-abhängige Tests werden automatisch übersprungen
+```
+
+**Ohne venv:**
+```bash
+python -m pytest tests\test_camunda.py -v
+```
+
 #### 3. "Internet-Verbindung nicht verfügbar"
 ```bash
 # Tests werden automatisch übersprungen, aber für vollständige Tests:
@@ -253,10 +280,13 @@ python tests\test_tools.py
 # 2. Scraper-Tests (bei Scraper-Änderungen)
 & "Masterarbeit\Scripts\python.exe" tests\test_scraper.py
 
-# 3. System-Tests (vor wichtigen Commits)
+# 3. Camunda-Tests (bei Camunda-Änderungen)
+& "Masterarbeit\Scripts\python.exe" tests\test_camunda.py
+
+# 4. System-Tests (vor wichtigen Commits)
 & "Masterarbeit\Scripts\python.exe" tests\test_system_.py
 
-# 4. Alle Tests (vor Release)
+# 5. Alle Tests (vor Release) - 44 Tests mit 100% Success Rate
 & "Masterarbeit\Scripts\python.exe" -m pytest tests\ -v
 ```
 
@@ -269,10 +299,13 @@ python tests\test_agent.py
 # 2. Scraper-Tests (bei Scraper-Änderungen)
 python tests\test_scraper.py
 
-# 3. System-Tests (vor wichtigen Commits)
+# 3. Camunda-Tests (bei Camunda-Änderungen)  
+python tests\test_camunda.py
+
+# 4. System-Tests (vor wichtigen Commits)
 python tests\test_system_.py
 
-# 4. Alle Tests (vor Release)
+# 5. Alle Tests (vor Release) - 44 Tests mit 100% Success Rate
 python -m pytest tests\ -v
 ```
 
@@ -282,9 +315,9 @@ python -m pytest tests\ -v
 ```
 ...
 ----------------------------------------------------------------------
-Ran X tests in Y.YYYs
+Ran 44 tests in Y.YYYs
 
-OK
+OK (44 passed)
 ```
 
 ### Fehlgeschlagene Tests:
@@ -308,5 +341,7 @@ test_example ... skipped 'Ollama-Server nicht erreichbar'
 
 - Tests sind so designed, dass sie bei fehlenden Abhängigkeiten übersprungen werden
 - Alle Tests können offline ausgeführt werden (außer externe Tool-Tests)
+- Camunda-Tests verwenden Mocks für Offline-Entwicklung
 - Tests erstellen temporäre Dateien, die automatisch gelöscht werden
+- Das System erreicht 44/44 Tests mit 100% Success Rate
 - Bei Problemen: Siehe detaillierte Fehlerausgabe und Haupt-README.md

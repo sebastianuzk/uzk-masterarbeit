@@ -9,10 +9,11 @@ Enterprise-grade BPMN 2.0 process engine integration with automatic Docker start
 - Intelligent container detection and management
 - Clean custom Docker image without demo processes
 
-✅ **Auto-Deployment of BPMN Files**
-- All `.bpmn` files in `bpmn_processes/` are automatically deployed at startup
-- No manual deployment required
-- Startup script handles deployment via REST API
+✅ **Manual Deployment Control**
+- No automatic BPMN deployment for security
+- Manual "Deploy All BPMN Files" button in Streamlit UI
+- User-controlled process deployment decisions
+- "Delete All Deployments" functionality for cleanup
 
 ✅ **Docker-based Camunda Platform 7**
 - Ready-to-use docker-compose setup with custom clean image
@@ -28,9 +29,9 @@ Enterprise-grade BPMN 2.0 process engine integration with automatic Docker start
 
 ✅ **Streamlit Management UI**
 - Engine status monitoring
-- Auto-deployed process overview
-- Task assignment and completion
-- Statistics and real-time monitoring
+- Process statistics and real-time monitoring
+- Task assignment and completion interface
+- Manual deployment controls
 - Direct links to Camunda web apps
 
 ## 🏁 **Quick Start**
@@ -54,8 +55,8 @@ cd d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit
 **What happens automatically:**
 1. 🚀 Streamlit app starts
 2. 🐳 Docker container automatically starts
-3. 📋 BPMN files are auto-deployed
-4. ✅ Camunda is ready to use!
+3. ✅ Camunda is ready to use!
+4. 📋 BPMN files can be deployed manually via UI
 
 ### 3. Access Camunda Web Apps
 
@@ -67,15 +68,20 @@ Once auto-started, access Camunda at:
 
 **Default Login:** demo / demo
 
-### 4. BPMN Auto-Deployment
+### 4. BPMN Manual Deployment
 
-**Automatic Process Deployment:**
+**Manual Process Deployment for Security:**
 - Place BPMN files in `src/camunda_integration/bpmn_processes/`
-- Files are automatically deployed when Docker container starts
-- No manual deployment needed!
+- Use "Deploy All BPMN Files" button in Streamlit UI
+- No automatic deployment for security reasons
+- Manual control over when processes are deployed
 
-**Current Auto-Deployed Processes:**
+**Current Available Processes:**
 - `bewerbung_process.bpmn` - Universitäts-Bewerbungsprozess
+
+**Deployment Management:**
+- "Deploy All BPMN Files" button - Deploy all files from bpmn_processes/ directory
+- "Delete All Deployments" button - Remove all deployed processes for cleanup
 
 ## 🏗️ **Architecture**
 
@@ -107,6 +113,7 @@ src/camunda_integration/
 - Automatic Docker container detection and startup
 - Progress monitoring with health checks
 - API availability verification
+- Manual deployment controls in UI
 
 **CamundaClient (`client/camunda_client.py`)**
 - Low-level REST API wrapper
@@ -126,14 +133,14 @@ src/camunda_integration/
 **Custom Docker Image (`docker/Dockerfile`)**
 - Based on camunda/camunda-bpm-platform:7.21.0
 - Removes all demo processes and applications
-- Includes auto-deployment startup script
-- BPMN files copied to container and deployed automatically
+- Clean startup without auto-deployment
+- Manual deployment control via Streamlit UI
 
 ## 📋 **BPMN Development Guide**
 
 ### Auto-Deployment Directory
 
-Place BPMN files in `src/camunda_integration/bpmn_processes/` for automatic deployment.
+Place BPMN files in `src/camunda_integration/bpmn_processes/` for manual deployment via Streamlit UI.
 
 ### BPMN Requirements for Camunda Platform 7
 
@@ -180,9 +187,9 @@ Place BPMN files in `src/camunda_integration/bpmn_processes/` for automatic depl
 
 The project uses a custom Docker image (`Dockerfile`) that:
 - Removes all Camunda demo processes
-- Includes auto-deployment script
-- Copies BPMN files from `bpmn_processes/` directory
-- Deploys processes automatically on startup
+- Provides clean startup environment
+- Enables manual deployment control via UI
+- No automatic BPMN deployment for security
 
 ### Database Options
 
@@ -253,10 +260,10 @@ print(f"Active instances: {stats['active_instances']}")
 The Camunda engine is fully integrated into the Streamlit UI:
 
 1. **🐳 Docker Status** - Auto-start status and container health
-2. **📋 Auto-Deployed Processes** - View automatically deployed BPMN files
-3. **🚀 Process Starting** - Start process instances
-4. **✅ Task Management** - View and complete tasks
-5. **📊 Statistics** - Monitor engine performance
+2. **� Statistics** - Real-time monitoring of process instances and tasks  
+3. **� Process Management** - Manual deployment and deletion controls
+4. **✅ Task Management** - View and complete user tasks
+5. **� Process Starting** - Start process instances with parameters
 
 ## ⚙️ **Configuration**
 
@@ -298,22 +305,22 @@ docker-compose up -d
 curl http://localhost:8080/engine-rest/engine
 
 # Check container logs
-docker logs camunda-platform-clean
+docker logs camunda-platform
 
-# View auto-deployment logs
-docker logs camunda-platform-clean | grep "Deploying"
+# Check deployment status in Streamlit UI
+# Use "Deploy All BPMN Files" button if needed
 ```
 
-**Auto-deployment not working:**
+**Manual deployment not working:**
 ```bash
 # Check BPMN files are in correct directory
 ls src/camunda_integration/bpmn_processes/
 
-# Verify files are copied to container
-docker exec camunda-platform-clean ls /tmp/bpmn-deploy/
+# Use Streamlit UI "Deploy All BPMN Files" button
+# Check deployment status in Process Management tab
 
-# Check deployment logs
-docker logs camunda-platform-clean --tail 20
+# Check container logs for deployment errors
+docker logs camunda-platform --tail 20
 ```
 
 **Memory issues:**
@@ -322,7 +329,7 @@ docker logs camunda-platform-clean --tail 20
 JAVA_OPTS=-Xmx2048m -XX:MaxMetaspaceSize=1024m
 
 # Monitor container resources
-docker stats camunda-platform-clean
+docker stats camunda-platform
 ```
 
 ## 🏭 **Production Considerations**
@@ -364,7 +371,7 @@ docker stats camunda-platform-clean
 | **Support** | Community | Commercial available |
 | **Learning Curve** | Low | Medium |
 | **Production Ready** | Development | Enterprise |
-| **Auto-Deployment** | Manual | Automatic |
+| **Deployment** | Manual | Manual (Security) |
 
 Choose based on your needs:
 - **Development/Prototyping**: Custom engine
@@ -373,9 +380,9 @@ Choose based on your needs:
 ## 🚀 **Getting Started Summary**
 
 1. **Start Streamlit**: `.\Masterarbeit\Scripts\python.exe -m streamlit run src/ui/streamlit_app.py`
-2. **Everything auto-starts**: Docker → Camunda → BPMN deployment
+2. **Everything auto-starts**: Docker → Camunda → Ready for use
 3. **Access Camunda**: http://localhost:8080/camunda/app/cockpit/
 4. **Add BPMN files**: Place in `src/camunda_integration/bpmn_processes/`
-5. **Restart container**: Files are auto-deployed
+5. **Deploy manually**: Use "Deploy All BPMN Files" button in UI
 
-**That's it! The system is fully automated and ready for enterprise use!** 🎉
+**That's it! The system is fully automated and ready for enterprise use with manual deployment control!** 🎉
