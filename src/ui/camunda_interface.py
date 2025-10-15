@@ -45,7 +45,7 @@ def get_docker_manager() -> DockerManager:
         DockerManager instance
     """
     if 'docker_manager' not in st.session_state:
-        compose_file = Path("src/camunda_integration/docker/docker-compose.yml")
+        compose_file = Path("src/camunda_integration/docker/docker-compose-manual.yml")
         st.session_state.docker_manager = DockerManager(compose_file=compose_file)
     
     return st.session_state.docker_manager
@@ -207,7 +207,7 @@ def display_process_management(camunda_service: CamundaService):
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### 🚀 Process Deployment")
+        st.markdown("#### 🚀 Manual Process Deployment")
         
         # Show BPMN files in directory
         camunda_service = get_camunda_service()
@@ -239,6 +239,9 @@ def display_process_management(camunda_service: CamundaService):
             st.markdown("**To add processes:**")
             st.markdown("1. Place .bpmn files in `src/camunda_integration/bpmn_processes/`")
             st.markdown("2. Click 'Deploy All BPMN Files'")
+        
+        st.markdown("---")
+        st.info("ℹ️ **Note**: Processes are no longer automatically deployed when the container starts. Use the deployment button above to manually deploy your BPMN files.")
         
         # Show deployed processes
         try:
@@ -273,7 +276,44 @@ def display_process_management(camunda_service: CamundaService):
                     
                     # Variables
                     st.markdown("**Process Variables (JSON format):**")
-                    variables_text = st.text_area("Variables", '{"key": "value"}', height=100)
+                    
+                    # Show required fields from BPMN
+                    try:
+                        from src.camunda_integration.services.form_validator import load_required_fields_from_bpmn
+                        bpmn_file = camunda_service.bpmn_dir / f"{selected_process_key}.bpmn"
+                        if bpmn_file.exists():
+                            required_fields = load_required_fields_from_bpmn(bpmn_file)
+                            if required_fields:
+                                st.markdown("**Required Fields:**")
+                                for field in required_fields:
+                                    if field.get('required'):
+                                        field_info = f"- `{field['id']}` ({field.get('type', 'string')})"
+                                        if field.get('label'):
+                                            field_info += f": {field['label']}"
+                                        st.markdown(field_info)
+                                
+                                # Generate example JSON
+                                example_vars = {}
+                                for field in required_fields:
+                                    if field.get('required'):
+                                        if field['type'] == 'string':
+                                            example_vars[field['id']] = f"Beispiel für {field['id']}"
+                                        elif field['type'] == 'long':
+                                            example_vars[field['id']] = 12345
+                                        elif field['type'] == 'boolean':
+                                            example_vars[field['id']] = True
+                                        else:
+                                            example_vars[field['id']] = f"Wert für {field['id']}"
+                                
+                                import json
+                                example_json = json.dumps(example_vars, indent=2, ensure_ascii=False)
+                                variables_text = st.text_area("Variables", example_json, height=120)
+                            else:
+                                variables_text = st.text_area("Variables", '{}', height=100)
+                        else:
+                            variables_text = st.text_area("Variables", '{}', height=100)
+                    except Exception:
+                        variables_text = st.text_area("Variables", '{}', height=100)
                     
                     if st.button("🚀 Start Process Instance"):
                         try:
@@ -282,12 +322,26 @@ def display_process_management(camunda_service: CamundaService):
                                 import json
                                 variables = json.loads(variables_text)
                             
-                            instance = camunda_service.start_process_instance(
+                            result = camunda_service.start_process(
                                 selected_process_key, 
                                 variables, 
                                 business_key if business_key else None
                             )
-                            st.success(f"✅ Process started! Instance ID: {instance.id}")
+                            
+                            if result.success:
+                                st.success(f"✅ Process started! Instance ID: {result.process_instance_id}")
+                                if result.next_tasks:
+                                    st.info(f"Next tasks: {len(result.next_tasks)} task(s) created")
+                            else:
+                                st.error(f"❌ Process start failed: {result.message}")
+                                if result.missing:
+                                    st.error("**Missing required fields (use these exact parameter names):**")
+                                    for missing in result.missing:
+                                        field_id = missing.get('id')
+                                        field_label = missing.get('label', field_id)
+                                        st.write(f"- **`{field_id}`** ({field_label})")
+                                    
+                                    st.info("💡 **Tip**: Use the field IDs (in backticks) as JSON keys, not the labels.")
                             
                         except json.JSONDecodeError:
                             st.error("Invalid JSON format for variables")
@@ -347,30 +401,25 @@ def display_task_management(camunda_service: CamundaService):
                 assignee_filter = st.text_input("Filter by Assignee")
             with col2:
                 process_filter = st.selectbox("Filter by Process", 
-                                            ["All"] + list(set([t.processDefinitionId or t.processInstanceId for t in tasks])))
+                                            ["All"] + list(set([t.get("processInstanceId", "unknown") for t in tasks])))
             
             # Filter tasks
             filtered_tasks = tasks
             if assignee_filter:
-                filtered_tasks = [t for t in filtered_tasks if t.assignee and assignee_filter in t.assignee]
+                filtered_tasks = [t for t in filtered_tasks if t.get("assignee") and assignee_filter in t.get("assignee")]
             if process_filter != "All":
-                filtered_tasks = [t for t in filtered_tasks if (t.processDefinitionId == process_filter or t.processInstanceId == process_filter)]
+                filtered_tasks = [t for t in filtered_tasks if t.get("processInstanceId") == process_filter]
             
             # Display tasks
             for task in filtered_tasks:
-                with st.expander(f"📌 {task.name or task.id} - {task.assignee or 'Unassigned'}"):
+                with st.expander(f"📌 {task.get('name') or task.get('id')} - {task.get('assignee') or 'Unassigned'}"):
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.write(f"**Task ID:** {task.id}")
-                        st.write(f"**Name:** {task.name or 'N/A'}")
-                        st.write(f"**Assignee:** {task.assignee or 'Unassigned'}")
-                        created_dt = task.created_datetime
-                        if created_dt:
-                            st.write(f"**Created:** {created_dt.strftime('%Y-%m-%d %H:%M')}")
-                        else:
-                            st.write(f"**Created:** {task.created or 'N/A'}")
-                        st.write(f"**Process:** {task.processDefinitionId or task.processInstanceId}")
+                        st.write(f"**Task ID:** {task.get('id')}")
+                        st.write(f"**Name:** {task.get('name') or 'N/A'}")
+                        st.write(f"**Assignee:** {task.get('assignee') or 'Unassigned'}")
+                        st.write(f"**Process Instance:** {task.get('processInstanceId') or 'N/A'}")
                         
                     with col2:
                         # Task completion
@@ -380,19 +429,19 @@ def display_task_management(camunda_service: CamundaService):
                         task_variables = st.text_area(
                             "Completion Variables (JSON)",
                             '{}',
-                            key=f"vars_{task.id}",
+                            key=f"vars_{task.get('id')}",
                             height=80
                         )
                         
-                        if st.button("✅ Complete Task", key=f"complete_{task.id}"):
+                        if st.button("✅ Complete Task", key=f"complete_{task.get('id')}"):
                             try:
                                 variables = {}
                                 if task_variables.strip():
                                     import json
                                     variables = json.loads(task_variables)
                                 
-                                camunda_service.complete_task(task.id, variables)
-                                st.success(f"✅ Task {task.id} completed!")
+                                camunda_service.complete_task(task.get('id'), variables)
+                                st.success(f"✅ Task {task.get('id')} completed!")
                                 st.rerun()
                                 
                             except json.JSONDecodeError:
@@ -454,10 +503,18 @@ def display_statistics(camunda_service: CamundaService):
             if active_instances:
                 instance_data = []
                 for instance in active_instances:
+                    # Extract process key from definitionId (format: "processKey:version:id")
+                    process_key = "unknown"
+                    if hasattr(instance, 'definitionId') and instance.definitionId:
+                        try:
+                            process_key = instance.definitionId.split(':')[0]
+                        except:
+                            process_key = instance.definitionId
+                    
                     instance_data.append({
                         "Instance ID": instance.id,
-                        "Process": instance.definition_id,
-                        "Business Key": instance.business_key or "N/A",
+                        "Process": process_key,
+                        "Business Key": instance.businessKey or "N/A",
                         "Suspended": "Yes" if instance.suspended else "No"
                     })
                 
@@ -467,6 +524,8 @@ def display_statistics(camunda_service: CamundaService):
                 
         except Exception as e:
             st.error(f"Failed to load active instances: {str(e)}")
+            logger.error(f"Active instances error: {e}")
+            st.code(traceback.format_exc())
         
         # Process History
         st.markdown("#### 📜 Process History (Last 10)")
@@ -474,23 +533,48 @@ def display_statistics(camunda_service: CamundaService):
             history = camunda_service.get_process_history()
             
             if history:
-                # Show last 10
-                recent_history = sorted(history, key=lambda x: x.start_time, reverse=True)[:10]
+                # Show last 10 - angepasst an tatsächliche Struktur
+                recent_history = history[:10]  # Backend liefert bereits sortiert
                 
                 history_data = []
                 for hist in recent_history:
+                    # Extract process key from definitionId
+                    process_key = "unknown"
+                    if hasattr(hist, 'definitionId') and hist.definitionId:
+                        try:
+                            process_key = hist.definitionId.split(':')[0]
+                        except:
+                            process_key = hist.definitionId
+                    
+                    # Backend liefert andere Attribute als erwartet
+                    start_time_str = "N/A"
+                    end_time_str = "N/A"
+                    
+                    if hasattr(hist, 'startTime') and hist.startTime:
+                        start_time_str = hist.startTime
+                    elif hasattr(hist, 'start_time') and hist.start_time:
+                        start_time_str = hist.start_time.strftime('%Y-%m-%d %H:%M') if hasattr(hist.start_time, 'strftime') else str(hist.start_time)
+                    
+                    if hasattr(hist, 'endTime') and hist.endTime:
+                        end_time_str = hist.endTime
+                    elif hasattr(hist, 'end_time') and hist.end_time:
+                        end_time_str = hist.end_time.strftime('%Y-%m-%d %H:%M') if hasattr(hist.end_time, 'strftime') else str(hist.end_time)
+                    
                     duration = ""
-                    if hist.duration_in_millis:
+                    if hasattr(hist, 'durationInMillis') and hist.durationInMillis:
+                        duration_sec = hist.durationInMillis / 1000
+                        duration = f"{duration_sec:.1f}s"
+                    elif hasattr(hist, 'duration_in_millis') and hist.duration_in_millis:
                         duration_sec = hist.duration_in_millis / 1000
                         duration = f"{duration_sec:.1f}s"
                     
                     history_data.append({
-                        "Process": hist.process_definition_key,
-                        "Started": hist.start_time.strftime('%Y-%m-%d %H:%M'),
-                        "Ended": hist.end_time.strftime('%Y-%m-%d %H:%M') if hist.end_time else "N/A",
+                        "Process": process_key,
+                        "Started": start_time_str,
+                        "Ended": end_time_str,
                         "Duration": duration,
-                        "Business Key": hist.business_key or "N/A",
-                        "State": hist.state
+                        "Business Key": getattr(hist, 'businessKey', getattr(hist, 'business_key', "N/A")) or "N/A",
+                        "State": getattr(hist, 'state', "COMPLETED")
                     })
                 
                 st.dataframe(history_data, use_container_width=True)
@@ -499,6 +583,8 @@ def display_statistics(camunda_service: CamundaService):
                 
         except Exception as e:
             st.error(f"Failed to load process history: {str(e)}")
+            logger.error(f"Process history error: {e}")
+            st.code(traceback.format_exc())
             
     except Exception as e:
         st.error(f"Failed to load statistics: {str(e)}")

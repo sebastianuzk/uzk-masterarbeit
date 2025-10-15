@@ -31,6 +31,23 @@ class ProcessInstance(BaseModel):
     definitionId: str
     processDefinitionKey: Optional[str] = None
     businessKey: Optional[str] = None
+    ended: Optional[bool] = None
+    suspended: Optional[bool] = None
+    tenantId: Optional[str] = None
+    
+    # Property für UI-Kompatibilität
+    @property
+    def definition_id(self) -> str:
+        return self.definitionId
+    
+    # Extract process key from definitionId if processDefinitionKey is missing
+    def get_process_key(self) -> str:
+        if self.processDefinitionKey:
+            return self.processDefinitionKey
+        # Extract from definitionId (format: "processKey:version:id")
+        if self.definitionId and ":" in self.definitionId:
+            return self.definitionId.split(":")[0]
+        return "unknown"
 
 
 class Task(BaseModel):

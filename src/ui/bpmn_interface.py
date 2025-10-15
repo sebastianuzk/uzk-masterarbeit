@@ -94,7 +94,7 @@ def display_dashboard(bpmn_manager):
                     "Variablen": len(instance.variables) if instance.variables else 0
                 })
             
-            st.dataframe(instance_data, use_container_width=True)
+            st.dataframe(instance_data, width='stretch')
             
         else:
             st.info("Noch keine Prozess-Instanzen vorhanden. Starten Sie einen neuen Prozess im 'Prozess starten' Tab.")

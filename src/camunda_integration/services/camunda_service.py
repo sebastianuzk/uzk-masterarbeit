@@ -196,7 +196,7 @@ class CamundaService:
             # Count instances by process key
             by_process = {}
             for instance in instances:
-                key = instance.processDefinitionKey or "unknown"
+                key = instance.get_process_key()  # Use the new method
                 if key not in by_process:
                     by_process[key] = {"active": 0, "completed": 0}
                 by_process[key]["active"] += 1
@@ -222,6 +222,52 @@ class CamundaService:
                 "engine_running": False,
                 "error": str(e)
             }
+
+    def get_active_processes(self):
+        """Get active process instances"""
+        try:
+            return self.client.get_process_instances()
+        except Exception as e:
+            return []
+
+    def get_process_history(self):
+        """Get process history (completed instances)"""
+        try:
+            # Get historical process instances
+            url = f"{self.client.base_url}/history/process-instance"
+            params = {
+                "finished": "true",
+                "sortBy": "startTime",
+                "sortOrder": "desc",
+                "maxResults": 10
+            }
+            response = self.client._session.get(url, params=params, timeout=self.client.timeout)
+            response.raise_for_status()
+            
+            history_data = response.json()
+            from src.camunda_integration.models.camunda_models import ProcessInstance
+            from datetime import datetime
+            
+            history_instances = []
+            for item in history_data:
+                # Convert to ProcessInstance-like object for consistency
+                instance = ProcessInstance(
+                    id=item.get("id"),
+                    definitionId=item.get("processDefinitionId", ""),
+                    processDefinitionKey=item.get("processDefinitionKey"),
+                    businessKey=item.get("businessKey")
+                )
+                # Add history-specific fields
+                instance.start_time = datetime.fromisoformat(item.get("startTime", "").replace("Z", "+00:00")) if item.get("startTime") else None
+                instance.end_time = datetime.fromisoformat(item.get("endTime", "").replace("Z", "+00:00")) if item.get("endTime") else None
+                instance.duration_in_millis = item.get("durationInMillis")
+                instance.state = item.get("state", "COMPLETED")
+                
+                history_instances.append(instance)
+            
+            return history_instances
+        except Exception as e:
+            return []
 
     def _find_bpmn_for_key(self, key: str) -> Optional[Path]:
         # heuristic: filename stem equals key

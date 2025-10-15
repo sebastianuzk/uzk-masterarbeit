@@ -30,12 +30,12 @@ def auto_start_docker_camunda():
         
     if not st.session_state.docker_auto_started:
         try:
-            compose_file = Path("src/camunda_integration/docker/docker-compose.yml")
+            compose_file = Path("src/camunda_integration/docker/docker-compose-manual.yml")
             docker_manager = DockerManager(compose_file=compose_file)
             
             # Prüfe ob Container bereits läuft
             status_result = docker_manager.get_status()
-            if status_result.get("success") and "camunda-platform-clean" in status_result.get("output", ""):
+            if status_result.get("success") and "camunda-platform-manual" in status_result.get("output", ""):
                 # Container läuft bereits, prüfe auch API
                 try:
                     import requests
@@ -61,7 +61,7 @@ def auto_start_docker_camunda():
                 
                 if result.get("success", False):
                     st.success("✅ Camunda Docker Container erfolgreich gestartet!")
-                    st.info("⏳ Warte auf Camunda-Initialisierung und Auto-Deployment...")
+                    st.info("⏳ Warte auf Camunda-Initialisierung...")
                     
                     # Warte auf Camunda-Start mit Progress Bar
                     progress_bar = st.progress(0)
@@ -80,9 +80,9 @@ def auto_start_docker_camunda():
                             except:
                                 continue
                     
-                    st.success("🎉 Camunda ist bereit! Auto-Deployment abgeschlossen.")
+                    st.success("🎉 Camunda Engine ist bereit!")
                     st.session_state.docker_auto_started = True
-                    st.session_state.docker_status = "✅ Camunda automatisch gestartet mit Auto-Deployment"
+                    st.session_state.docker_status = "✅ Camunda automatisch gestartet"
                     
                     # Entferne Status-Container nach erfolgreichem Start
                     time.sleep(2)
@@ -102,19 +102,24 @@ def initialize_session_state():
     # AUTO-START: Camunda Docker Container
     auto_start_docker_camunda()
     
-    # Starte BPMN Process Engine automatisch
+    # BPMN Process Engine - DEAKTIVIERT für Camunda-Only Mode
     if 'bpmn_engine_initialized' not in st.session_state:
-        try:
-            bpmn_manager = get_bpmn_engine()
-            # Engine automatisch starten
-            if not bpmn_manager.running:
-                bpmn_manager.start()
-            st.session_state.bpmn_engine_initialized = True
-            st.session_state.bpmn_engine_error = None
-            st.session_state.bpmn_manager = bpmn_manager
-        except Exception as e:
-            st.session_state.bpmn_engine_initialized = False
-            st.session_state.bpmn_engine_error = str(e)
+        # TEMPORÄR DEAKTIVIERT: Separate BPMN Engine um Auto-Deployment zu verhindern
+        st.session_state.bpmn_engine_initialized = False
+        st.session_state.bpmn_engine_error = "BPMN Engine deaktiviert - Nur Camunda Platform 7 aktiv"
+        
+        # ORIGINAL CODE (auskommentiert):
+        # try:
+        #     bpmn_manager = get_bpmn_engine()
+        #     # Engine automatisch starten
+        #     if not bpmn_manager.running:
+        #         bpmn_manager.start()
+        #     st.session_state.bpmn_engine_initialized = True
+        #     st.session_state.bpmn_engine_error = None
+        #     st.session_state.bpmn_manager = bpmn_manager
+        # except Exception as e:
+        #     st.session_state.bpmn_engine_initialized = False
+        #     st.session_state.bpmn_engine_error = str(e)
     
     if 'agent' not in st.session_state:
         try:
