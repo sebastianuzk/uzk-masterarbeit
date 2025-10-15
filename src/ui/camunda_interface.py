@@ -234,6 +234,44 @@ def display_process_management(camunda_service: CamundaService):
                             st.error(f"❌ Deployment failed: {result.get('error', 'Unknown error')}")
                     except Exception as e:
                         st.error(f"❌ Deployment error: {str(e)}")
+            
+            # Delete all deployments button
+            if st.button("🗑️ Delete All Deployments", type="secondary"):
+                with st.spinner("Deleting all deployments..."):
+                    try:
+                        # Hole alle Deployments
+                        deployments_response = camunda_service.client._session.get(
+                            f"{camunda_service.client.base_url}/deployment"
+                        )
+                        
+                        if deployments_response.status_code == 200:
+                            deployments = deployments_response.json()
+                            deleted_count = 0
+                            
+                            for deployment in deployments:
+                                deployment_id = deployment['id']
+                                
+                                # Lösche Deployment mit cascade=true (entfernt auch aktive Instanzen)
+                                delete_response = camunda_service.client._session.delete(
+                                    f"{camunda_service.client.base_url}/deployment/{deployment_id}",
+                                    params={'cascade': 'true'}
+                                )
+                                
+                                if delete_response.status_code == 204:
+                                    deleted_count += 1
+                                else:
+                                    st.warning(f"⚠️ Failed to delete deployment {deployment_id}")
+                            
+                            if deleted_count > 0:
+                                st.success(f"✅ Successfully deleted {deleted_count} deployment(s) and all associated process instances!")
+                                st.rerun()
+                            else:
+                                st.info("ℹ️ No deployments found to delete")
+                        else:
+                            st.error(f"❌ Failed to retrieve deployments: {deployments_response.status_code}")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Delete error: {str(e)}")
         else:
             st.warning(f"⚠️ No BPMN files found in {camunda_service.bpmn_dir}")
             st.markdown("**To add processes:**")

@@ -33,15 +33,10 @@ class BPMNEngineManager:
         
         self.running = True
         
-        # Lade Prozesse aus Ordner falls vorhanden
-        self._load_processes_from_directory()
+        # AUTO-DEPLOYMENT DEAKTIVIERT
+        # self._load_processes_from_directory()
         
-        # Falls keine Prozesse geladen wurden, zeige Warnung
-        deployed_processes = self.execution_engine.process_definitions
-        if not deployed_processes:
-            logger.warning("No processes loaded from directory and no fallback process deployed")
-        
-        logger.info("BPMN Engine gestartet")
+        logger.info("BPMN Engine gestartet - Auto-Deployment deaktiviert")
     
     def stop(self):
         """Stoppe BPMN Engine"""

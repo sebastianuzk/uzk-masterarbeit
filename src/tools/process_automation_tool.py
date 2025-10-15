@@ -29,26 +29,99 @@ def _svc():
 
 @tool
 def discover_processes() -> Dict[str, Any]:
-    """Listet alle verfügbaren Prozesse inkl. erwarteter Pflichtfelder (falls aus BPMN ableitbar)."""
-    return _svc().discover_processes()
+    """
+    Zeigt alle verfügbaren BPMN-Prozesse und deren Eigenschaften an.
+    
+    Returns:
+        Dictionary mit verfügbaren Prozessen und deren Details
+        
+    Beispiel Antwort:
+        {
+            "processes": [
+                {
+                    "key": "bewerbung_process", 
+                    "name": "Universitäts-Bewerbungsprozess",
+                    "version": 1
+                }
+            ]
+        }
+    """
+    try:
+        return _svc().discover_processes()
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Fehler beim Laden der Prozesse: {e}"
+        }
 
 @tool
 def start_process(process_key: str, variables: Dict[str, Any]) -> Dict[str, Any]:
-    """Startet einen Prozess per Key und Variablen (als Objekt). Validiert Pflichtfelder vorab, wenn möglich."""
-    res = _svc().start_process(process_key, variables)
-    return res.model_dump()
+    """
+    Startet einen Prozess in Camunda mit den gegebenen Variablen.
+    
+    Args:
+        process_key: Der Key des BPMN-Prozesses (z.B. "bewerbung_process")
+        variables: Dictionary mit Prozessvariablen (z.B. {"student_name": "Max", "studiengang": "Informatik"})
+    
+    Returns:
+        Dictionary mit Prozess-Details und Status
+        
+    Beispiel:
+        start_process("bewerbung_process", {"student_name": "Pascal", "studiengang": "Informatik"})
+    """
+    try:
+        res = _svc().start_process(process_key, variables)
+        return res.model_dump()
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Fehler beim Starten des Prozesses {process_key}: {e}"
+        }
 
 @tool
 def get_process_status(process_instance_id: str) -> Dict[str, Any]:
-    """Gibt den Status und offene User Tasks einer Instanz zurück."""
-    res = _svc().get_process_status(process_instance_id)
-    return res.model_dump()
+    """
+    Zeigt den Status einer laufenden Prozessinstanz und offene Tasks an.
+    
+    Args:
+        process_instance_id: Die ID der Prozessinstanz
+        
+    Returns:
+        Dictionary mit Prozess-Status und offenen Tasks
+    """
+    try:
+        res = _svc().get_process_status(process_instance_id)
+        return res.model_dump()
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Fehler beim Abrufen des Prozess-Status: {e}"
+        }
 
 @tool
 def complete_task(process_instance_id: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Vervollständigt den nächsten offenen User Task einer Instanz. Wenn Variablen fehlen, wird need_input=True geliefert."""
-    res = _svc().complete_next_task(process_instance_id, variables)
-    return res.model_dump()
+    """
+    Vervollständigt den nächsten offenen User Task einer Prozessinstanz.
+    
+    Args:
+        process_instance_id: Die ID der Prozessinstanz
+        variables: Optionale zusätzliche Variablen für die Task-Completion
+        
+    Returns:
+        Dictionary mit Completion-Status
+    """
+    try:
+        res = _svc().complete_next_task(process_instance_id, variables)
+        return res.model_dump()
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Fehler beim Vervollständigen der Task: {e}"
+        }
 
 def get_process_automation_tools() -> List:
     """Factory function to get all process automation tools for compatibility with react_agent.py"""
