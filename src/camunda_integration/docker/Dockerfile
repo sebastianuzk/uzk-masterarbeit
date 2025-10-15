@@ -1,4 +1,4 @@
-# Custom Camunda Platform 7 without demo processes and without auto-deployment
+# Custom Camunda Platform 7 without demo processes
 FROM camunda/camunda-bpm-platform:7.21.0
 
 # Switch to root to modify files
@@ -29,12 +29,5 @@ ENV DB_USERNAME=sa
 ENV DB_PASSWORD=sa
 ENV JAVA_OPTS=-Xmx512m -XX:MaxMetaspaceSize=256m
 
-# Expose port
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-    CMD curl -f http://localhost:8080/engine-rest/engine || exit 1
-
 # Use default Camunda startup (no auto-deployment)
-CMD ["/sbin/tini", "--", "/camunda/camunda.sh"]
+CMD ["/camunda/camunda.sh"]

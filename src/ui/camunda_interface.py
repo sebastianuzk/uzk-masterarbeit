@@ -45,7 +45,7 @@ def get_docker_manager() -> DockerManager:
         DockerManager instance
     """
     if 'docker_manager' not in st.session_state:
-        compose_file = Path("src/camunda_integration/docker/docker-compose-manual.yml")
+        compose_file = Path("src/camunda_integration/docker/docker-compose.yml")
         st.session_state.docker_manager = DockerManager(compose_file=compose_file)
     
     return st.session_state.docker_manager

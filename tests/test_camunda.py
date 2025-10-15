@@ -60,7 +60,7 @@ class TestCamundaIntegration(unittest.TestCase):
     def test_docker_manager_creation(self):
         """Teste DockerManager Erstellung"""
         try:
-            compose_file = Path("src/camunda_integration/docker/docker-compose-manual.yml")
+            compose_file = Path("src/camunda_integration/docker/docker-compose.yml")
             docker_manager = DockerManager(compose_file=compose_file)
             
             self.assertIsNotNone(docker_manager)
@@ -184,7 +184,7 @@ class TestCamundaIntegration(unittest.TestCase):
         """Teste Docker Compose File Validation"""
         try:
             # Test mit existierender Compose-Datei
-            compose_file = Path("src/camunda_integration/docker/docker-compose-manual.yml")
+            compose_file = Path("src/camunda_integration/docker/docker-compose.yml")
             
             if compose_file.exists():
                 docker_manager = DockerManager(compose_file=compose_file)

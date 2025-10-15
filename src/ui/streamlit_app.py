@@ -30,7 +30,7 @@ def auto_start_docker_camunda():
         
     if not st.session_state.docker_auto_started:
         try:
-            compose_file = Path("src/camunda_integration/docker/docker-compose-manual.yml")
+            compose_file = Path("src/camunda_integration/docker/docker-compose.yml")
             docker_manager = DockerManager(compose_file=compose_file)
             
             # Prüfe ob Container bereits läuft

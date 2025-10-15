@@ -85,7 +85,7 @@ src/camunda_integration/
 │   ├── camunda_client.py          # REST API client with pycamunda
 │   └── __init__.py
 ├── docker/
-│   ├── Dockerfile.clean           # Custom Camunda image without demos
+│   ├── Dockerfile                # Custom Camunda image without demos
 │   ├── docker-compose.yml         # Auto-start container setup
 │   └── startup-deploy.sh          # Auto-deployment script (in container)
 ├── models/
@@ -123,7 +123,7 @@ src/camunda_integration/
 - Health monitoring and log access
 - Cross-platform docker-compose handling
 
-**Custom Docker Image (`docker/Dockerfile.clean`)**
+**Custom Docker Image (`docker/Dockerfile`)**
 - Based on camunda/camunda-bpm-platform:7.21.0
 - Removes all demo processes and applications
 - Includes auto-deployment startup script
@@ -178,7 +178,7 @@ Place BPMN files in `src/camunda_integration/bpmn_processes/` for automatic depl
 
 ### Custom Clean Image
 
-The project uses a custom Docker image (`Dockerfile.clean`) that:
+The project uses a custom Docker image (`Dockerfile`) that:
 - Removes all Camunda demo processes
 - Includes auto-deployment script
 - Copies BPMN files from `bpmn_processes/` directory

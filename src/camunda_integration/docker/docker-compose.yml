@@ -4,8 +4,8 @@ services:
   camunda:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.clean
-    container_name: camunda-platform-clean
+      dockerfile: docker/Dockerfile
+    container_name: camunda-platform
     ports:
       - "8080:8080"
     environment:
