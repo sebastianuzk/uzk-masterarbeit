@@ -88,7 +88,7 @@ uzk-masterarbeit/
 ## 🚀 Schnellstart
 
 ### Voraussetzungen
-- Python 3.10+
+- Python 3.8+
 - Ollama installiert und laufend
 - 4GB+ RAM empfohlen
 
