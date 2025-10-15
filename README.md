@@ -66,7 +66,6 @@ uzk-masterarbeit/
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt             # Alle Dependencies (Agent + Scraper)
-├── main.py
 └── README.md
 ```
 
@@ -234,15 +233,6 @@ streamlit run src/ui/streamlit_app.py
 
 # Mit spezifischem Python-Interpreter:
 ./Masterarbeit/Scripts/python.exe -m streamlit run src/ui/streamlit_app.py
-```
-
-**Kommandozeilen-Interface:**
-```bash
-# VS Code Task verwenden oder direkt:
-python main.py
-
-# Mit spezifischem Python-Interpreter:
-./Masterarbeit/Scripts/python.exe main.py
 ```
 
 ### 🔍 RAG Web Scraper (Unabhängiges System)
