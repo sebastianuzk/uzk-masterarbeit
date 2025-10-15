@@ -45,7 +45,7 @@ class ProcessInstance(BaseModel):
         if self.processDefinitionKey:
             return self.processDefinitionKey
         # Extract from definitionId (format: "processKey:version:id")
-        if self.definitionId and ":" in self.definitionId:
+        if self.definitionId and self.definitionId.strip() and ":" in self.definitionId:
             return self.definitionId.split(":")[0]
         return "unknown"
 
