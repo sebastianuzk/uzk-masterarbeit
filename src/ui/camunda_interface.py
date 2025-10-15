@@ -7,9 +7,12 @@ Provides UI components for Camunda Platform 7 management.
 import streamlit as st
 import logging
 import traceback
+from pathlib import Path
 
-from ..camunda_integration.services.camunda_service import CamundaService
-from ..camunda_integration.services.docker_manager import DockerManager
+from config.settings import settings
+from src.camunda_integration.client.camunda_client import CamundaClient
+from src.camunda_integration.services.camunda_service import CamundaService
+from src.camunda_integration.services.docker_manager import DockerManager
 
 
 logger = logging.getLogger(__name__)
@@ -23,10 +26,12 @@ def get_camunda_service() -> CamundaService:
         CamundaService instance
     """
     if 'camunda_service' not in st.session_state:
-        # Use camunda_integration bpmn_processes directory for auto-deployment
-        auto_deploy_dir = "src/camunda_integration/bpmn_processes"
+        # Create Camunda client and service with new API
+        client = CamundaClient(settings.CAMUNDA_BASE_URL)
+        bpmn_dir = Path("src/camunda_integration/bpmn_processes")
         st.session_state.camunda_service = CamundaService(
-            auto_deploy_dir=auto_deploy_dir
+            client=client,
+            bpmn_dir=bpmn_dir
         )
     
     return st.session_state.camunda_service
@@ -40,7 +45,8 @@ def get_docker_manager() -> DockerManager:
         DockerManager instance
     """
     if 'docker_manager' not in st.session_state:
-        st.session_state.docker_manager = DockerManager()
+        compose_file = Path("src/camunda_integration/docker/docker-compose.yml")
+        st.session_state.docker_manager = DockerManager(compose_file=compose_file)
     
     return st.session_state.docker_manager
 
@@ -201,18 +207,48 @@ def display_process_management(camunda_service: CamundaService):
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### � Auto-Deployed Processes")
-        st.info("� BPMN files are automatically deployed when Docker container starts.")
+        st.markdown("#### 🚀 Process Deployment")
+        
+        # Show BPMN files in directory
+        camunda_service = get_camunda_service()
+        bpmn_files = list(camunda_service.bpmn_dir.glob("**/*.bpmn"))
+        
+        if bpmn_files:
+            st.success(f"✅ {len(bpmn_files)} BPMN file(s) found:")
+            for bpmn_file in bpmn_files:
+                st.write(f"- {bpmn_file.name}")
+            
+            # Manual deployment button
+            if st.button("🚀 Deploy All BPMN Files", type="primary"):
+                with st.spinner("Deploying BPMN files..."):
+                    try:
+                        result = camunda_service.deploy_all()
+                        if result.get("success"):
+                            deployment_result = result.get("result", {})
+                            deployed_count = len(deployment_result.get("deployedProcessDefinitions", []))
+                            st.success(f"✅ Successfully deployed {deployed_count} process definition(s)!")
+                            if "id" in deployment_result:
+                                st.info(f"Deployment ID: {deployment_result['id']}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Deployment failed: {result.get('error', 'Unknown error')}")
+                    except Exception as e:
+                        st.error(f"❌ Deployment error: {str(e)}")
+        else:
+            st.warning(f"⚠️ No BPMN files found in {camunda_service.bpmn_dir}")
+            st.markdown("**To add processes:**")
+            st.markdown("1. Place .bpmn files in `src/camunda_integration/bpmn_processes/`")
+            st.markdown("2. Click 'Deploy All BPMN Files'")
         
         # Show deployed processes
         try:
             process_definitions = camunda_service.get_process_definitions()
             if process_definitions:
-                st.success(f"✅ {len(process_definitions)} processes deployed automatically:")
+                st.success(f"✅ {len(process_definitions)} processes currently deployed:")
                 for proc in process_definitions:
                     st.write(f"- **{proc.key}**: {proc.name}")
             else:
-                st.warning("No processes deployed. Check BPMN files in bpmn_processes/ directory.")
+                st.info("ℹ️ No processes deployed yet. Click 'Deploy All BPMN Files' above.")
         except Exception as e:
             st.error(f"Failed to get process definitions: {str(e)}")
     
@@ -246,7 +282,7 @@ def display_process_management(camunda_service: CamundaService):
                                 import json
                                 variables = json.loads(variables_text)
                             
-                            instance = camunda_service.start_process(
+                            instance = camunda_service.start_process_instance(
                                 selected_process_key, 
                                 variables, 
                                 business_key if business_key else None
@@ -311,14 +347,14 @@ def display_task_management(camunda_service: CamundaService):
                 assignee_filter = st.text_input("Filter by Assignee")
             with col2:
                 process_filter = st.selectbox("Filter by Process", 
-                                            ["All"] + list(set([t.process_definition_id for t in tasks])))
+                                            ["All"] + list(set([t.processDefinitionId or t.processInstanceId for t in tasks])))
             
             # Filter tasks
             filtered_tasks = tasks
             if assignee_filter:
                 filtered_tasks = [t for t in filtered_tasks if t.assignee and assignee_filter in t.assignee]
             if process_filter != "All":
-                filtered_tasks = [t for t in filtered_tasks if t.process_definition_id == process_filter]
+                filtered_tasks = [t for t in filtered_tasks if (t.processDefinitionId == process_filter or t.processInstanceId == process_filter)]
             
             # Display tasks
             for task in filtered_tasks:
@@ -329,8 +365,12 @@ def display_task_management(camunda_service: CamundaService):
                         st.write(f"**Task ID:** {task.id}")
                         st.write(f"**Name:** {task.name or 'N/A'}")
                         st.write(f"**Assignee:** {task.assignee or 'Unassigned'}")
-                        st.write(f"**Created:** {task.created.strftime('%Y-%m-%d %H:%M')}")
-                        st.write(f"**Process:** {task.process_definition_id}")
+                        created_dt = task.created_datetime
+                        if created_dt:
+                            st.write(f"**Created:** {created_dt.strftime('%Y-%m-%d %H:%M')}")
+                        else:
+                            st.write(f"**Created:** {task.created or 'N/A'}")
+                        st.write(f"**Process:** {task.processDefinitionId or task.processInstanceId}")
                         
                     with col2:
                         # Task completion

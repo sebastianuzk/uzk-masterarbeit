@@ -7,6 +7,7 @@ import os
 import logging
 import time
 import subprocess
+from pathlib import Path
 
 # Füge das Projekt-Root-Verzeichnis zum Python-Pfad hinzu
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -29,7 +30,8 @@ def auto_start_docker_camunda():
         
     if not st.session_state.docker_auto_started:
         try:
-            docker_manager = DockerManager()
+            compose_file = Path("src/camunda_integration/docker/docker-compose.yml")
+            docker_manager = DockerManager(compose_file=compose_file)
             
             # Prüfe ob Container bereits läuft
             status_result = docker_manager.get_status()

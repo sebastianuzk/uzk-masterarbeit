@@ -4,15 +4,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from camunda_client import CamundaClient
-from camunda_models import ToolResult
-from form_validator import load_required_fields_from_bpmn, validate_start_variables
+from src.camunda_integration.client.camunda_client import CamundaClient
+from src.camunda_integration.models.camunda_models import ToolResult
+from src.camunda_integration.services.form_validator import load_required_fields_from_bpmn, validate_start_variables
 
 
 @dataclass
 class CamundaService:
     client: CamundaClient
     bpmn_dir: Path
+
+    def is_engine_running(self) -> bool:
+        """Check if Camunda engine is running and accessible"""
+        return self.client.is_alive()
 
     def wait_for_engine(self, attempts: int = 30, sleep_seconds: float = 1.0) -> bool:
         import time
@@ -23,7 +27,12 @@ class CamundaService:
         return False
 
     def deploy_all(self) -> Dict[str, Any]:
-        return self.client.deploy_directory(self.bpmn_dir)
+        """Deploy all BPMN files from the configured directory"""
+        try:
+            result = self.client.deploy_directory(self.bpmn_dir)
+            return {"success": True, "result": result}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def discover_processes(self) -> Dict[str, Any]:
         defs = self.client.get_process_definitions()
@@ -46,7 +55,7 @@ class CamundaService:
             })
         return {"success": True, "processes": result}
 
-    def start_process(self, process_key: str, variables: Dict[str, Any]) -> ToolResult:
+    def start_process(self, process_key: str, variables: Dict[str, Any], business_key: Optional[str] = None) -> ToolResult:
         # validate against BPMN, if file exists
         bpmn_path = self._find_bpmn_for_key(process_key)
         if bpmn_path:
@@ -59,7 +68,7 @@ class CamundaService:
                     missing=missing,
                 )
         # start
-        pi = self.client.start_process_by_key(process_key, variables)
+        pi = self.client.start_process_by_key(process_key, variables, business_key)
         tasks = self.client.get_tasks_for_instance(pi.id)
         return ToolResult(
             success=True,
@@ -68,6 +77,14 @@ class CamundaService:
             next_tasks=tasks,
             process_status="running" if tasks else "completed",
         )
+
+    def start_process_instance(self, process_key: str, variables: Dict[str, Any], business_key: Optional[str] = None):
+        """Start a process instance - UI compatible version"""
+        return self.client.start_process_by_key(process_key, variables, business_key)
+
+    def complete_task(self, task_id: str, variables: Optional[Dict[str, Any]] = None):
+        """Complete a task - UI compatible version"""
+        return self.client.complete_task(task_id, variables or {})
 
     def get_process_status(self, process_instance_id: str) -> ToolResult:
         tasks = self.client.get_tasks_for_instance(process_instance_id)
@@ -111,6 +128,100 @@ class CamundaService:
             next_tasks=remaining,
             process_status=status,
         )
+
+    def get_process_definitions(self) -> List:
+        """Get all process definitions as objects"""
+        try:
+            return self.client.get_process_definitions()
+        except Exception as e:
+            return []
+
+    def get_engine_status(self) -> Dict[str, Any]:
+        """Get engine status information"""
+        try:
+            is_running = self.client.is_alive()
+            if is_running:
+                processes = self.client.get_process_definitions()
+                instances = self.client.get_process_instances()
+                tasks = self.get_tasks()
+                return {
+                    "running": True,
+                    "engine_info": {
+                        "name": "Camunda Platform 7",
+                        "version": "7.21.0"
+                    },
+                    "process_definitions": len(processes),
+                    "active_instances": len(instances),
+                    "open_tasks": len(tasks)
+                }
+            else:
+                return {
+                    "running": False,
+                    "error": "Engine not reachable"
+                }
+        except Exception as e:
+            return {
+                "running": False,
+                "error": str(e)
+            }
+
+    def get_tasks(self) -> List[Dict[str, Any]]:
+        """Get all active tasks"""
+        try:
+            # Get all process instances
+            instances = self.client.get_process_instances()
+            all_tasks = []
+            
+            for instance in instances:
+                tasks = self.client.get_tasks_for_instance(instance.id)
+                for task in tasks:
+                    all_tasks.append({
+                        "id": task.id,
+                        "name": task.name,
+                        "processInstanceId": task.processInstanceId,
+                        "taskDefinitionKey": task.taskDefinitionKey,
+                        "assignee": task.assignee
+                    })
+            
+            return all_tasks
+        except Exception as e:
+            return []
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get engine statistics"""
+        try:
+            processes = self.client.get_process_definitions()
+            instances = self.client.get_process_instances()
+            
+            # Count instances by process key
+            by_process = {}
+            for instance in instances:
+                key = instance.processDefinitionKey or "unknown"
+                if key not in by_process:
+                    by_process[key] = {"active": 0, "completed": 0}
+                by_process[key]["active"] += 1
+            
+            # Get all tasks
+            all_tasks = self.get_tasks()
+            
+            return {
+                "process_definitions": len(processes),
+                "active_instances": len(instances),
+                "completed_instances": 0,  # TODO: Implement completed instances tracking
+                "open_tasks": len(all_tasks),
+                "by_process": by_process,
+                "engine_running": self.client.is_alive()
+            }
+        except Exception as e:
+            return {
+                "process_definitions": 0,
+                "active_instances": 0, 
+                "completed_instances": 0,
+                "open_tasks": 0,
+                "by_process": {},
+                "engine_running": False,
+                "error": str(e)
+            }
 
     def _find_bpmn_for_key(self, key: str) -> Optional[Path]:
         # heuristic: filename stem equals key

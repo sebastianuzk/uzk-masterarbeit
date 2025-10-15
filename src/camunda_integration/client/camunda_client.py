@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-from camunda_models import (
+from src.camunda_integration.models.camunda_models import (
     ProcessDefinition,
     ProcessInstance,
     Task,
@@ -145,6 +145,16 @@ class CamundaClient:
         )
         r.raise_for_status()
         return [Task(**x) for x in r.json()]
+
+    def get_process_instances(self) -> List[ProcessInstance]:
+        """Get all process instances"""
+        r = self._session.get(f"{self.base_url}/process-instance", timeout=self.timeout)
+        r.raise_for_status()
+        return [ProcessInstance(**x) for x in r.json()]
+
+    def is_connected(self) -> bool:
+        """Check if connection to Camunda is working"""
+        return self.is_alive()
 
     def complete_task(self, task_id: str, variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         payload = {"variables": self._var_map(variables)} if variables else {}
