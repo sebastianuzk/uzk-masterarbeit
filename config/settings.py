@@ -33,8 +33,13 @@ class Settings:
     DEFAULT_RECIPIENT = os.getenv("DEFAULT_RECIPIENT")
     
     # Streamlit Konfiguration
-    PAGE_TITLE = "Autonomer Chatbot Agent"
+    PAGE_TITLE = "🤖 Autonomer Chatbot-Agent"
     PAGE_ICON = "🤖"
+    
+    # LangSmith Tracing Konfiguration
+    LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
+    LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT")
+    LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING", "false").lower() == "true"
     
     @classmethod
     def validate(cls):
@@ -72,6 +77,11 @@ ENABLE_WEB_SCRAPER = settings.ENABLE_WEB_SCRAPER
 ENABLE_DUCKDUCKGO = settings.ENABLE_DUCKDUCKGO
 PAGE_TITLE = settings.PAGE_TITLE
 PAGE_ICON = settings.PAGE_ICON
+
+# LangSmith-Konfiguration Exports
+LANGSMITH_API_KEY = settings.LANGSMITH_API_KEY
+LANGSMITH_PROJECT = settings.LANGSMITH_PROJECT
+LANGSMITH_TRACING = settings.LANGSMITH_TRACING
 
 # E-Mail-Konfiguration Exports
 SMTP_SERVER = settings.SMTP_SERVER
