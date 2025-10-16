@@ -166,7 +166,7 @@ def main():
     # Hauptinhalt
     if st.session_state.get('initialized', False):
         st.markdown("### 💬 Chat mit dem Agenten")
-        st.markdown("Stellen Sie Fragen oder bitten Sie um Hilfe. Der Agent kann Wikipedia durchsuchen, Webseiten scrapen und aktuelle Informationen finden.")
+        st.markdown("Stellen Sie Fragen oder bitten Sie um Hilfe. Der Agent kann Webseiten scrapen, aktuelle Informationen finden.")
         
         display_chat_interface()
     
@@ -191,7 +191,6 @@ def main():
         4. Starten Sie die App neu
         
         ### 📖 Verfügbare Open Source Tools:
-        - **Wikipedia**: Kostenlose Wissensdatenbank
         - **Web Scraper**: Direkter Zugriff auf Webseiten
         - **DuckDuckGo**: Privatsphärefreundliche Websuche
         """)
