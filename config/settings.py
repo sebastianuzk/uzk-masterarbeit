@@ -39,7 +39,7 @@ class Settings:
     # LangSmith Tracing Konfiguration
     LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
     LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT")
-    LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING")
+    LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING", "false").lower() == "true"
     
     @classmethod
     def validate(cls):
