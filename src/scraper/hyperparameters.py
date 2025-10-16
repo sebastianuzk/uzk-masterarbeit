@@ -11,13 +11,14 @@ Einfache zentrale Verwaltung aller Hyperparameter.
 # ==============================================================================
 
 # Performance & Rate Limiting
-SCRAPER_MAX_CONCURRENT_REQUESTS = 10  # Genutzt in: batch_scraper.py
-SCRAPER_REQUEST_DELAY = 1.0           # Genutzt in: batch_scraper.py
+# WICHTIG: Niedrige Werte verhindern, dass die Website Sie blockiert!
+SCRAPER_MAX_CONCURRENT_REQUESTS = 5   # Genutzt in: batch_scraper.py (reduziert von 10 auf 5)
+SCRAPER_REQUEST_DELAY = 2.0           # Genutzt in: batch_scraper.py (erhöht von 1.0 auf 2.0)
 SCRAPER_TIMEOUT = 30                  # Genutzt in: batch_scraper.py
 
 # Error Handling  
 SCRAPER_RETRY_ATTEMPTS = 3            # Genutzt in: batch_scraper.py
-SCRAPER_RETRY_DELAY = 2.0            # Genutzt in: batch_scraper.py
+SCRAPER_RETRY_DELAY = 2.0             # Genutzt in: batch_scraper.py
 
 # Content Extraction
 SCRAPER_CONTENT_SELECTORS = {         # Genutzt in: batch_scraper.py
