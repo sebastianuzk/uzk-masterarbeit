@@ -41,7 +41,6 @@ class Settings:
     LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
     LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT")
     LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING")
-    LANGSMITH_ENDPOINT = os.getenv("LANGSMITH_ENDPOINT")
     
     @classmethod
     def validate(cls):

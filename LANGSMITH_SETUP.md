@@ -24,7 +24,7 @@ Füge folgende Zeilen zu deiner `.env`-Datei hinzu:
 ```bash
 # LangSmith Tracing
 LANGSMITH_API_KEY=your_actual_api_key_here
-LANGSMITH_PROJECT=your_actual_project_here
+LANGSMITH_PROJECT=uzk-masterarbeit
 LANGSMITH_TRACING=true
 ```
 
@@ -33,6 +33,7 @@ LANGSMITH_TRACING=true
 export LANGSMITH_API_KEY="your_actual_api_key_here"
 export LANGSMITH_PROJECT="your_actual_project_here"  
 export LANGSMITH_TRACING="true"
+export LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
 ```
 
 ## Verwendung
