@@ -29,7 +29,7 @@ class ReactAgent:
         if settings.LANGSMITH_TRACING and settings.LANGSMITH_API_KEY:
             os.environ["LANGCHAIN_TRACING_V2"] = "true"
             os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
-            os.environ["LANGCHAIN_ENDPOINT"] = settings.LANGSMITH_ENDPOINT
+            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
             os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
             print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
         
