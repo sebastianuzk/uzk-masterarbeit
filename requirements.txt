@@ -13,13 +13,10 @@ python-dotenv>=1.0.0
 
 # UI Framework
 streamlit>=1.29.0
-duckduckgo-search>=4.4.0
-requests>=2.31.0
-beautifulsoup4>=4.12.2
-httpx>=0.25.0
 
 # Agent Tools
 duckduckgo-search>=4.4.0    # DuckDuckGo-Suche (kein API-Key benötigt)
+wikipedia>=1.4.0            # Wikipedia-API
 requests>=2.31.0            # HTTP-Requests
 beautifulsoup4>=4.12.2      # HTML-Parsing für Web Scraper Tool
 httpx>=0.25.0               # Async HTTP-Client
@@ -28,12 +25,32 @@ httpx>=0.25.0               # Async HTTP-Client
 pytest>=7.0.0
 pytest-asyncio>=0.21.0      # Async-Tests
 
-# Web Scraper Dependencies  
-aiohttp>=3.8.0
-chromadb>=0.4.0
-# faiss-cpu>=1.7.4  # Removed - not used in current implementation
-sentence-transformers>=2.2.0
-# numpy>=1.21.0  # Already included with sentence-transformers
-lxml>=4.9.0
-# pandas>=1.5.0  # Removed - not used in current implementation
-tqdm>=4.64.0
+# ============================================================================
+# WEB SCRAPER DEPENDENCIES
+# ============================================================================
+# Async HTTP & Crawling
+aiohttp>=3.8.0              # Asynchrones HTTP für paralleles Scraping
+
+# HTML/XML Parsing
+lxml>=4.9.0                 # Schneller XML/HTML-Parser (BeautifulSoup Backend)
+
+# Vector Database & Embeddings
+chromadb>=0.4.0             # Vector-Datenbank für RAG-System
+sentence-transformers>=2.2.0 # Lokale Embeddings (all-MiniLM-L6-v2, 384 dim)
+
+# PDF Processing (für PDF-Dokumente auf Websites)
+pypdf>=3.0.0                # PDF-Lesen und -Extraktion
+PyPDF2>=3.0.0               # Alternative PDF-Bibliothek
+pdfplumber>=0.9.0           # Erweiterte PDF-Verarbeitung mit Layout-Analyse
+
+# Web Crawling & Ethics
+robotexclusionrulesparser>=1.7.0  # robots.txt Parser für ethisches Scraping
+
+# Utilities
+tqdm>=4.64.0                # Progress Bars für lange Scraping-Operationen
+
+# ============================================================================
+# NOTIZEN
+# ============================================================================
+# Ollama muss separat installiert werden: https://ollama.ai
+# Nach Installation: ollama pull llama3.1:8b
