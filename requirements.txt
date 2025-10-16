@@ -16,7 +16,6 @@ streamlit>=1.29.0
 
 # Agent Tools
 duckduckgo-search>=4.4.0    # DuckDuckGo-Suche (kein API-Key benötigt)
-wikipedia>=1.4.0            # Wikipedia-API
 requests>=2.31.0            # HTTP-Requests
 beautifulsoup4>=4.12.2      # HTML-Parsing für Web Scraper Tool
 httpx>=0.25.0               # Async HTTP-Client

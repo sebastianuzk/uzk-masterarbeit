@@ -9,7 +9,6 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import BaseTool
 
 from config.settings import settings
-from src.tools.wikipedia_tool import create_wikipedia_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
@@ -59,7 +58,6 @@ verwende das E-Mail-Tool für professionelle Support-Eskalation. Du benötigst n
 Empfänger und Absender werden automatisch aus der Konfiguration verwendet.
 
 Verfügbare Tools:
-- Wikipedia: Für Enzyklopädie-Informationen
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
 - DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
@@ -80,9 +78,6 @@ Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
     def _create_tools(self) -> List[BaseTool]:
         """Erstelle Liste der verfügbaren Tools einschließlich E-Mail-Tool"""
         tools = []
-        
-        if settings.ENABLE_WIKIPEDIA:
-            tools.append(create_wikipedia_tool())
         
         if settings.ENABLE_WEB_SCRAPER:
             tools.append(create_web_scraper_tool())
