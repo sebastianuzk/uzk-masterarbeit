@@ -134,16 +134,22 @@ Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
             agent_input = {
                 "messages": self.memory
             }
-            
-            # Füge Session-Metadaten hinzu (falls LangSmith aktiv)
+
+            # Erstelle Config mit Metadaten für LangSmith-Tracing (falls aktiv)
+            config = None
             if settings.LANGSMITH_TRACING:
-                agent_input["metadata"] = {
-                    "session_id": session_id,
-                    "user_message": message[:100] + "..." if len(message) > 100 else message,
-                    "available_tools": len(self.tools)
+                config = {
+                    "metadata": {
+                        "session_id": session_id,
+                        "user_message": message[:100] + "..." if len(message) > 100 else message,
+                        "available_tools": len(self.tools)
+                    }
                 }
-            
-            response = self.agent.invoke(agent_input)
+
+            if config is not None:
+                response = self.agent.invoke(agent_input, config=config)
+            else:
+                response = self.agent.invoke(agent_input)
             
             # Extrahiere Antwort
             ai_message = response["messages"][-1]
