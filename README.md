@@ -61,38 +61,58 @@ Dieses Projekt bietet einen intelligenten Chatbot, der:
 uzk-masterarbeit/
 ├── src/
 │   ├── agent/
-│   │   └── react_agent.py           # LangGraph ReAct Agent
+│   │   └── react_agent.py              # LangGraph ReAct Agent
 │   ├── tools/
-│   │   ├── rag_tool.py              # RAG für WiSo-Fakultät ⭐
-│   │   ├── wikipedia_tool.py        # Wikipedia-Suche
-│   │   ├── web_scraper_tool.py      # Web-Scraping
-│   │   └── duckduckgo_tool.py       # DuckDuckGo-Suche
-│   ├── scraper/                     # Erweiterte Web Scraper Pipeline ⭐
-│   │   ├── crawler_scraper_pipeline.py  # Haupt-Pipeline
-│   │   ├── wiso_crawler.py          # WiSo-Website Crawler
-│   │   ├── batch_scraper.py         # Batch-Scraper
-│   │   ├── vector_store.py          # Vector DB Integration
-│   │   ├── reprocess_existing_data.py   # Daten-Wiederaufbereitung
-│   │   ├── hyperparameters.py       # Zentrale Konfiguration
-│   │   └── data_analysis/           # Gescrapte Daten & Reports
-│   └── ui/
-│       └── streamlit_app.py         # Chat-Interface
+│   │   ├── rag_tool.py                 # RAG für WiSo-Fakultät ⭐
+│   │   ├── web_scraper_tool.py         # Web-Scraping Tool
+│   │   ├── duckduckgo_tool.py          # DuckDuckGo-Suche
+│   │   └── email_tool.py               # E-Mail Support-Eskalation
+│   ├── scraper/                        # Erweiterte Web Scraper Pipeline ⭐
+│   │   ├── core/                       # Kern-Komponenten
+│   │   │   ├── batch_scraper.py        # Batch-Verarbeitung
+│   │   │   ├── wiso_crawler.py         # WiSo-Website Crawler
+│   │   │   ├── vector_store.py         # Vector DB Integration
+│   │   │   ├── incremental_scraper.py  # Inkrementelles Scraping
+│   │   │   └── resilient_scraper.py    # Fehlertolerantes Scraping
+│   │   ├── pipelines/                  # Ausführbare Workflows
+│   │   │   ├── crawler_scraper_pipeline.py  # Haupt-Pipeline
+│   │   │   ├── scraper_main.py         # Scraper Entry Point
+│   │   │   └── reprocess_existing_data.py   # Daten-Wiederaufbereitung
+│   │   ├── utils/                      # Hilfsfunktionen
+│   │   │   ├── content_cleaner.py      # Content-Bereinigung
+│   │   │   ├── content_deduplicator.py # Duplikat-Erkennung
+│   │   │   ├── pdf_extractor.py        # PDF-Verarbeitung
+│   │   │   ├── semantic_chunker.py     # Intelligentes Chunking
+│   │   │   └── url_cache.py            # URL-Caching
+│   │   ├── analysis/                   # Analyse & Monitoring
+│   │   │   ├── show_cached_urls.py     # Cache-Viewer
+│   │   │   └── scraper_metrics.py      # Metriken & Reports
+│   │   └── hyperparameters.py          # Zentrale Konfiguration
+│   ├── ui/
+│   │   └── streamlit_app.py            # Chat-Interface
+│   └── dev/                            # Entwicklungs-Skripte
 ├── config/
-│   └── settings.py                  # Globale Einstellungen
-├── data/
-│   └── vector_db/                   # ChromaDB Collections ⭐
-├── tests/
-│   └── test_*.py                    # Test-Suite
-├── main.py                          # CLI-Einstiegspunkt
-├── test_enhanced_pipeline.py        # Pipeline-Tests
-└── requirements.txt                 # Alle Dependencies
 │   ├── __init__.py
-│   ├── test_agent.py
-│   └── test_tools.py
-├── Masterarbeit/                # Virtuelles Environment
-├── .env.example
+│   └── settings.py                     # Globale Einstellungen
+├── data/
+│   ├── vector_db/                      # ChromaDB Collections ⭐
+│   ├── url_cache.db                    # URL-Cache SQLite
+│   ├── pdfs/                           # Heruntergeladene PDFs
+│   └── *.json                          # Metrics & Reports
+├── tests/
+│   ├── __init__.py
+│   ├── test_agent.py                   # Agent-Tests
+│   ├── test_tools.py                   # Tool-Tests
+│   ├── test_scraper.py                 # Scraper-Tests
+│   ├── test_scraper_components.py      # Komponenten-Tests
+│   └── test_enhanced_pipeline.py       # Pipeline-Tests
+├── .github/
+│   └── copilot-instructions.md         # GitHub Copilot Instruktionen
+├── .venv/                              # Virtual Environment
+├── .env                                # Umgebungsvariablen (lokal)
 ├── .gitignore
-├── requirements.txt             # Alle Dependencies (Agent + Scraper)
+├── requirements.txt                    # Python Dependencies
+├── setup.py                            # Package Setup
 └── README.md
 ```
 
