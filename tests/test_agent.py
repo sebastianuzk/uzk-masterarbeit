@@ -46,11 +46,7 @@ class TestReactAgent(unittest.TestCase):
             
             self.assertIsInstance(tools, list)
             self.assertGreater(len(tools), 0)
-            
-            # Überprüfe erwartete Tools
-            if settings.ENABLE_WIKIPEDIA:
-                self.assertIn("wikipedia_search", tools)
-            
+           
             if settings.ENABLE_WEB_SCRAPER:
                 self.assertIn("web_scraper", tools)
             

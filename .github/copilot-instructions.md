@@ -8,7 +8,7 @@
 	<!-- Vollständige Projektstruktur mit allen notwendigen Dateien und Modulen erstellt -->
 
 - [x] Customize the Project
-	<!-- Agent mit create_react_agent von LangGraph implementiert, Tools für Wikipedia, Web-Scraping und Tavily-Suche hinzugefügt -->
+	<!-- Agent mit create_react_agent von LangGraph implementiert, Tools für Web-Scraping, DuckDuckGo-Suche und Camunda Process Automation hinzugefügt -->
 
 - [x] Install Required Extensions
 	<!-- Keine spezifischen Extensions erforderlich -->
