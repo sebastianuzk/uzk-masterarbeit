@@ -25,7 +25,7 @@ import time
 from datetime import datetime
 import logging
 from pathlib import Path
-from .hyperparameters import (
+from src.scraper.hyperparameters import (
     SCRAPER_MAX_CONCURRENT_REQUESTS,
     SCRAPER_REQUEST_DELAY,
     SCRAPER_TIMEOUT,

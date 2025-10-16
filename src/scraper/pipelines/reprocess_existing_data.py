@@ -21,9 +21,9 @@ from collections import defaultdict
 # Füge übergeordnetes Verzeichnis zum Pfad für Imports hinzu
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.scraper.batch_scraper import ScrapedContent
-from src.scraper.vector_store import VectorStore, VectorStoreConfig
-from src.scraper.crawler_scraper_pipeline import categorize_url, enrich_metadata
+from src.scraper.core.batch_scraper import ScrapedContent
+from src.scraper.core.vector_store import VectorStore, VectorStoreConfig
+from src.scraper.pipelines.crawler_scraper_pipeline import categorize_url, enrich_metadata
 
 logger = logging.getLogger(__name__)
 

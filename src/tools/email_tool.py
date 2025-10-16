@@ -128,10 +128,12 @@ Diese E-Mail wurde automatisch vom Chatbot-System gesendet."""
         
         # Erstelle Text- und HTML-Version
         text_body = body
+        # Ersetze Zeilenumbrüche für HTML außerhalb des f-strings
+        body_html = body.replace('\n', '<br>')
         html_body = f"""
         <html>
           <body>
-            {body.replace('\n', '<br>')}
+            {body_html}
           </body>
         </html>
         """

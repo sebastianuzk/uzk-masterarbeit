@@ -41,7 +41,7 @@ except ImportError:
 OPENAI_AVAILABLE = False
 
 try:
-    from .scraped_content import ScrapedContent
+    from .batch_scraper import ScrapedContent
 except ImportError:
     # Fallback if scraped_content is not available
     from dataclasses import dataclass
@@ -58,7 +58,7 @@ except ImportError:
 
 # Importiere Hyperparameter
 try:
-    from .hyperparameters import (
+    from src.scraper.hyperparameters import (
         VECTOR_BACKEND,
         VECTOR_PERSIST_DIRECTORY,
         VECTOR_CHUNK_SIZE,

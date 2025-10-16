@@ -24,9 +24,9 @@ from datetime import datetime
 # Add the src directory to the path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from scraper.batch_scraper import BatchScraper, ScrapingConfig, ScrapedContent
-from scraper.vector_store import VectorStore, VectorStoreConfig
-from scraper.data_analysis.data_structure_analyzer import DataStructureAnalyzer
+from src.scraper.core.batch_scraper import BatchScraper, ScrapingConfig, ScrapedContent
+from src.scraper.core.vector_store import VectorStore, VectorStoreConfig
+from src.scraper.data_analysis.data_structure_analyzer import DataStructureAnalyzer
 
 
 def setup_logging(level: str = "INFO") -> None:

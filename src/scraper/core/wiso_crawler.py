@@ -35,9 +35,9 @@ class CrawlerConfig:
     seed_url: str = "https://wiso.uni-koeln.de/"
     allowed_domains: Set[str] = None
     max_pages: int = 6000
-    crawl_delay: float = 1.0
+    crawl_delay: float = 2.0  # Erhöht von 1.0 auf 2.0 - verhindert Blockierung
     max_depth: int = 5
-    concurrent_requests: int = 10
+    concurrent_requests: int = 5  # Reduziert von 10 auf 5 - weniger aggressiv
     
     def __post_init__(self):
         if self.allowed_domains is None:
@@ -61,7 +61,29 @@ class WisoCrawler:
     async def init_session(self):
         """Initialize aiohttp session and robots.txt parser."""
         if self.session is None:
-            self.session = aiohttp.ClientSession()
+            # Add realistic headers to avoid being blocked
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            # Add timeout and connector settings for better stability
+            # Disable SSL verification to avoid handshake issues
+            timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=20)
+            connector = aiohttp.TCPConnector(
+                limit=5, 
+                limit_per_host=3, 
+                ssl=False,  # Disable SSL verification
+                force_close=True  # Close connections after each request
+            )
+            self.session = aiohttp.ClientSession(
+                headers=headers, 
+                timeout=timeout,
+                connector=connector
+            )
             
         # Fetch and parse robots.txt
         try:
@@ -131,9 +153,12 @@ class WisoCrawler:
         """Crawl a single page and extract links."""
         if not self.session:
             await self.init_session()
+        
+        # Add delay to respect server
+        await asyncio.sleep(self.config.crawl_delay)
             
         try:
-            async with self.session.get(url) as response:
+            async with self.session.get(url, allow_redirects=True) as response:
                 if response.status == 200:
                     html = await response.text()
                     links = await self.extract_links(url, html)
@@ -141,6 +166,10 @@ class WisoCrawler:
                     return links
                 else:
                     logger.warning(f"Failed to fetch {url}: Status {response.status}")
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout crawling {url}")
+        except aiohttp.ClientError as e:
+            logger.error(f"Client error crawling {url}: {e}")
         except Exception as e:
             logger.error(f"Error crawling {url}: {e}")
         

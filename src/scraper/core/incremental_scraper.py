@@ -11,7 +11,7 @@ from pathlib import Path
 import json
 import logging
 
-from .url_cache import URLCache
+from src.scraper.utils.url_cache import URLCache
 
 logger = logging.getLogger(__name__)
 

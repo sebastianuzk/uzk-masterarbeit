@@ -22,19 +22,19 @@ from datetime import datetime
 from collections import defaultdict
 from urllib.parse import urlparse
 
-from src.scraper.wiso_crawler import WisoCrawler, CrawlerConfig
-from src.scraper.batch_scraper import BatchScraper, ScrapingConfig, ScrapedContent
-from src.scraper.vector_store import VectorStore, VectorStoreConfig, VectorDocument
-from src.scraper.pdf_extractor import PDFExtractor, PDFContent
+from src.scraper.core.wiso_crawler import WisoCrawler, CrawlerConfig
+from src.scraper.core.batch_scraper import BatchScraper, ScrapingConfig, ScrapedContent
+from src.scraper.core.vector_store import VectorStore, VectorStoreConfig, VectorDocument
+from src.scraper.utils.pdf_extractor import PDFExtractor, PDFContent
 
 # Enhancement-Module
-from src.scraper.url_cache import URLCache
-from src.scraper.content_deduplicator import ContentDeduplicator
-from src.scraper.content_cleaner import ContentCleaner
-from src.scraper.semantic_chunker import SemanticChunker
-from src.scraper.scraper_metrics import ScraperMetrics
-from src.scraper.resilient_scraper import ResilientScraper, RetryConfig
-from src.scraper.incremental_scraper import IncrementalScraper
+from src.scraper.utils.url_cache import URLCache
+from src.scraper.utils.content_deduplicator import ContentDeduplicator
+from src.scraper.utils.content_cleaner import ContentCleaner
+from src.scraper.utils.semantic_chunker import SemanticChunker
+from src.scraper.analysis.scraper_metrics import ScraperMetrics
+from src.scraper.core.resilient_scraper import ResilientScraper, RetryConfig
+from src.scraper.core.incremental_scraper import IncrementalScraper
 
 logger = logging.getLogger(__name__)
 
