@@ -1,6 +1,8 @@
 """
 React Agent basierend auf LangGraph für autonomes Verhalten mit Ollama
 """
+import os
+import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
@@ -21,6 +23,14 @@ class ReactAgent:
     def __init__(self):
         # Validiere Einstellungen
         settings.validate()
+        
+        # LangSmith Tracing konfigurieren (falls aktiviert)
+        if settings.LANGSMITH_TRACING and settings.LANGSMITH_API_KEY:
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
+            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+            os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
+            print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
         
         # Initialisiere Ollama LLM
         self.llm = ChatOllama(
@@ -105,9 +115,13 @@ Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
         
         return tools
     
-    def chat(self, message: str) -> str:
+    def chat(self, message: str, session_id: str = None) -> str:
         """Führe eine Unterhaltung mit dem Agenten"""
         try:
+            # Session-ID für Tracing (falls nicht übergeben)
+            if session_id is None:
+                session_id = str(uuid.uuid4())
+            
             # Füge Nachricht zum Memory hinzu
             human_message = HumanMessage(content=message)
             self.memory.append(human_message)
@@ -116,10 +130,26 @@ Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
             if len(self.memory) > settings.MEMORY_SIZE:
                 self.memory = self.memory[-settings.MEMORY_SIZE:]
             
-            # Führe Agent aus
-            response = self.agent.invoke({
+            # Führe Agent aus (mit automatischem LangSmith-Tracing)
+            agent_input = {
                 "messages": self.memory
-            })
+            }
+
+            # Erstelle Config mit Metadaten für LangSmith-Tracing (falls aktiv)
+            config = None
+            if settings.LANGSMITH_TRACING:
+                config = {
+                    "metadata": {
+                        "session_id": session_id,
+                        "user_message": message[:100] + "..." if len(message) > 100 else message,
+                        "available_tools": len(self.tools)
+                    }
+                }
+
+            if config is not None:
+                response = self.agent.invoke(agent_input, config=config)
+            else:
+                response = self.agent.invoke(agent_input)
             
             # Extrahiere Antwort
             ai_message = response["messages"][-1]
