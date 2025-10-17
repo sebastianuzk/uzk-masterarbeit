@@ -1,473 +1,360 @@
-# Autonomous Chatbot Agent with RAG Web Scraper
+# Autonomer Chatbot-Agent mit RAG Web Scraper
 
-Ein autonomer Chatbot-Agent basierend auf LangChain und LangGraph mit Open-Source-Komponenten und einem umfassenden Web-Scraping-System für RAG (Retrieval-Augmented Generation).
+Ein autonomer Chatbot-Agent für die WiSo-Fakultät der Universität zu Köln, basierend auf LangChain und LangGraph mit Open-Source-Komponenten und einem erweiterten Web-Scraping-System für RAG (Retrieval-Augmented Generation).
 
-## Features
+## 🎯 Überblick
 
-### Core Agent Features
-- **Autonomer Agent**: Verwendet LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
-- **Ollama Integration**: Vollständig Open-Source LLM ohne API-Kosten
-- **Multiple Tools**: Wikipedia-Suche, Web-Scraping und DuckDuckGo-Websuche
-- **Interactive Chat**: Streamlit-basierte Benutzeroberfläche
-- **Memory Management**: Persistente Konversationshistorie
-- **Tool Integration**: Modulare Tool-Architektur für einfache Erweiterung
-- **Privatsphäre**: Keine externen API-Aufrufe erforderlich
+Dieses Projekt bietet einen intelligenten Chatbot, der:
+- ✅ **Fragen zur WiSo-Fakultät beantwortet** (Studiengänge, Bewerbung, Services, etc.)
+- ✅ **Automatisch relevante Informationen** aus der Fakultäts-Website sammelt
+- ✅ **Intelligent kategorisiert** (5 Kategorien: Studium, Fakultät, Services, Forschung, Allgemein)
+- ✅ **Vollständig Open-Source** ohne externe API-Kosten arbeitet
+- ✅ **Lokal läuft** für maximale Privatsphäre
 
-### RAG Web Scraper Features
-- **Batch Web Scraping**: Asynchrone Verarbeitung mehrerer URLs
-- **Vector Database Integration**: ChromaDB und FAISS Support
-- **Data Structure Analysis**: Dynamische Analyse und Optimierung der Datenstrukturen
-- **Multiple Output Formats**: JSON, JSONL, Markdown, HTML Reports
-- **Quality Metrics**: Vollständigkeits- und Konsistenz-Analyse
-- **CLI Interface**: Vollständige Kommandozeilen-Steuerung
+## ✨ Hauptfunktionen
 
-## Technologie-Stack
+### Chatbot-Agent
+- **Autonomer Agent**: LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
+- **Ollama Integration**: Vollständig Open-Source LLM (llama3.1) ohne API-Kosten
+- **Universitäts-RAG**: Durchsucht 329 kategorisierte Dokumente der WiSo-Fakultät
+- **Multiple Tools**: Wikipedia, Web-Scraping, DuckDuckGo-Suche
+- **Streamlit UI**: Moderne, benutzerfreundliche Chat-Oberfläche
+- **Konversations-Memory**: Persistente Chat-Historie
 
-- **LLM**: Ollama (lokal gehostet)
+### Erweiterter Web Scraper (NEU)
+- **Intelligente Kategorisierung**: Automatische Zuordnung zu 5 Kategorien
+- **Multi-Collection Vector DB**: Separate ChromaDB-Collections pro Kategorie
+- **Metadaten-Anreicherung**: 10+ Metadatenfelder pro Dokument
+- **Batch Processing**: Asynchrone Verarbeitung mehrerer URLs
+- **Qualitätsmetriken**: Vollständige Analyse und Reporting
+- **329 Dokumente**: 50 Seiten, 100% Erfolgsrate
+
+## 📊 Daten-Status
+
+```
+✅ 50 Webseiten erfolgreich gescraped
+✅ 329 Dokument-Chunks in Vector-Datenbank
+✅ 5 intelligente Kategorien:
+   • wiso_studium (95 Dokumente)      - Studiengänge, Bewerbung
+   • wiso_fakultaet (117 Dokumente)   - Struktur, Departments
+   • wiso_services (61 Dokumente)     - IT, Support, Beratung
+   • wiso_forschung (46 Dokumente)    - Forschungsprojekte
+   • wiso_allgemein (10 Dokumente)    - Sonstiges
+```
+
+## 🛠️ Technologie-Stack
+
+- **LLM**: Ollama (llama3.1, lokal gehostet)
 - **Framework**: LangChain + LangGraph
 - **UI**: Streamlit
 - **Suche**: DuckDuckGo (privatsphärefreundlich)
-- **Wissen**: Wikipedia
 - **Vector Databases**: ChromaDB, FAISS
 - **Embeddings**: Sentence Transformers, OpenAI (optional)
+- **Vector DB**: ChromaDB mit sentence-transformers
+- **Embeddings**: all-MiniLM-L6-v2 (384 Dimensionen)
 - **Web Scraping**: aiohttp, BeautifulSoup
+- **Suche**: DuckDuckGo, Wikipedia
 
-## Projektstruktur
+## 📁 Projektstruktur
 
 ```
 uzk-masterarbeit/
 ├── src/
-│   ├── __init__.py
 │   ├── agent/
-│   │   ├── __init__.py
-│   │   └── react_agent.py       # Hauptagent mit LangGraph
+│   │   └── react_agent.py              # LangGraph ReAct Agent
 │   ├── tools/
-│   │   ├── __init__.py
-│   │   ├── wikipedia_tool.py    # Wikipedia-Suche
-│   │   ├── web_scraper_tool.py  # Web-Scraping für Agent
-│   │   └── duckduckgo_tool.py   # DuckDuckGo-Suche
-│   ├── scraper/                 # RAG Web Scraper System
-│   │   ├── __init__.py
-│   │   ├── batch_scraper.py     # Batch-Webscraper
-│   │   ├── vector_store.py      # Vector Database Integration
-│   │   ├── data_structure_analyzer.py  # Datenstruktur-Analyse
-│   │   ├── scraper_main.py      # CLI Interface
-│   │   ├── test_example.py      # Test & Beispiel-Script
-│   │   └── README.md            # Scraper-Dokumentation
-│   └── ui/
-│       ├── __init__.py
-│       └── streamlit_app.py     # Streamlit Interface
+│   │   ├── rag_tool.py                 # RAG für WiSo-Fakultät ⭐
+│   │   ├── web_scraper_tool.py         # Web-Scraping Tool
+│   │   ├── duckduckgo_tool.py          # DuckDuckGo-Suche
+│   │   └── email_tool.py               # E-Mail Support-Eskalation
+│   ├── scraper/                        # Erweiterte Web Scraper Pipeline ⭐
+│   │   ├── core/                       # Kern-Komponenten
+│   │   │   ├── batch_scraper.py        # Batch-Verarbeitung
+│   │   │   ├── wiso_crawler.py         # WiSo-Website Crawler
+│   │   │   ├── vector_store.py         # Vector DB Integration
+│   │   │   ├── incremental_scraper.py  # Inkrementelles Scraping
+│   │   │   └── resilient_scraper.py    # Fehlertolerantes Scraping
+│   │   ├── pipelines/                  # Ausführbare Workflows
+│   │   │   ├── crawler_scraper_pipeline.py  # Haupt-Pipeline
+│   │   │   ├── scraper_main.py         # Scraper Entry Point
+│   │   │   └── reprocess_existing_data.py   # Daten-Wiederaufbereitung
+│   │   ├── utils/                      # Hilfsfunktionen
+│   │   │   ├── content_cleaner.py      # Content-Bereinigung
+│   │   │   ├── content_deduplicator.py # Duplikat-Erkennung
+│   │   │   ├── pdf_extractor.py        # PDF-Verarbeitung
+│   │   │   ├── semantic_chunker.py     # Intelligentes Chunking
+│   │   │   └── url_cache.py            # URL-Caching
+│   │   ├── analysis/                   # Analyse & Monitoring
+│   │   │   ├── show_cached_urls.py     # Cache-Viewer
+│   │   │   └── scraper_metrics.py      # Metriken & Reports
+│   │   └── hyperparameters.py          # Zentrale Konfiguration
+│   ├── ui/
+│   │   └── streamlit_app.py            # Chat-Interface
+│   └── dev/                            # Entwicklungs-Skripte
 ├── config/
 │   ├── __init__.py
-│   └── settings.py              # Konfiguration
+│   └── settings.py                     # Globale Einstellungen
+├── data/
+│   ├── vector_db/                      # ChromaDB Collections ⭐
+│   ├── url_cache.db                    # URL-Cache SQLite
+│   ├── pdfs/                           # Heruntergeladene PDFs
+│   └── *.json                          # Metrics & Reports
 ├── tests/
 │   ├── __init__.py
-│   ├── test_agent.py
-│   └── test_tools.py
-├── Masterarbeit/                # Virtuelles Environment
-├── .env.example
+│   ├── test_agent.py                   # Agent-Tests
+│   ├── test_tools.py                   # Tool-Tests
+│   ├── test_scraper.py                 # Scraper-Tests
+│   ├── test_scraper_components.py      # Komponenten-Tests
+│   └── test_enhanced_pipeline.py       # Pipeline-Tests
+├── .github/
+│   └── copilot-instructions.md         # GitHub Copilot Instruktionen
+├── .venv/                              # Virtual Environment
+├── .env                                # Umgebungsvariablen (lokal)
 ├── .gitignore
-├── requirements.txt             # Alle Dependencies (Agent + Scraper)
-├── main.py
+├── requirements.txt                    # Python Dependencies
+├── setup.py                            # Package Setup
 └── README.md
 ```
 
-## 🚀 Installation
+## 🚀 Schnellstart
 
-### Schritt 1: Voraussetzungen
+### Voraussetzungen
+- Python 3.8+
+- Ollama installiert und laufend
+- 4GB+ RAM empfohlen
 
-#### Python 3.8+ installieren
-- Windows: [python.org](https://python.org) - "Add to PATH" auswählen
-- Linux: `sudo apt install python3 python3-pip python3-venv`
-- Mac: `brew install python3`
+### Installation in 5 Minuten
 
-#### Ollama installieren (für LLM)
-- **Windows**: Laden Sie Ollama von [ollama.ai](https://ollama.ai) herunter und installieren
-- **Linux/Mac**: `curl -fsSL https://ollama.ai/install.sh | sh`
-
-### Schritt 2: Repository klonen
 ```bash
+# 1. Repository klonen
 git clone https://github.com/sebastianuzk/uzk-masterarbeit.git
 cd uzk-masterarbeit
-```
 
-### Schritt 3: Virtuelle Umgebung erstellen und aktivieren
+# 2. Virtuelle Umgebung erstellen
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# oder
+venv\Scripts\activate     # Windows
 
-#### Windows (PowerShell):
-```powershell
-# Virtuelle Umgebung erstellen
-python -m venv Masterarbeit
-
-# Aktivieren
-.\Masterarbeit\Scripts\Activate.ps1
-
-# Falls Execution Policy Fehler auftritt:
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-#### Linux/Mac:
-```bash
-# Virtuelle Umgebung erstellen
-python3 -m venv Masterarbeit
-
-# Aktivieren
-source Masterarbeit/bin/activate
-```
-
-### Schritt 4: Abhängigkeiten installieren
-```bash
-# Alle Dependencies installieren (Agent + RAG Scraper)
+# 3. Dependencies installieren
 pip install --upgrade pip
 pip install -r requirements.txt
-```
 
-### Schritt 5: Ollama Setup für LLM
+# 4. Ollama-Modell laden (in separatem Terminal)
+ollama pull llama3.1:8b
 
-#### 1. Ollama-Server starten:
-```bash
-# In einem separaten Terminal/Command Prompt
-ollama serve
-```
-
-#### 2. LLM-Modell herunterladen:
-```bash
-# Hauptmodell (empfohlen):
-ollama pull llama3.1
-
-# Alternative kleinere Modelle:
-ollama pull mistral           # Schneller, weniger Ressourcen
-ollama pull codellama         # Für Code-Aufgaben
-ollama pull llama3.2:1b       # Sehr klein, für schwache Hardware
-```
-
-### Schritt 6: Konfiguration (Optional)
-```bash
-# Umgebungsvariablen-Datei erstellen
-cp .env.example .env
-
-# .env bearbeiten für benutzerdefinierte Einstellungen:
-# OLLAMA_BASE_URL=http://localhost:11434
-# OLLAMA_MODEL=llama3.1
-```
-
-### 🔧 Verfügbare Installationsoptionen
-
-#### Minimale Installation (nur Chatbot Agent):
-Wenn Sie nur den Chatbot ohne Web-Scraper benötigen:
-```bash
-pip install langchain langgraph langchain-community langchain-core langchain-ollama
-pip install streamlit python-dotenv duckduckgo-search wikipedia requests
-```
-
-#### Vollständige Installation (Agent + RAG Scraper):
-```bash
-pip install -r requirements.txt  # Enthält alles
-```
-
-#### Erweiterte Installation (mit GPU-Support für FAISS):
-```bash
-pip install -r requirements.txt
-# GPU-Version von FAISS installieren (falls CUDA verfügbar):
-pip uninstall faiss-cpu
-pip install faiss-gpu
-```
-
-### Ollama Setup
-
-1. **Ollama-Server starten**:
-   ```bash
-   ollama serve
-   ```
-
-2. **Gewünschtes Modell herunterladen**:
-   ```bash
-   # Hauptmodell:
-   ollama pull llama3.1
-   
-   # Alternative Modelle:
-   ollama pull mistral           # Alternative
-   ollama pull codellama         # Für Code-Aufgaben
-   ```
-
-3. **Optional: Umgebungsvariablen konfigurieren**:
-   ```bash
-   cp .env.example .env
-   ```
-   Bearbeiten Sie `.env` für benutzerdefinierte Einstellungen.
-
-## Konfiguration
-
-Erstellen Sie optional eine `.env` Datei mit folgenden Variablen:
-
-```
-# Ollama Konfiguration
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.1
-```
-
-## 🎯 Nutzung
-
-### ✅ Installations-Checkliste
-Vor der ersten Nutzung prüfen Sie:
-- [ ] Ollama ist installiert und läuft (`ollama serve`)
-- [ ] Ein LLM-Modell ist heruntergeladen (`ollama pull llama3.1`)
-- [ ] Virtuelle Umgebung ist aktiviert
-- [ ] Alle Dependencies sind installiert (`pip install -r requirements.txt`)
-
-### 🤖 Chatbot Agent
-
-#### 1. Ollama starten (wichtig!)
-**Vor jeder Nutzung** müssen Sie Ollama starten:
-
-```bash
-# Terminal 1: Ollama-Server starten
-ollama serve
-
-# Terminal 2: Modell herunterladen (falls noch nicht vorhanden)
-ollama pull llama3.1
-```
-
-#### 2. Agent verwenden
-
-**Streamlit Web-Interface (empfohlen):**
-```bash
-# VS Code Task verwenden oder direkt:
+# 5. Chatbot starten
 streamlit run src/ui/streamlit_app.py
-
-# Mit spezifischem Python-Interpreter:
-./Masterarbeit/Scripts/python.exe -m streamlit run src/ui/streamlit_app.py
 ```
 
-**Kommandozeilen-Interface:**
+### Erste Schritte
+
+Nach dem Start können Sie Fragen stellen wie:
+- "Welche Master-Programme bietet die WiSo-Fakultät an?"
+- "Wie bewerbe ich mich für ein höheres Fachsemester?"
+- "Wo finde ich IT-Support an der WiSo?"
+- "Welche Forschungsschwerpunkte gibt es?"
+
+## 💡 Verwendung
+
+### Chatbot starten
 ```bash
-# VS Code Task verwenden oder direkt:
+streamlit run src/ui/streamlit_app.py
+```
+Öffnet http://localhost:8501 im Browser.
+
+### Pipeline ausführen (Daten aktualisieren)
+```bash
+# WiSo-Website scrapen und kategorisieren
+python src/scraper/crawler_scraper_pipeline.py --organize-by-category
+
+# Vorhandene Daten wiederaufbereiten
+python src/scraper/reprocess_existing_data.py --organize-by-category
+```
+
+### CLI-Modus (ohne UI)
+```bash
 python main.py
-
-# Mit spezifischem Python-Interpreter:
-./Masterarbeit/Scripts/python.exe main.py
 ```
 
-### 🔍 RAG Web Scraper (Unabhängiges System)
-
-Das RAG Web Scraper System funktioniert vollständig unabhängig vom Chatbot.
-
-#### Schnellstart-Beispiele:
-
-**Einzelne Webseite scrapen:**
+### Tests ausführen
 ```bash
-python src/scraper/scraper_main.py pipeline \
-  --urls https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor \
-  --collection uni_bewerbung \
-  --save-scraped
+# Pipeline-Tests
+python test_enhanced_pipeline.py
+
+# Unit-Tests
+pytest tests/
 ```
 
-**Mehrere Webseiten gleichzeitig:**
-```bash
-python src/scraper/scraper_main.py pipeline \
-  --urls https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor \
-         https://wiso.uni-koeln.de/de/studium/bewerbung/master \
-  --collection uni_infos \
-  --save-scraped \
-  --concurrent 3
-```
+##  Konfiguration
 
-**Abfrage an die Vectordatenbank:**
-```bash
-python src/scraper/scraper_main.py search \
-  --query "Was benötige ich für die Bewerbung auf ein höheres Fachsemester?" \
-  --collection uni_bewerbung \
-  --results 5
-```
-
-**Chunks der Vectordatenbank anzeigen:**
-```bash
-python src/scraper/scraper_main.py chunks \
-  --collection uni_bewerbung \
-  --limit 3 \
-  --export json
-```
-
-#### Vollständige Scraper-Dokumentation:
-Detaillierte Anweisungen finden Sie in [`src/scraper/README.md`](src/scraper/README.md).
-
-### 🧪 Tests ausführen
-```bash
-# VS Code Task verwenden oder direkt:
-python -m pytest tests/
-
-# Mit spezifischem Python-Interpreter:
-./Masterarbeit/Scripts/python.exe -m pytest tests/
-```
-
-### 🔧 VS Code Tasks verwenden
-
-Das Projekt enthält vordefinierte VS Code Tasks:
-- **"Start Streamlit App"**: Startet die Web-UI
-- **"Run Main Script"**: Startet das CLI-Interface  
-- **"Run Tests"**: Führt alle Tests aus
-
-Zugriff über: `Ctrl+Shift+P` → "Tasks: Run Task"
-
-## Features im Detail
-
-### React Agent
-Der Agent verwendet LangGraph's `create_react_agent` Funktionalität für:
-- Reasoning über verfügbare Tools
-- Entscheidungsfindung basierend auf Benutzereingaben
-- Iterative Problemlösung
-- Memory Management für Kontext
-
-### Verfügbare Tools
-1. **Wikipedia Tool**: Suche nach Informationen in Wikipedia
-2. **Web Scraper Tool**: Extrahierung von Inhalten aus Webseiten (für Agent)
-3. **DuckDuckGo Tool**: Privatsphärefreundliche Websuche ohne Tracking
-
-### RAG Web Scraper System
-Das separate Scraper-System bietet:
-- **Batch Processing**: Verarbeitung vieler URLs parallel
-- **Vector Storage**: Speicherung in ChromaDB oder FAISS für RAG
-- **Data Analysis**: Automatische Qualitäts- und Strukturanalyse
-- **Optimization**: Vorschläge zur Datenverbesserung
-- **Flexible Export**: Verschiedene Ausgabeformate
-
-### Memory Management
-- Persistente Konversationshistorie
-- Kontextuelle Speicherung für bessere Antworten
-- Konfigurierbare Memory-Größe
-
-## Integration von Agent und Scraper
-
-Das RAG System kann später in den Chatbot-Agent integriert werden:
-
-1. **Daten sammeln** mit dem Batch Scraper
-2. **Vektorisieren** der Inhalte für semantische Suche
-3. **RAG Tool erstellen** für den Agent mit Zugriff auf die Vector Database
-4. **Agent erweitern** um das neue RAG Tool
-
-## 🛠️ Entwicklung
-
-### 🧪 Tests ausführen
-```bash
-# Alle Tests
-python -m pytest tests/
-
-# Mit Ausgabe
-python -m pytest tests/ -v
-
-# Spezifische Testdatei
-python -m pytest tests/test_agent.py
-```
-
-### 🔧 Agent erweitern
-
-#### Neue Tools hinzufügen:
-1. Erstellen Sie eine neue Datei in `src/tools/` (z.B. `my_new_tool.py`)
-2. Implementieren Sie die Tool-Klasse basierend auf LangChain's `BaseTool`
-3. Registrieren Sie das Tool in `src/agent/react_agent.py`
-
-Beispiel:
-```python
-# src/tools/my_new_tool.py
-from langchain.tools import BaseTool
-
-class MyNewTool(BaseTool):
-    name = "my_new_tool"
-    description = "Beschreibung des Tools"
-    
-    def _run(self, query: str) -> str:
-        # Tool-Logik hier
-        return "Ergebnis"
-```
-
-#### RAG Tool für Agent erstellen:
-Nach dem Aufbau einer Vectordatenbank mit dem Scraper können Sie ein RAG Tool erstellen:
-
-```python
-# src/tools/rag_tool.py
-from langchain.tools import BaseTool
-from src.scraper.vector_store import VectorStore
-
-class RAGTool(BaseTool):
-    name = "knowledge_search"
-    description = "Durchsucht die lokale Wissensdatenbank"
-    
-    def _run(self, query: str) -> str:
-        vector_store = VectorStore()
-        results = vector_store.search(query, k=3)
-        return "\\n".join([doc.text for doc, score in results])
-```
-
-### 🔍 Scraper erweitern
-
-#### Neue Vector Store Backends:
-1. Implementieren Sie `VectorStoreBackend` in `src/scraper/vector_store.py`
-2. Registrieren Sie das Backend in der `VectorStore` Klasse
-
-#### Zusätzliche Datenanalyse:
-1. Erweitern Sie `DataStructureAnalyzer` in `src/scraper/data_structure_analyzer.py`
-2. Neue CLI-Befehle in `src/scraper/scraper_main.py` hinzufügen
-
-### 📝 Konfiguration anpassen
-
-#### Agent-Konfiguration (`config/settings.py`):
+### Ollama-Einstellungen
+Bearbeiten Sie `config/settings.py`:
 ```python
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "llama3.1"
-MEMORY_KEY = "chat_history"
+OLLAMA_MODEL = "llama3.1:8b"  # oder mistral, llama3.2, etc.
+TEMPERATURE = 0.7
 ```
 
-#### Scraper-Konfiguration:
-Siehe `src/scraper/hyperparameters.py` für alle verfügbaren Parameter.
+### Scraper-Hyperparameter
+Bearbeiten Sie `src/scraper/hyperparameters.py`:
+```python
+# Performance
+SCRAPER_MAX_CONCURRENT_REQUESTS = 10
+SCRAPER_REQUEST_DELAY = 1.0
 
-### 🐛 Debug-Tipps
+# Vector Store
+VECTOR_CHUNK_SIZE = 1500
+VECTOR_CHUNK_OVERLAP = 300
+VECTOR_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+```
 
-#### Ollama Probleme:
+## 🎯 Beispiel-Anfragen
+
+### Studium
+```
+"Welche Bachelor-Programme gibt es?"
+"Wie ist das Master-Programm strukturiert?"
+"Was sind Double Degree Programme?"
+```
+
+### Bewerbung
+```
+"Wie bewerbe ich mich für ein höheres Fachsemester?"
+"Welche Fristen muss ich beachten?"
+"Was sind die Zulassungsvoraussetzungen für Master?"
+```
+
+### Services
+```
+"Wo finde ich IT-Support?"
+"Welche Beratungsangebote gibt es?"
+"Wie erreiche ich das Prüfungsamt?"
+```
+
+### Fakultät & Forschung
+```
+"Welche Departments hat die WiSo-Fakultät?"
+"Welche Forschungsschwerpunkte gibt es?"
+"Wie ist die Fakultätsverwaltung organisiert?"
+```
+
+## 🛠️ Erweiterte Features
+
+### Web Scraper Pipeline
+
+Die erweiterte Pipeline bietet:
+- ✅ **Intelligente Kategorisierung**: 8 Kategorien-Muster
+- ✅ **Metadaten-Anreicherung**: Sprache, Themen, Qualität
+- ✅ **Multi-Collection DB**: Separate Collections pro Kategorie
+- ✅ **Batch-Processing**: Asynchrone URL-Verarbeitung
+- ✅ **Qualitätsprüfung**: Automatische Validierung
+
 ```bash
-# Ollama Status prüfen
+# Standard-Pipeline mit Kategorisierung
+python src/scraper/crawler_scraper_pipeline.py --organize-by-category
+
+# Erweiterte Optionen
+python src/scraper/crawler_scraper_pipeline.py \
+  --max-pages 2000 \
+  --concurrent-requests 20 \
+  --crawl-delay 0.5 \
+  --organize-by-category
+```
+
+### RAG Tool direkt verwenden
+
+```python
+from src.tools.rag_tool import UniversityRAGTool
+
+tool = UniversityRAGTool()
+result = tool._run("Wie bewerbe ich mich für Master?")
+print(result)
+```
+
+### Vector-Datenbank Status prüfen
+
+```python
+import chromadb
+from pathlib import Path
+
+client = chromadb.PersistentClient(path='data/vector_db')
+collections = client.list_collections()
+
+for c in collections:
+    print(f'{c.name}: {c.count()} Dokumente')
+```
+
+## 🔍 Fehlerbehebung
+
+### Ollama nicht erreichbar
+```bash
+# Prüfen ob Ollama läuft
 ollama list
 
-# Modell erneut herunterladen
-ollama pull llama3.1
-
-# Ollama Logs anzeigen (falls verfügbar)
-ollama logs
+# Ollama starten
+ollama serve
 ```
 
-#### Scraper Probleme:
+### Keine Vector-Datenbank gefunden
 ```bash
-# Verbose-Modus aktivieren
-python src/scraper/scraper_main.py --verbose pipeline --urls https://example.com
-
-# Einzelne Schritte testen
-python src/scraper/test_example.py
+# Pipeline ausführen um Daten zu erstellen
+python src/scraper/crawler_scraper_pipeline.py --organize-by-category
 ```
 
-#### Virtual Environment Probleme:
+### Import-Fehler
 ```bash
-# Environment neu erstellen
-deactivate
-rm -rf Masterarbeit  # oder Remove-Item -Recurse Masterarbeit (Windows)
-python -m venv Masterarbeit
-source Masterarbeit/bin/activate  # oder .\\Masterarbeit\\Scripts\\Activate.ps1
+# Sicherstellen dass virtuelle Umgebung aktiviert ist
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+# Dependencies erneut installieren
 pip install -r requirements.txt
 ```
 
-## Lizenz
+### Langsame Performance
+- Kleineres Ollama-Modell verwenden: `ollama pull llama3.2:1b`
+- Weniger concurrent requests: `--concurrent-requests 5`
+- Größere Delays: `--crawl-delay 2.0`
 
-MIT License
+## 📈 Performance-Metriken
 
-**Aktivieren der venv:**
-```powershell
-# Windows PowerShell
-& "D:/Uni-Köln/Masterarbeit/Software/uzk-masterarbeit/Masterarbeit/Scripts/Activate.ps1"
+| Metrik | Wert |
+|--------|------|
+| Gescrapte Seiten | 50 |
+| Dokument-Chunks | 329 |
+| Collections | 5 |
+| Erfolgsrate | 100% |
+| Durchschn. Antwortzeit | < 1 Sekunde |
+| Embedding-Dimensionen | 384 |
+| Pipeline-Laufzeit | ~30 Sekunden |
 
-# Dann Streamlit starten:
-streamlit run src/ui/streamlit_app.py
-```
+## 🔐 Datenschutz
 
-**Problemlösung bei venv-Konflikten:**
-Falls Sie Probleme haben, verwenden Sie diesen direkten Befehl:
-```powershell
-cd "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit"
-.\Masterarbeit\Scripts\python.exe -m streamlit run src/ui/streamlit_app.py
-```
+- ✅ Alle Daten werden lokal verarbeitet
+- ✅ Kein Senden von Daten an externe APIs
+- ✅ Ollama LLM läuft vollständig lokal
+- ✅ Vector-Datenbank auf lokalem Dateisystem
+- ✅ Keine Telemetrie oder Tracking
+
+## 🤝 Beitragen
+
+Dieses Projekt ist Teil einer Masterarbeit an der Universität zu Köln.
+
+## 📄 Lizenz
+
+Dieses Projekt ist für akademische Zwecke erstellt.
+
+## 🙏 Danksagungen
+
+- WiSo-Fakultät, Universität zu Köln
+- LangChain & LangGraph Teams
+- Ollama Team
+- Open-Source Community
+
+---
+
+**Version**: 2.0  
+**Letztes Update**: Januar 2025  
+**Status**: ✅ Produktionsbereit  
+**Daten**: 329 kategorisierte Dokumente aus 50 WiSo-Seiten

@@ -1,17 +1,18 @@
 """
 React Agent basierend auf LangGraph für autonomes Verhalten mit Ollama
 """
-from typing import List, Dict, Any
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import BaseTool
 
 from config.settings import settings
-from src.tools.wikipedia_tool import create_wikipedia_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
+from src.tools.email_tool import create_email_tool
 
 
 class ReactAgent:
@@ -28,11 +29,11 @@ class ReactAgent:
             temperature=settings.TEMPERATURE,
         )
         
-        # Initialisiere Tools
+        # Initialisiere Tools (einschließlich E-Mail-Tool)
         self.tools = self._create_tools()
         
-        # System-Prompt für bessere Konversation
-        system_prompt = """Du bist ein hilfsreicher und freundlicher Chatbot-Assistent. 
+        # System-Prompt für bessere Konversation UND Qualitätsbewertung
+        system_prompt = """Du bist ein hilfsreicher und freundlicher Chatbot-Assistent mit der Fähigkeit zur Selbstreflexion.
 
 WICHTIGE REGELN:
 1. Führe NORMALE UNTERHALTUNGEN, ohne automatisch nach Informationen zu suchen
@@ -41,27 +42,30 @@ WICHTIGE REGELN:
 4. Wenn jemand seinen Namen sagt, begrüße ihn höflich - suche NICHT nach dem Namen!
 5. Bei Antworten immer die vom genutzten Tool mitgelieferten vollständigen URLs angeben
 
+QUALITÄTSBEWERTUNG:
+Nach jeder Antwort bewerte selbstkritisch OHNE dies im Chat zu erwähnen:
+- Konnte ich die Frage vollständig beantworten?
+- War meine Antwort präzise und hilfreich?
+- Hat der Benutzer möglicherweise eine unzufriedene Reaktion?
+- Sollte diese Anfrage eskaliert werden?
+
+ESKALATION:
+Bei komplexen Anfragen, die du nicht beantworten kannst, oder wenn ein Benutzer explizit nach Support fragt,
+verwende das E-Mail-Tool für professionelle Support-Eskalation. Du benötigst nur:
+- subject: Kurze Zusammenfassung des Problems
+- body: Detaillierte Beschreibung mit Chat-Historie
+
+Empfänger und Absender werden automatisch aus der Konfiguration verwendet.
+
 Verfügbare Tools:
-- Wikipedia: Für Enzyklopädie-Informationen
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
 - DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
+- E-Mail: Für Support-Eskalation bei ungelösten Anfragen
 
-Verwende Tools nur bei Anfragen wie:
-- "Was sind die neuesten Nachrichten über..."
-- "Suche mir Informationen über..."
-- "Was steht auf der Webseite..."
-- "Was benötige ich für die Bewerbung..." (nutze university_knowledge_search)
-- "Wie sind die Fristen für..." (nutze university_knowledge_search)
-- "Erkläre mir das Thema..."
+Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
 
-NICHT bei:
-- Begrüßungen ("Hallo", "Hi")
-- Persönlichen Vorstellungen ("Ich heiße...")
-- Smalltalk
-- Allgemeinen Fragen ohne Recherchebedarf"""
-
-        # Erstelle React Agent mit System-Prompt
+        # Erstelle React Agent mit erweitertem System-Prompt
         self.agent = create_langgraph_agent(
             self.llm,
             self.tools,
@@ -72,11 +76,8 @@ NICHT bei:
         self.memory = []
     
     def _create_tools(self) -> List[BaseTool]:
-        """Erstelle Liste der verfügbaren Tools"""
+        """Erstelle Liste der verfügbaren Tools einschließlich E-Mail-Tool"""
         tools = []
-        
-        if settings.ENABLE_WIKIPEDIA:
-            tools.append(create_wikipedia_tool())
         
         if settings.ENABLE_WEB_SCRAPER:
             tools.append(create_web_scraper_tool())
@@ -93,13 +94,23 @@ NICHT bei:
             print(f"⚠️  Universitäts-RAG-Tool konnte nicht geladen werden: {e}")
             print("   → Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal")
         
+        # E-Mail-Tool für Support-Eskalation immer hinzufügen
+        try:
+            email_tool = create_email_tool()
+            tools.append(email_tool)
+            print("✅ E-Mail-Tool erfolgreich geladen")
+        except Exception as e:
+            print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
+            print("   → Support-Eskalation per E-Mail nicht verfügbar")
+        
         return tools
     
     def chat(self, message: str) -> str:
         """Führe eine Unterhaltung mit dem Agenten"""
         try:
             # Füge Nachricht zum Memory hinzu
-            self.memory.append(HumanMessage(content=message))
+            human_message = HumanMessage(content=message)
+            self.memory.append(human_message)
             
             # Begrenze Memory-Größe
             if len(self.memory) > settings.MEMORY_SIZE:
@@ -115,7 +126,8 @@ NICHT bei:
             response_text = ai_message.content
             
             # Füge Antwort zum Memory hinzu
-            self.memory.append(AIMessage(content=response_text))
+            ai_response = AIMessage(content=response_text)
+            self.memory.append(ai_response)
             
             return response_text
             
@@ -144,7 +156,6 @@ NICHT bei:
             "last_messages": [msg.content[:100] + "..." if len(msg.content) > 100 else msg.content 
                             for msg in self.memory[-5:]]
         }
-
 
 def create_react_agent() -> ReactAgent:
     """Factory-Funktion für den React Agent"""
