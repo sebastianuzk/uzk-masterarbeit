@@ -49,8 +49,8 @@ jobs:
           # Warte bis Ollama bereit ist
           timeout 60 bash -c 'until curl -s http://localhost:11434/api/tags > /dev/null; do sleep 2; done'
 
-          # Lade das optimale Modell für GitHub Runner herunter (llama3.2:3b - 2GB RAM, schnell)
-          docker exec $(docker ps -q -f ancestor=ollama/ollama:latest) ollama pull llama3.2:3b
+          # Lade das schnellste Modell für CI/CD herunter (llama3.2:1b - nur 1GB RAM, ultra-schnell)
+          docker exec $(docker ps -q -f ancestor=ollama/ollama:latest) ollama pull llama3.2:1b
 
           # Verifiziere, dass das Modell verfügbar ist
           docker exec $(docker ps -q -f ancestor=ollama/ollama:latest) ollama list
@@ -58,6 +58,6 @@ jobs:
       - name: Run all tests (including LLM tests)
         env:
           OLLAMA_BASE_URL: http://localhost:11434
-          OLLAMA_MODEL: llama3.2:3b
+          OLLAMA_MODEL: llama3.2:1b
         run: |
           python -m pytest tests/unit/ tests/integration/ tests/llm/ -v --tb=short
