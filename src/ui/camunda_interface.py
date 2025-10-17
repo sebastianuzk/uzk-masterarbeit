@@ -138,7 +138,7 @@ def display_engine_control(camunda_service: CamundaService, docker_manager: Dock
                         st.success("Camunda gestartet")
                         # Wait for engine to be ready
                         with st.spinner("Warte auf Engine..."):
-                            if camunda_service.wait_for_engine(timeout=120):
+                            if camunda_service.wait_for_engine(attempts=120, sleep_seconds=1.0):
                                 st.success("Camunda Engine ist bereit!")
                             else:
                                 st.warning("Engine braucht länger zum Starten")
@@ -163,27 +163,28 @@ def display_engine_control(camunda_service: CamundaService, docker_manager: Dock
         if camunda_service.is_engine_running():
             st.success("✅ Engine API erreichbar")
             
-            # Get engine info
+            # Get engine info directly from client
             try:
-                engine_status = camunda_service.get_engine_status()
-                if engine_status["running"]:
-                    engine_info = engine_status["engine_info"]
-                    st.write(f"**Name:** {engine_info['name']}")
-                    st.write(f"**Version:** {engine_info['version']}")
-                    st.write(f"**Process Definitions:** {engine_status['process_definitions']}")
-                    st.write(f"**Active Instances:** {engine_status['active_instances']}")
-                    st.write(f"**Open Tasks:** {engine_status['open_tasks']}")
-                    
-                    # Camunda UI Links
-                    st.markdown("#### 🌐 Camunda Web Apps")
-                    st.markdown("**Cockpit:** [http://localhost:8080/camunda/app/cockpit/](http://localhost:8080/camunda/app/cockpit/)")
-                    st.markdown("**Tasklist:** [http://localhost:8080/camunda/app/tasklist/](http://localhost:8080/camunda/app/tasklist/)")
-                    st.markdown("**Admin:** [http://localhost:8080/camunda/app/admin/](http://localhost:8080/camunda/app/admin/)")
-                    st.markdown("**Login:** demo / demo")
-                    
-                else:
-                    st.error(f"Engine Error: {engine_status.get('error', 'Unknown error')}")
-                    
+                # Get basic engine info
+                version_info = camunda_service.client.get_version()
+                st.write(f"**Version:** {version_info.get('version', 'Unknown')}")
+                
+                # Get statistics directly
+                process_definitions = camunda_service.client.get_process_definitions()
+                process_instances = camunda_service.client.get_process_instances()
+                tasks = camunda_service.client.get_all_tasks()
+                
+                st.write(f"**Process Definitions:** {len(process_definitions) if process_definitions else 0}")
+                st.write(f"**Active Instances:** {len(process_instances) if process_instances else 0}")
+                st.write(f"**Open Tasks:** {len(tasks) if tasks else 0}")
+                
+                # Camunda UI Links
+                st.markdown("#### 🌐 Camunda Web Apps")
+                st.markdown("**Cockpit:** [http://localhost:8080/camunda/app/cockpit/](http://localhost:8080/camunda/app/cockpit/)")
+                st.markdown("**Tasklist:** [http://localhost:8080/camunda/app/tasklist/](http://localhost:8080/camunda/app/tasklist/)")
+                st.markdown("**Admin:** [http://localhost:8080/camunda/app/admin/](http://localhost:8080/camunda/app/admin/)")
+                st.markdown("**Login:** demo / demo")
+                
             except Exception as e:
                 st.error(f"Fehler beim Abrufen des Engine-Status: {str(e)}")
         else:
@@ -283,7 +284,7 @@ def display_process_management(camunda_service: CamundaService):
         
         # Show deployed processes
         try:
-            process_definitions = camunda_service.get_process_definitions()
+            process_definitions = camunda_service.client.get_process_definitions()
             if process_definitions:
                 st.success(f"✅ {len(process_definitions)} processes currently deployed:")
                 for proc in process_definitions:
@@ -298,7 +299,7 @@ def display_process_management(camunda_service: CamundaService):
         
         # Get process definitions
         try:
-            process_definitions = camunda_service.get_process_definitions()
+            process_definitions = camunda_service.client.get_process_definitions()
             
             if process_definitions:
                 # Select process to start
@@ -315,33 +316,39 @@ def display_process_management(camunda_service: CamundaService):
                     # Variables
                     st.markdown("**Process Variables (JSON format):**")
                     
-                    # Show required fields from BPMN
+                    # Show required fields from Camunda API
                     try:
-                        from src.camunda_integration.services.form_validator import load_required_fields_from_bpmn
-                        bpmn_file = camunda_service.bpmn_dir / f"{selected_process_key}.bpmn"
-                        if bpmn_file.exists():
-                            required_fields = load_required_fields_from_bpmn(bpmn_file)
-                            if required_fields:
-                                st.markdown("**Required Fields:**")
-                                for field in required_fields:
-                                    if field.get('required'):
-                                        field_info = f"- `{field['id']}` ({field.get('type', 'string')})"
-                                        if field.get('label'):
-                                            field_info += f": {field['label']}"
-                                        st.markdown(field_info)
+                        # Get form variables directly from Camunda
+                        definition = camunda_service.client.get_definition_by_key(selected_process_key)
+                        if definition:
+                            form_vars = camunda_service.client.get_start_form_variables(definition.id)
+                            if form_vars:
+                                st.markdown("**Required Fields (from Camunda):**")
+                                required_fields = []
+                                for var_name, var_spec in form_vars.items():
+                                    field_info = f"- `{var_name}` ({var_spec.get('type', 'String')})"
+                                    if var_spec.get('required', False):
+                                        field_info += " **required**"
+                                    st.markdown(field_info)
+                                    
+                                    if var_spec.get('required', False):
+                                        required_fields.append({
+                                            'id': var_name,
+                                            'type': var_spec.get('type', 'String').lower(),
+                                            'required': True
+                                        })
                                 
-                                # Generate example JSON
+                                # Generate example JSON from Camunda form variables
                                 example_vars = {}
                                 for field in required_fields:
-                                    if field.get('required'):
-                                        if field['type'] == 'string':
-                                            example_vars[field['id']] = f"Beispiel für {field['id']}"
-                                        elif field['type'] == 'long':
-                                            example_vars[field['id']] = 12345
-                                        elif field['type'] == 'boolean':
-                                            example_vars[field['id']] = True
-                                        else:
-                                            example_vars[field['id']] = f"Wert für {field['id']}"
+                                    if field['type'] == 'string':
+                                        example_vars[field['id']] = f"Beispiel für {field['id']}"
+                                    elif field['type'] == 'long' or field['type'] == 'integer':
+                                        example_vars[field['id']] = 12345
+                                    elif field['type'] == 'boolean':
+                                        example_vars[field['id']] = True
+                                    else:
+                                        example_vars[field['id']] = f"Wert für {field['id']}"
                                 
                                 import json
                                 example_json = json.dumps(example_vars, indent=2, ensure_ascii=False)
@@ -394,7 +401,7 @@ def display_process_management(camunda_service: CamundaService):
     # Process Definitions Table
     st.markdown("#### 📋 Deployed Process Definitions")
     try:
-        process_definitions = camunda_service.get_process_definitions()
+        process_definitions = camunda_service.client.get_process_definitions()
         
         if process_definitions:
             # Convert to display format
@@ -408,7 +415,7 @@ def display_process_management(camunda_service: CamundaService):
                     "Suspended": "Yes" if pd.suspended else "No"
                 })
             
-            st.dataframe(process_data, use_container_width=True)
+            st.dataframe(process_data, width='stretch')
         else:
             st.info("No process definitions deployed yet.")
             
@@ -428,7 +435,7 @@ def display_task_management(camunda_service: CamundaService):
     
     # Get tasks
     try:
-        tasks = camunda_service.get_tasks()
+        tasks = camunda_service.client.get_all_tasks()
         
         if tasks:
             st.markdown(f"#### 📋 Open Tasks ({len(tasks)})")
@@ -439,25 +446,25 @@ def display_task_management(camunda_service: CamundaService):
                 assignee_filter = st.text_input("Filter by Assignee")
             with col2:
                 process_filter = st.selectbox("Filter by Process", 
-                                            ["All"] + list(set([t.get("processInstanceId", "unknown") for t in tasks])))
+                                            ["All"] + list(set([t.processInstanceId or "unknown" for t in tasks])))
             
             # Filter tasks
             filtered_tasks = tasks
             if assignee_filter:
-                filtered_tasks = [t for t in filtered_tasks if t.get("assignee") and assignee_filter in t.get("assignee")]
+                filtered_tasks = [t for t in filtered_tasks if t.assignee and assignee_filter in t.assignee]
             if process_filter != "All":
-                filtered_tasks = [t for t in filtered_tasks if t.get("processInstanceId") == process_filter]
+                filtered_tasks = [t for t in filtered_tasks if t.processInstanceId == process_filter]
             
             # Display tasks
             for task in filtered_tasks:
-                with st.expander(f"📌 {task.get('name') or task.get('id')} - {task.get('assignee') or 'Unassigned'}"):
+                with st.expander(f"📌 {task.name or task.id} - {task.assignee or 'Unassigned'}"):
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.write(f"**Task ID:** {task.get('id')}")
-                        st.write(f"**Name:** {task.get('name') or 'N/A'}")
-                        st.write(f"**Assignee:** {task.get('assignee') or 'Unassigned'}")
-                        st.write(f"**Process Instance:** {task.get('processInstanceId') or 'N/A'}")
+                        st.write(f"**Task ID:** {task.id}")
+                        st.write(f"**Name:** {task.name or 'N/A'}")
+                        st.write(f"**Assignee:** {task.assignee or 'Unassigned'}")
+                        st.write(f"**Process Instance:** {task.processInstanceId or 'N/A'}")
                         
                     with col2:
                         # Task completion
@@ -467,19 +474,19 @@ def display_task_management(camunda_service: CamundaService):
                         task_variables = st.text_area(
                             "Completion Variables (JSON)",
                             '{}',
-                            key=f"vars_{task.get('id')}",
+                            key=f"vars_{task.id}",
                             height=80
                         )
                         
-                        if st.button("✅ Complete Task", key=f"complete_{task.get('id')}"):
+                        if st.button("✅ Complete Task", key=f"complete_{task.id}"):
                             try:
                                 variables = {}
                                 if task_variables.strip():
                                     import json
                                     variables = json.loads(task_variables)
                                 
-                                camunda_service.complete_task(task.get('id'), variables)
-                                st.success(f"✅ Task {task.get('id')} completed!")
+                                camunda_service.complete_task(task.id, variables)
+                                st.success(f"✅ Task {task.id} completed!")
                                 st.rerun()
                                 
                             except json.JSONDecodeError:
@@ -504,39 +511,81 @@ def display_statistics(camunda_service: CamundaService):
         return
     
     try:
-        stats = camunda_service.get_statistics()
+        # Get data directly from client
+        process_definitions = camunda_service.client.get_process_definitions()
+        active_instances = camunda_service.client.get_process_instances()
+        completed_instances = camunda_service.client.get_history_process_instances()
+        tasks = camunda_service.client.get_all_tasks()
+        
+        # Calculate statistics
+        process_def_count = len(process_definitions) if process_definitions else 0
+        active_count = len(active_instances) if active_instances else 0
+        completed_count = len(completed_instances) if completed_instances else 0
+        tasks_count = len(tasks) if tasks else 0
         
         # Overview metrics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("Process Definitions", stats["process_definitions"])
+            st.metric("Process Definitions", process_def_count)
         with col2:
-            st.metric("Active Instances", stats["active_instances"])
+            st.metric("Active Instances", active_count)
         with col3:
-            st.metric("Completed Instances", stats["completed_instances"])
+            st.metric("Completed Instances", completed_count)
         with col4:
-            st.metric("Open Tasks", stats["open_tasks"])
+            st.metric("Open Tasks", tasks_count)
         
         # Process breakdown
-        if stats["by_process"]:
+        if active_instances or completed_instances:
             st.markdown("#### 📈 Processes Breakdown")
             
-            process_data = []
-            for process_key, counts in stats["by_process"].items():
-                process_data.append({
-                    "Process": process_key,
-                    "Active": counts["active"],
-                    "Completed": counts["completed"],
-                    "Total": counts["active"] + counts["completed"]
-                })
+            # Count by process definition
+            process_counts = {}
             
-            st.dataframe(process_data, use_container_width=True)
+            # Count active instances by process
+            if active_instances:
+                for instance in active_instances:
+                    process_key = "unknown"
+                    if hasattr(instance, 'definitionId') and instance.definitionId:
+                        try:
+                            process_key = instance.definitionId.split(':')[0]
+                        except:
+                            process_key = str(instance.definitionId)
+                    
+                    if process_key not in process_counts:
+                        process_counts[process_key] = {"active": 0, "completed": 0}
+                    process_counts[process_key]["active"] += 1
+            
+            # Count completed instances by process
+            if completed_instances:
+                for instance in completed_instances[:50]:  # Limit to avoid performance issues
+                    process_key = instance.get('processDefinitionKey', 'unknown')
+                    if not process_key or process_key == 'unknown':
+                        definition_id = instance.get('processDefinitionId', '')
+                        if definition_id and ':' in definition_id:
+                            process_key = definition_id.split(':')[0]
+                    
+                    if process_key not in process_counts:
+                        process_counts[process_key] = {"active": 0, "completed": 0}
+                    process_counts[process_key]["completed"] += 1
+            
+            # Display process breakdown
+            if process_counts:
+                process_data = []
+                for process_key, counts in process_counts.items():
+                    process_data.append({
+                        "Process": process_key,
+                        "Active": counts["active"],
+                        "Completed": counts["completed"],
+                        "Total": counts["active"] + counts["completed"]
+                    })
+                
+                st.dataframe(process_data, width='stretch')
         
         # Active Process Instances
         st.markdown("#### 🔄 Active Process Instances")
         try:
-            active_instances = camunda_service.get_active_processes()
+            active_instances = camunda_service.client.get_process_instances()
             
             if active_instances:
                 instance_data = []
@@ -556,7 +605,7 @@ def display_statistics(camunda_service: CamundaService):
                         "Suspended": "Yes" if instance.suspended else "No"
                     })
                 
-                st.dataframe(instance_data, use_container_width=True)
+                st.dataframe(instance_data, width='stretch')
             else:
                 st.info("No active process instances")
                 
@@ -568,62 +617,48 @@ def display_statistics(camunda_service: CamundaService):
         # Process History
         st.markdown("#### 📜 Process History (Last 10)")
         try:
-            history = camunda_service.get_process_history()
+            history = camunda_service.client.get_history_process_instances()
             
             if history:
-                # Show last 10 - angepasst an tatsächliche Struktur
-                recent_history = history[:10]  # Backend liefert bereits sortiert
-                
+                # Process raw JSON history data
                 history_data = []
-                for hist in recent_history:
-                    # Extract process key from definitionId
-                    process_key = "unknown"
-                    if hasattr(hist, 'definitionId') and hist.definitionId:
-                        try:
-                            process_key = hist.definitionId.split(':')[0]
-                        except:
-                            process_key = hist.definitionId
+                for hist_item in history[:10]:  # Take first 10
+                    # Extract process key from processDefinitionKey or processDefinitionId
+                    process_key = hist_item.get('processDefinitionKey', 'unknown')
+                    if not process_key or process_key == 'unknown':
+                        definition_id = hist_item.get('processDefinitionId', '')
+                        if definition_id and ':' in definition_id:
+                            process_key = definition_id.split(':')[0]
                     
-                    # Backend liefert andere Attribute als erwartet
-                    start_time_str = "N/A"
-                    end_time_str = "N/A"
+                    # Parse timestamps
+                    start_time = hist_item.get('startTime', 'N/A')
+                    end_time = hist_item.get('endTime', 'N/A')
+                    duration = hist_item.get('durationInMillis')
                     
-                    if hasattr(hist, 'startTime') and hist.startTime:
-                        start_time_str = hist.startTime
-                    elif hasattr(hist, 'start_time') and hist.start_time:
-                        start_time_str = hist.start_time.strftime('%Y-%m-%d %H:%M') if hasattr(hist.start_time, 'strftime') else str(hist.start_time)
-                    
-                    if hasattr(hist, 'endTime') and hist.endTime:
-                        end_time_str = hist.endTime
-                    elif hasattr(hist, 'end_time') and hist.end_time:
-                        end_time_str = hist.end_time.strftime('%Y-%m-%d %H:%M') if hasattr(hist.end_time, 'strftime') else str(hist.end_time)
-                    
-                    duration = ""
-                    if hasattr(hist, 'durationInMillis') and hist.durationInMillis:
-                        duration_sec = hist.durationInMillis / 1000
-                        duration = f"{duration_sec:.1f}s"
-                    elif hasattr(hist, 'duration_in_millis') and hist.duration_in_millis:
-                        duration_sec = hist.duration_in_millis / 1000
-                        duration = f"{duration_sec:.1f}s"
+                    # Format duration
+                    duration_text = "N/A"
+                    if duration:
+                        duration_seconds = duration / 1000
+                        if duration_seconds < 60:
+                            duration_text = f"{duration_seconds:.1f}s"
+                        else:
+                            duration_text = f"{duration_seconds/60:.1f}min"
                     
                     history_data.append({
                         "Process": process_key,
-                        "Started": start_time_str,
-                        "Ended": end_time_str,
-                        "Duration": duration,
-                        "Business Key": getattr(hist, 'businessKey', getattr(hist, 'business_key', "N/A")) or "N/A",
-                        "State": getattr(hist, 'state', "COMPLETED")
+                        "Started": start_time,
+                        "Ended": end_time,
+                        "Duration": duration_text,
+                        "Business Key": hist_item.get('businessKey', 'N/A') or 'N/A',
+                        "State": hist_item.get('state', 'COMPLETED')
                     })
                 
-                st.dataframe(history_data, use_container_width=True)
+                st.dataframe(history_data, width='stretch')
             else:
                 st.info("No process history found")
                 
         except Exception as e:
             st.error(f"Failed to load process history: {str(e)}")
-            logger.error(f"Process history error: {e}")
-            st.code(traceback.format_exc())
             
     except Exception as e:
         st.error(f"Failed to load statistics: {str(e)}")
-        st.code(traceback.format_exc())

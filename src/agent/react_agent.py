@@ -31,21 +31,6 @@ except ImportError as e:
     print(f"WARNUNG Camunda Process Automation Tools nicht verfügbar: {e}")
     PROCESS_AUTOMATION_AVAILABLE = False
 
-# BPMN Engine Tools - DEAKTIVIERT (nur Camunda verwendet)
-BPMN_ENGINE_AVAILABLE = False
-
-# Process Engine Tools - DEAKTIVIERT (nur Camunda verwendet)  
-PROCESS_ENGINE_AVAILABLE = False
-
-# Universal Process Automation Tools import (Camunda Integration)
-try:
-    from src.tools.process_automation_tool import get_process_automation_tools
-    PROCESS_AUTOMATION_AVAILABLE = True
-    print("OK Camunda Process Automation Tools werden geladen...")
-except ImportError as e:
-    print(f"WARNUNG Camunda Process Automation Tools nicht verfügbar: {e}")
-    PROCESS_AUTOMATION_AVAILABLE = False
-
 
 class ReactAgent:
     """Autonomer React Agent mit LangGraph und Ollama"""
@@ -73,37 +58,50 @@ class ReactAgent:
         self.tools = self._create_tools()
         
         # System-Prompt für bessere Konversation UND Qualitätsbewertung
-        system_prompt = """Du bist ein hilfsreicher und freundlicher Chatbot-Assistent mit der Fähigkeit zur Selbstreflexion.
+        system_prompt = """Du bist ein hilfsreicher und freundlicher Chatbot.
 
 WICHTIGE REGELN:
-1. Führe NORMALE UNTERHALTUNGEN, ohne automatisch nach Informationen zu suchen
-2. Verwende Tools NUR wenn explizit nach aktuellen Informationen, Fakten oder Recherche gefragt wird
+1. Führe NORMALE UNTERHALTUNGEN, ohne automatisch nach Informationen zu suchen oder Tools zu nutzen
+2. Verwende Tools NUR wenn explizit nach aktuellen Informationen, Fakten oder Recherche gefragt wird und NICHT bei Smalltalk
 3. Bei Begrüßungen, Smalltalk oder persönlichen Fragen antworte direkt freundlich
 4. Wenn jemand seinen Namen sagt, begrüße ihn höflich - suche NICHT nach dem Namen!
 5. Bei Antworten immer die vom genutzten Tool mitgelieferten vollständigen URLs angeben
-
-QUALITÄTSBEWERTUNG:
-Nach jeder Antwort bewerte selbstkritisch OHNE dies im Chat zu erwähnen:
-- Konnte ich die Frage vollständig beantworten?
-- War meine Antwort präzise und hilfreich?
-- Hat der Benutzer möglicherweise eine unzufriedene Reaktion?
-- Sollte diese Anfrage eskaliert werden?
+6. Ermittle den process_key und die notwendigen Parameter für process_start, wenn ein Benutzer einen Prozess starten möchte (z.B. "Bewerbung auf einen Studiengang").
+7. Nutze das Tool "discover_processes", um den process_key eines Prozesses zu erhalten und die dafür notwendigen Parameter, wenn ein Benutzer einen Prozess starten möchte.
 
 ESKALATION:
 Bei komplexen Anfragen, die du nicht beantworten kannst, oder wenn ein Benutzer explizit nach Support fragt,
 verwende das E-Mail-Tool für professionelle Support-Eskalation. Du benötigst nur:
 - subject: Kurze Zusammenfassung des Problems
 - body: Detaillierte Beschreibung mit Chat-Historie
-
 Empfänger und Absender werden automatisch aus der Konfiguration verwendet.
+
+PROZESSAUTOMATISIERUNG:
+Du verfügst über Camunda BPM Integration für Geschäftsprozess-Management:
+- discover_processes: Zeige verfügbare BPMN-Prozesse (z.B. Bewerbungsprozess, Prüfungsanmeldung)
+- start_process: Starte einen Geschäftsprozess mit den erforderlichen Variablen
+- get_process_status: Prüfe Status laufender Prozessinstanzen und offene Tasks
+- complete_task: Vervollständige offene User Tasks in laufenden Prozessen
+Verwende Tools für Geschäftsprozess-Management wenn Benutzer:
+- Verfügbaren Prozessen/Workflows fragen
+- Einen Prozess starten möchten (z.B. "Bewerbung einreichen")
+- Status einer laufenden Angelegenheit prüfen möchten
+- Aufgaben/Tasks bearbeiten möchten
+
+Beispielablauf um einen Prozess zu starten:
+1. Nutze "discover_processes", um verfügbare Prozesse und deren Eingabefelder zu ermitteln.
+2. Frage den Benutzer nach den erforderlichen Informationen basierend auf den Eingabefeldern.
+3. Verwende "start_process", um den Prozess mit den gesammelten Informationen zu starten.
 
 Verfügbare Tools:
 - Web-Scraping: Für Inhalte von spezifischen Webseiten  
 - DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
-- E-Mail: Für Support-Eskalation bei ungelösten Anfragen
-
-Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
+- discover_processes: Verfügbare BPMN-Prozesse mit Eingabefeldern anzeigen (keine Parameter erforderlich)
+- start_process: Geschäftsprozesse mit spezifischen Variablen starten (process_key, variables)
+- get_process_status: Status und offene Tasks einer Prozessinstanz prüfen (process_instance_id)
+- complete_task: Nächsten User Task vervollständigen (process_instance_id, optional: variables)
+- E-Mail: Für Support-Eskalation bei ungelösten Anfragen"""
 
         # Erstelle React Agent mit erweitertem System-Prompt
         self.agent = create_langgraph_agent(
@@ -144,15 +142,6 @@ Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
             except Exception as e:
                 print(f"WARNUNG Camunda Process Automation Tools konnten nicht geladen werden: {e}")
                 print("   -> Prozessautomatisierung ist nicht verfügbar")
-        
-        # E-Mail-Tool für Support-Eskalation immer hinzufügen
-        try:
-            email_tool = create_email_tool()
-            tools.append(email_tool)
-            print("✅ E-Mail-Tool erfolgreich geladen")
-        except Exception as e:
-            print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
-            print("   → Support-Eskalation per E-Mail nicht verfügbar")
         
         # E-Mail-Tool für Support-Eskalation immer hinzufügen
         try:

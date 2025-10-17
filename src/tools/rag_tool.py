@@ -30,7 +30,7 @@ class UniversityRAGTool(BaseTool):
         "Durchsucht die Universitäts-Wissensdatenbank für Fragen zu "
         "Bewerbungen, Studiengängen, Fristen, Prüfungen, Fachsemestern "
         "und anderen Themen der Universität zu Köln / WiSo-Fakultät. "
-        "Nutze dieses Tool für spezifische Uni-Fragen."
+        "Nutze dieses Tool ausschließlich für spezifische Uni-Fragen."
     )
     
     def _run(self, query: str) -> str:

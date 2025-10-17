@@ -21,8 +21,8 @@ class EmailTool(BaseTool):
     """Tool zum Versenden von E-Mails über SMTP"""
     
     name: str = "send_email"
-    description: str = """
-    Sendet eine E-Mail an die vorkonfigurierte Standard-E-Mail-Adresse.
+    description: str = """Nutze dieses Tool, falls du eine Anfrage nicht beantworten kannst, oder der Benutzer explizit danach fragt. Nutze es nicht bei Smalltalk!
+    Das Tool sendet eine E-Mail an die vorkonfigurierte Standard-E-Mail-Adresse.
     
     🎯 Verwendet automatisch die konfigurierten Umgebungsvariablen:
     🎯 Empfänger: DEFAULT_RECIPIENT aus .env

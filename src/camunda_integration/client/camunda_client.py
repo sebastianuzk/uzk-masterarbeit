@@ -165,3 +165,21 @@ class CamundaClient:
         )
         r.raise_for_status()
         return r.json() if r.text else {}
+
+    def get_all_tasks(self) -> List[Task]:
+        """Get all active tasks across all process instances"""
+        r = self._session.get(f"{self.base_url}/task", timeout=self.timeout)
+        r.raise_for_status()
+        return [Task(**x) for x in r.json()]
+
+    def get_history_process_instances(self, finished: bool = True, max_results: int = 10) -> List[Dict[str, Any]]:
+        """Get historical process instances"""
+        params = {
+            "finished": str(finished).lower(),
+            "sortBy": "startTime", 
+            "sortOrder": "desc",
+            "maxResults": max_results
+        }
+        r = self._session.get(f"{self.base_url}/history/process-instance", params=params, timeout=self.timeout)
+        r.raise_for_status()
+        return r.json()

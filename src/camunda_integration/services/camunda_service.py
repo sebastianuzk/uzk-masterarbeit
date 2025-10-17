@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional
 
 from src.camunda_integration.client.camunda_client import CamundaClient
 from src.camunda_integration.models.camunda_models import ToolResult
-from src.camunda_integration.services.form_validator import load_required_fields_from_bpmn, validate_start_variables
 
 
 @dataclass
@@ -35,48 +34,62 @@ class CamundaService:
             return {"success": False, "error": str(e)}
 
     def discover_processes(self) -> Dict[str, Any]:
-        defs = self.client.get_process_definitions()
-        # enrich with required fields from BPMN where filename matches key (common convention)
-        key_to_fields: Dict[str, List[Dict[str, Any]]] = {}
-        for p in self.bpmn_dir.glob("**/*.bpmn"):
-            fields = load_required_fields_from_bpmn(p)
-            if not fields:
-                continue
-            key_to_fields[p.stem] = fields
-        result = []
-        for d in defs:
-            req = key_to_fields.get(d.key) or key_to_fields.get((d.name or "").strip().replace(" ", "_")) or []
-            result.append({
-                "id": d.id,
-                "key": d.key,
-                "name": d.name,
-                "version": d.version,
-                "required_fields": req,
-            })
-        return {"success": True, "processes": result}
+        """Get all deployed process definitions from Camunda with form variables"""
+        try:
+            defs = self.client.get_process_definitions()
+            result = []
+            
+            for d in defs:
+                # Get form variables directly from Camunda API
+                try:
+                    form_vars = self.client.get_start_form_variables(d.id)
+                    required_fields = []
+                    
+                    # Convert Camunda form variables to our format
+                    for var_name, var_spec in form_vars.items():
+                        required_fields.append({
+                            "id": var_name,
+                            "label": var_spec.get("label", var_name),
+                            "type": var_spec.get("type", "string").lower(),
+                            "required": var_spec.get("required", False),
+                            "value": var_spec.get("value")
+                        })
+                        
+                except Exception:
+                    # If form variables can't be retrieved, continue without them
+                    required_fields = []
+                
+                result.append({
+                    "id": d.id,
+                    "key": d.key,
+                    "name": d.name,
+                    "version": d.version,
+                    "required_fields": required_fields,
+                })
+                
+            return {"success": True, "processes": result}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def start_process(self, process_key: str, variables: Dict[str, Any], business_key: Optional[str] = None) -> ToolResult:
-        # validate against BPMN, if file exists
-        bpmn_path = self._find_bpmn_for_key(process_key)
-        if bpmn_path:
-            ok, msg, missing = validate_start_variables(bpmn_path, variables or {})
-            if not ok:
-                return ToolResult(
-                    success=False,
-                    message=f"Validation failed: {msg}",
-                    need_input=True,
-                    missing=missing,
-                )
-        # start
-        pi = self.client.start_process_by_key(process_key, variables, business_key)
-        tasks = self.client.get_tasks_for_instance(pi.id)
-        return ToolResult(
-            success=True,
-            message=f"Started process {process_key} -> instance {pi.id}",
-            process_instance_id=pi.id,
-            next_tasks=tasks,
-            process_status="running" if tasks else "completed",
-        )
+        """Start a process using Camunda-first approach with intelligent error handling"""
+        try:
+            # Let Camunda handle validation and start the process
+            pi = self.client.start_process_by_key(process_key, variables, business_key)
+            tasks = self.client.get_tasks_for_instance(pi.id)
+            
+            return ToolResult(
+                success=True,
+                message=f"Started process {process_key} -> instance {pi.id}",
+                process_instance_id=pi.id,
+                next_tasks=tasks,
+                process_status="running" if tasks else "completed",
+            )
+            
+        except Exception as e:
+            # Transform Camunda errors into user-friendly format
+            return self._handle_camunda_error(e, process_key)
 
     def start_process_instance(self, process_key: str, variables: Dict[str, Any], business_key: Optional[str] = None):
         """Start a process instance - UI compatible version"""
@@ -88,190 +101,95 @@ class CamundaService:
 
     def get_process_status(self, process_instance_id: str) -> ToolResult:
         tasks = self.client.get_tasks_for_instance(process_instance_id)
+        
+        # Enhance tasks with form variables
+        enhanced_tasks = []
+        for task in tasks:
+            # Get form variables for each task
+            try:
+                form_vars = self.client.get_task_form_variables(task.id)
+                # Add form variables to task (extend Task model or use dict)
+                task_dict = task.model_dump()
+                task_dict["form_variables"] = form_vars
+                enhanced_tasks.append(task_dict)
+            except Exception:
+                # If form variables can't be retrieved, use task as-is
+                enhanced_tasks.append(task.model_dump())
+        
         status = "running" if tasks else "completed"
         return ToolResult(
             success=True,
             message=f"Instance {process_instance_id} status: {status}",
             process_instance_id=process_instance_id,
-            next_tasks=tasks,
+            next_tasks=enhanced_tasks,  # Now includes form variables
             process_status=status,
         )
 
     def complete_next_task(self, process_instance_id: str, variables: Optional[Dict[str, Any]] = None) -> ToolResult:
-        tasks = self.client.get_tasks_for_instance(process_instance_id)
-        if not tasks:
-            return ToolResult(success=False, message="No open user tasks", process_instance_id=process_instance_id)
-        task = tasks[0]
-        # (Optional) fetch task form variables and ensure provided variables satisfy required ones
+        """Complete the next task using Camunda-first approach"""
         try:
-            form_vars = self.client.get_task_form_variables(task.id)
-            missing = []
-            if form_vars:
-                provided = variables or {}
-                for k, spec in form_vars.items():
-                    if spec.get("readable", True) and spec.get("required", False):
-                        if k not in provided or provided.get(k) in (None, ""):
-                            missing.append({"id": k, "label": spec.get("label", k), "reason": "required"})
-                if missing:
-                    return ToolResult(success=False, message="Missing variables for task", need_input=True, missing=missing, process_instance_id=process_instance_id)
-        except Exception:
-            # If form retrieval fails, proceed best-effort
-            pass
-        self.client.complete_task(task.id, variables)
-        # refresh
-        remaining = self.client.get_tasks_for_instance(process_instance_id)
-        status = "running" if remaining else "completed"
-        return ToolResult(
-            success=True,
-            message=f"Completed task {task.name or task.id}",
-            process_instance_id=process_instance_id,
-            next_tasks=remaining,
-            process_status=status,
-        )
-
-    def get_process_definitions(self) -> List:
-        """Get all process definitions as objects"""
-        try:
-            return self.client.get_process_definitions()
-        except Exception as e:
-            return []
-
-    def get_engine_status(self) -> Dict[str, Any]:
-        """Get engine status information"""
-        try:
-            is_running = self.client.is_alive()
-            if is_running:
-                processes = self.client.get_process_definitions()
-                instances = self.client.get_process_instances()
-                tasks = self.get_tasks()
-                return {
-                    "running": True,
-                    "engine_info": {
-                        "name": "Camunda Platform 7",
-                        "version": "7.21.0"
-                    },
-                    "process_definitions": len(processes),
-                    "active_instances": len(instances),
-                    "open_tasks": len(tasks)
-                }
-            else:
-                return {
-                    "running": False,
-                    "error": "Engine not reachable"
-                }
-        except Exception as e:
-            return {
-                "running": False,
-                "error": str(e)
-            }
-
-    def get_tasks(self) -> List[Dict[str, Any]]:
-        """Get all active tasks"""
-        try:
-            # Get all process instances
-            instances = self.client.get_process_instances()
-            all_tasks = []
-            
-            for instance in instances:
-                tasks = self.client.get_tasks_for_instance(instance.id)
-                for task in tasks:
-                    all_tasks.append({
-                        "id": task.id,
-                        "name": task.name,
-                        "processInstanceId": task.processInstanceId,
-                        "taskDefinitionKey": task.taskDefinitionKey,
-                        "assignee": task.assignee
-                    })
-            
-            return all_tasks
-        except Exception as e:
-            return []
-
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get engine statistics"""
-        try:
-            processes = self.client.get_process_definitions()
-            instances = self.client.get_process_instances()
-            
-            # Count instances by process key
-            by_process = {}
-            for instance in instances:
-                key = instance.get_process_key()  # Use the new method
-                if key not in by_process:
-                    by_process[key] = {"active": 0, "completed": 0}
-                by_process[key]["active"] += 1
-            
-            # Get all tasks
-            all_tasks = self.get_tasks()
-            
-            return {
-                "process_definitions": len(processes),
-                "active_instances": len(instances),
-                "completed_instances": 0,  # TODO: Implement completed instances tracking
-                "open_tasks": len(all_tasks),
-                "by_process": by_process,
-                "engine_running": self.client.is_alive()
-            }
-        except Exception as e:
-            return {
-                "process_definitions": 0,
-                "active_instances": 0, 
-                "completed_instances": 0,
-                "open_tasks": 0,
-                "by_process": {},
-                "engine_running": False,
-                "error": str(e)
-            }
-
-    def get_active_processes(self):
-        """Get active process instances"""
-        try:
-            return self.client.get_process_instances()
-        except Exception as e:
-            return []
-
-    def get_process_history(self):
-        """Get process history (completed instances)"""
-        try:
-            # Get historical process instances
-            url = f"{self.client.base_url}/history/process-instance"
-            params = {
-                "finished": "true",
-                "sortBy": "startTime",
-                "sortOrder": "desc",
-                "maxResults": 10
-            }
-            response = self.client._session.get(url, params=params, timeout=self.client.timeout)
-            response.raise_for_status()
-            
-            history_data = response.json()
-            from src.camunda_integration.models.camunda_models import ProcessInstance
-            from datetime import datetime
-            
-            history_instances = []
-            for item in history_data:
-                # Convert to ProcessInstance-like object for consistency
-                instance = ProcessInstance(
-                    id=item.get("id"),
-                    definitionId=item.get("processDefinitionId", ""),
-                    processDefinitionKey=item.get("processDefinitionKey"),
-                    businessKey=item.get("businessKey")
+            tasks = self.client.get_tasks_for_instance(process_instance_id)
+            if not tasks:
+                return ToolResult(
+                    success=False, 
+                    message="No open user tasks", 
+                    process_instance_id=process_instance_id
                 )
-                # Add history-specific fields
-                instance.start_time = datetime.fromisoformat(item.get("startTime", "").replace("Z", "+00:00")) if item.get("startTime") else None
-                instance.end_time = datetime.fromisoformat(item.get("endTime", "").replace("Z", "+00:00")) if item.get("endTime") else None
-                instance.duration_in_millis = item.get("durationInMillis")
-                instance.state = item.get("state", "COMPLETED")
-                
-                history_instances.append(instance)
             
-            return history_instances
+            task = tasks[0]
+            
+            # Let Camunda handle task completion and validation
+            self.client.complete_task(task.id, variables or {})
+            
+            # Get updated status
+            remaining = self.client.get_tasks_for_instance(process_instance_id)
+            status = "running" if remaining else "completed"
+            
+            return ToolResult(
+                success=True,
+                message=f"Completed task {task.name or task.id}",
+                process_instance_id=process_instance_id,
+                next_tasks=remaining,
+                process_status=status,
+            )
+            
         except Exception as e:
-            return []
+            return self._handle_camunda_error(e, f"task completion for instance {process_instance_id}")
 
-    def _find_bpmn_for_key(self, key: str) -> Optional[Path]:
-        # heuristic: filename stem equals key
-        for p in self.bpmn_dir.glob("**/*.bpmn"):
-            if p.stem == key:
-                return p
-        return None
+    def _handle_camunda_error(self, error: Exception, process_key: str) -> ToolResult:
+        """Transform Camunda API errors into user-friendly ToolResult"""
+        import requests
+        
+        if isinstance(error, requests.HTTPError):
+            if error.response.status_code == 400:
+                try:
+                    error_details = error.response.json()
+                    message = error_details.get("message", "Process start failed")
+                    
+                    # Try to extract missing field information
+                    if "variable" in message.lower() or "required" in message.lower():
+                        return ToolResult(
+                            success=False,
+                            message=f"Validation failed: {message}",
+                            need_input=True,
+                            missing=[{"reason": "validation_error", "details": message}]
+                        )
+                        
+                except Exception:
+                    pass
+                    
+                return ToolResult(
+                    success=False, 
+                    message=f"Invalid request for process {process_key}: {str(error)}"
+                )
+                
+            elif error.response.status_code == 404:
+                return ToolResult(
+                    success=False,
+                    message=f"Process '{process_key}' not found. Make sure it's deployed."
+                )
+                
+        return ToolResult(
+            success=False,
+            message=f"Failed to start process {process_key}: {str(error)}"
+        )
