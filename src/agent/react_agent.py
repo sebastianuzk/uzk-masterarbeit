@@ -13,6 +13,7 @@ from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
 from src.tools.email_tool import create_email_tool
+from src.tools.klips2_register_tool import create_klips2_register_tool
 
 
 class ReactAgent:
@@ -62,6 +63,7 @@ Verfügbare Tools:
 - DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
 - Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
 - E-Mail: Für Support-Eskalation bei ungelösten Anfragen
+- KLIPS2-Registrierung: Hilft Benutzern bei der Erstellung eines neuen Basis-Accounts auf KLIPS2
 
 Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
 
@@ -102,6 +104,15 @@ Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
         except Exception as e:
             print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
             print("   → Support-Eskalation per E-Mail nicht verfügbar")
+        
+        # KLIPS2-Registrierungs-Tool hinzufügen
+        try:
+            klips2_tool = create_klips2_register_tool()
+            tools.append(klips2_tool)
+            print("✅ KLIPS2-Registrierungs-Tool erfolgreich geladen")
+        except Exception as e:
+            print(f"⚠️  KLIPS2-Registrierungs-Tool konnte nicht geladen werden: {e}")
+            print("   → KLIPS2-Account-Erstellung nicht verfügbar")
         
         return tools
     
