@@ -17,6 +17,17 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
 
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+        options: >-
+          --health-cmd "ollama list || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,6 +44,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Pull Ollama model
         run: |
-          python -m pytest tests/unit/ tests/integration/ -v --tb=short
+          # Warte bis Ollama bereit ist
+          timeout 60 bash -c 'until curl -s http://localhost:11434/api/tags > /dev/null; do sleep 2; done'
+
+          # Lade das Modell herunter (llama3.1:8b)
+          docker exec $(docker ps -q -f ancestor=ollama/ollama:latest) ollama pull llama3.1:8b
+
+          # Verifiziere, dass das Modell verfügbar ist
+          docker exec $(docker ps -q -f ancestor=ollama/ollama:latest) ollama list
+
+      - name: Run all tests (including LLM tests)
+        env:
+          OLLAMA_BASE_URL: http://localhost:11434
+        run: |
+          python -m pytest tests/unit/ tests/integration/ tests/llm/ -v --tb=short
