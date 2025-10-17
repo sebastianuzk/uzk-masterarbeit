@@ -1,3 +1,7 @@
+# ============================================================================
+# PYTHON
+# ============================================================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -32,8 +36,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -88,33 +90,18 @@ profile_default/
 ipython_config.py
 
 # pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
 # .python-version
 
 # pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
 #Pipfile.lock
 
 # poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
 
 # pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/#use-with-ide
 .pdm.toml
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+# PEP 582
 __pypackages__/
 
 # Celery stuff
@@ -124,60 +111,217 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments
-.env
+# ============================================================================
+# ENVIRONMENTS
+# ============================================================================
+
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+Masterarbeit/
 
-# Spyder project settings
+# ============================================================================
+# IDE & EDITORS
+# ============================================================================
+
+# PyCharm
+.idea/
+
+# Spyder
 .spyderproject
 .spyproject
 
-# Rope project settings
+# Rope
 .ropeproject
 
-# mkdocs documentation
-/site
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ============================================================================
+# TYPE CHECKERS
+# ============================================================================
 
 # mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
 
-# Pyre type checker
+# Pyre
 .pyre/
 
-# pytype static type analyzer
+# pytype
 .pytype/
 
-# Cython debug symbols
+# Cython
 cython_debug/
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be added to the global gitignore or merged into this project gitignore.  For a PyCharm
-#  project, it is not uncommon to see the whole .idea folder being ignored.
-.idea/
+# ============================================================================
+# PROJECT-SPECIFIC
+# ============================================================================
 
-# Project-specific files
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Project notes
 hyperparameter_documentation.md
 Notizen Pascal.txt
 *.txt.bak
-.env
-
-# Virtual environment (if different name is used)
-Masterarbeit/
-.venv/
-venv/
-env/
+TODO.md
+NOTES.md
 
 # Streamlit cache
 .streamlit/
 
-# Additional helper scripts
+# Helper scripts
 start_streamlit.bat
 start_streamlit.ps1
+run_pipeline_*.py
+test_*.py
+
+# ============================================================================
+# DATA & DATABASES
+# ============================================================================
+
+# Data directories (keep structure, ignore content)
+data/*
+!data/.gitkeep
+!data/README.md
+
+# Specific data subdirectories
+data/scraped/
+data/pdfs/
+data/vector_db/
+data/pipeline_*/
+data/test_*/
+data/enhanced_*/
+data/wiso_*/
+data/cache/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+url_cache.db
+chroma.sqlite3
+
+# ChromaDB
+**/chroma.sqlite3
+**/vector_db/*.bin
+**/vector_db/*.pkl
+src/scraper/vector_db/*
+!src/scraper/vector_db/.gitkeep
+
+# ============================================================================
+# SCRAPER OUTPUT FILES
+# ============================================================================
+
+# JSON output files
+scraped_data.json
+discovered_urls*.json
+discovered_urls*.txt
+cached_urls*.json
+cached_urls*.txt
+pipeline_report*.json
+urls_*.json
+
+# Metrics and statistics
+*_metrics.json
+*_statistics.json
+*_report.json
+*_report.md
+*_report.html
+cache_statistics.json
+scraper_metrics.json
+deduplication_report.json
+content_changes.json
+failed_urls.json
+pdf_metadata.json
+
+# Analysis output
+src/scraper/data_analysis/scraped_data.json
+src/scraper/data_analysis/pipeline_analysis_report.json
+src/scraper/data_analysis/pipeline_analysis_report.md
+src/scraper/data_analysis/pipeline_analysis_report.html
+
+# Scraper cache and temporary files
+src/scraper/output/*
+src/scraper/*.db
+src/scraper/cache/
+
+# ============================================================================
+# DOWNLOADED & GENERATED FILES
+# ============================================================================
+
+# PDFs (keep documentation PDFs)
+*.pdf
+!docs/*.pdf
+!README*.pdf
+
+# Large model files
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.ckpt
+
+# Embeddings
+embeddings/
+*.npy
+*.npz
+
+# ============================================================================
+# LOGS & TEMPORARY FILES
+# ============================================================================
+
+# Log files
+*.log
+logs/
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================================================
+# SYSTEM FILES
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ============================================================================
+# BACKUP FILES
+# ============================================================================
+
+*.bak
+*.backup
+*.old
+*_backup
+*_old

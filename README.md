@@ -1,73 +1,50 @@
-# Autonomous University Chatbot with Camunda Platform 7 Integration
+# Autonomer Chatbot-Agent mit RAG Web Scraper
 
-Ein autonomer Universitäts-Chatbot mit Enterprise-Grade BPMN-Workflow-Engine, basierend auf LangChain, LangGraph und Camunda Platform 7. Das System kombiniert Open-Source LLMs mit automatisierter Prozessbearbeitung für Universitätsdienste.
+Ein autonomer Chatbot-Agent für die WiSo-Fakultät der Universität zu Köln, basierend auf LangChain und LangGraph mit Open-Source-Komponenten und einem erweiterten Web-Scraping-System für RAG (Retrieval-Augmented Generation).
 
-## 🎉 CAMUNDA PLATFORM 7 INTEGRATION - VOLLSTÄNDIG IMPLEMENTIERT
+## 🎯 Überblick
 
-### ✅ Erfolgreich Implementierte Komponenten
+Dieses Projekt bietet einen intelligenten Chatbot, der:
+- ✅ **Fragen zur WiSo-Fakultät beantwortet** (Studiengänge, Bewerbung, Services, etc.)
+- ✅ **Automatisch relevante Informationen** aus der Fakultäts-Website sammelt
+- ✅ **Intelligent kategorisiert** (5 Kategorien: Studium, Fakultät, Services, Forschung, Allgemein)
+- ✅ **Vollständig Open-Source** ohne externe API-Kosten arbeitet
+- ✅ **Lokal läuft** für maximale Privatsphäre
 
-#### 🏗️ Camunda Platform 7 Enterprise Integration
-- **CamundaClient**: REST API-Integration mit pycamunda und HTTP-Fallback
-- **CamundaService**: High-Level Service-Layer für BPMN-Lifecycle-Management
-- **DockerManager**: Automatisches Container-Management mit Health-Checks
-- **Auto-Deployment Prevention**: Sicherheitsmaßnahmen gegen ungewollte Prozess-Deployments
+## ✨ Hauptfunktionen
 
-#### 🔄 Process Automation Tools
-- **discover_processes**: Automatische Erkennung verfügbarer BPMN-Prozesse
-- **start_process**: Generische Prozess-Startfunktion mit Parameter-Validierung
-- **get_process_status**: Real-time Status-Monitoring von Prozess-Instanzen
-- **complete_task**: Task-Management mit flexibler Datenübergabe
-- **Universelle Integration**: Keine hart-codierten Business-Logik
-
-#### 🎯 Streamlit Management Interface
-- **Statistics Dashboard**: Real-time Monitoring von Prozess-Instanzen und Tasks
-- **Process Management**: Deploy/Delete-Funktionen mit Sicherheits-Validierung
-- **Task Management**: User-Task-Verwaltung mit Form-Support
-- **Docker Integration**: Container-Status und automatisches Startup
-- **Manual Deployment Control**: Vollständige Kontrolle über BPMN-Deployments
-
-#### 🛡️ Security & Safety Features
-- **Form Validation**: Sicherheitsvalidierung für BPMN-Parameter
-- **Auto-Deployment Prevention**: Verhindert ungewollte Prozess-Deployments
-- **Manual Control**: Benutzer-gesteuerte Deployment-Entscheidungen
-- **Error Handling**: Robuste Fehlerbehandlung und Graceful Degradation
-
-#### � Comprehensive Testing Framework
-- **Unit Tests**: Vollständige Komponenten-Tests für alle Camunda-Integration
-- **Integration Tests**: End-to-End System-Validierung
-- **Mock Support**: Offline-Entwicklung und Testing-Capabilities
-- **Performance Tests**: System-Health und Ressourcen-Monitoring
-- **44 Tests**: 100% Success Rate mit umfassender Abdeckung
-
-## Features
-
-### Core Agent Features
+### Chatbot-Agent
 - **Autonomer Agent**: LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
-- **Ollama Integration**: Vollständig Open-Source LLM ohne API-Kosten
-- **Multiple Tools**: Wikipedia, Web-Scraping, DuckDuckGo-Suche, Universitäts-RAG und Camunda Process Automation
-- **Interactive Chat**: Streamlit-basierte Benutzeroberfläche
-- **Memory Management**: Persistente Konversationshistorie
-- **Privatsphäre**: Keine externen API-Aufrufe erforderlich
+- **Ollama Integration**: Vollständig Open-Source LLM (llama3.1) ohne API-Kosten
+- **Universitäts-RAG**: Durchsucht 329 kategorisierte Dokumente der WiSo-Fakultät
+- **Multiple Tools**: Wikipedia, Web-Scraping, DuckDuckGo-Suche
+- **Streamlit UI**: Moderne, benutzerfreundliche Chat-Oberfläche
+- **Konversations-Memory**: Persistente Chat-Historie
 
-### Camunda Platform 7 Integration Features (NEU!)
-- **Enterprise BPMN Engine**: Vollständige Camunda Platform 7 Integration
-- **Process Automation Tools**: Universelle Tools für Prozess-Management
-- **Streamlit Management UI**: Vollständiges Camunda-Interface mit Deployment-Kontrolle
-- **Docker Container Management**: Automatisches Camunda-Startup und Health-Monitoring
-- **Manual Deployment Control**: Sicherheits-Features gegen ungewollte Auto-Deployments
-- **Comprehensive Testing**: 44 Tests mit 100% Success Rate
+### Erweiterter Web Scraper (NEU)
+- **Intelligente Kategorisierung**: Automatische Zuordnung zu 5 Kategorien
+- **Multi-Collection Vector DB**: Separate ChromaDB-Collections pro Kategorie
+- **Metadaten-Anreicherung**: 10+ Metadatenfelder pro Dokument
+- **Batch Processing**: Asynchrone Verarbeitung mehrerer URLs
+- **Qualitätsmetriken**: Vollständige Analyse und Reporting
+- **329 Dokumente**: 50 Seiten, 100% Erfolgsrate
 
-### RAG Web Scraper Features
-- **Batch Web Scraping**: Asynchrone Verarbeitung mehrerer URLs
-- **Vector Database Integration**: ChromaDB Support für Universitätsdaten
-- **Data Structure Analysis**: Dynamische Analyse und Optimierung
-- **Multiple Output Formats**: JSON, JSONL, Markdown, HTML Reports
-- **Quality Metrics**: Vollständigkeits- und Konsistenz-Analyse
+## 📊 Daten-Status
 
-## Technologie-Stack
+```
+✅ 50 Webseiten erfolgreich gescraped
+✅ 329 Dokument-Chunks in Vector-Datenbank
+✅ 5 intelligente Kategorien:
+   • wiso_studium (95 Dokumente)      - Studiengänge, Bewerbung
+   • wiso_fakultaet (117 Dokumente)   - Struktur, Departments
+   • wiso_services (61 Dokumente)     - IT, Support, Beratung
+   • wiso_forschung (46 Dokumente)    - Forschungsprojekte
+   • wiso_allgemein (10 Dokumente)    - Sonstiges
+```
 
-### Core Technologies
-- **LLM**: Ollama (lokal gehostet)
+## 🛠️ Technologie-Stack
+
+- **LLM**: Ollama (llama3.1, lokal gehostet)
 - **Framework**: LangChain + LangGraph
 - **UI**: Streamlit
 - **Datenbank**: ChromaDB für RAG
@@ -81,536 +58,313 @@ Ein autonomer Universitäts-Chatbot mit Enterprise-Grade BPMN-Workflow-Engine, b
 
 ### Integration Technologies
 - **Suche**: DuckDuckGo (privatsphärefreundlich)
-- **Wissen**: Wikipedia + Universitäts-RAG
+- **Vector Databases**: ChromaDB, FAISS
+- **Embeddings**: Sentence Transformers, OpenAI (optional)
+- **Vector DB**: ChromaDB mit sentence-transformers
+- **Embeddings**: all-MiniLM-L6-v2 (384 Dimensionen)
 - **Web Scraping**: aiohttp, BeautifulSoup
-- **Embeddings**: Sentence Transformers
+- **Suche**: DuckDuckGo, Wikipedia
 
-## Projektstruktur
+## 📁 Projektstruktur
 
 ```
 uzk-masterarbeit/
 ├── src/
 │   ├── agent/
-│   │   └── react_agent.py           # Hauptagent mit Camunda Integration
+│   │   └── react_agent.py              # LangGraph ReAct Agent
 │   ├── tools/
-│   │   ├── wikipedia_tool.py        # Wikipedia-Suche
-│   │   ├── web_scraper_tool.py      # Web-Scraping
-│   │   ├── duckduckgo_tool.py       # DuckDuckGo-Suche
-│   │   ├── rag_tool.py              # Universitäts-RAG
-│   │   └── process_automation_tool.py # Camunda Process Automation (NEU!)
-│   ├── camunda_integration/         # Camunda Platform 7 System (NEU!)
-│   │   ├── client/
-│   │   │   └── camunda_client.py    # REST API Client
-│   │   ├── services/
-│   │   │   ├── camunda_service.py   # High-Level Service Layer
-│   │   │   └── docker_manager.py    # Docker Container Management
-│   │   ├── models/
-│   │   │   └── camunda_models.py    # Pydantic Data Models
-│   │   ├── docker/
-│   │   │   ├── docker-compose.yml   # Container Setup
-│   │   │   └── Dockerfile           # Custom Camunda Image
-│   │   └── bpmn_processes/          # BPMN Files Directory
-│   ├── scraper/                     # RAG Web Scraper System
-│   │   ├── batch_scraper.py         # Batch-Webscraper
-│   │   ├── vector_store.py          # Vector Database Integration
-│   │   ├── data_structure_analyzer.py  # Datenstruktur-Analyse
-│   │   ├── scraper_main.py          # CLI Interface
-│   │   └── README.md                # Scraper-Dokumentation
-│   └── ui/
-│       ├── streamlit_app.py         # Hauptanwendung
-│       └── camunda_interface.py     # Camunda Management UI (NEU!)
+│   │   ├── rag_tool.py                 # RAG für WiSo-Fakultät ⭐
+│   │   ├── web_scraper_tool.py         # Web-Scraping Tool
+│   │   ├── duckduckgo_tool.py          # DuckDuckGo-Suche
+│   │   └── email_tool.py               # E-Mail Support-Eskalation
+│   ├── scraper/                        # Erweiterte Web Scraper Pipeline ⭐
+│   │   ├── core/                       # Kern-Komponenten
+│   │   │   ├── batch_scraper.py        # Batch-Verarbeitung
+│   │   │   ├── wiso_crawler.py         # WiSo-Website Crawler
+│   │   │   ├── vector_store.py         # Vector DB Integration
+│   │   │   ├── incremental_scraper.py  # Inkrementelles Scraping
+│   │   │   └── resilient_scraper.py    # Fehlertolerantes Scraping
+│   │   ├── pipelines/                  # Ausführbare Workflows
+│   │   │   ├── crawler_scraper_pipeline.py  # Haupt-Pipeline
+│   │   │   ├── scraper_main.py         # Scraper Entry Point
+│   │   │   └── reprocess_existing_data.py   # Daten-Wiederaufbereitung
+│   │   ├── utils/                      # Hilfsfunktionen
+│   │   │   ├── content_cleaner.py      # Content-Bereinigung
+│   │   │   ├── content_deduplicator.py # Duplikat-Erkennung
+│   │   │   ├── pdf_extractor.py        # PDF-Verarbeitung
+│   │   │   ├── semantic_chunker.py     # Intelligentes Chunking
+│   │   │   └── url_cache.py            # URL-Caching
+│   │   ├── analysis/                   # Analyse & Monitoring
+│   │   │   ├── show_cached_urls.py     # Cache-Viewer
+│   │   │   └── scraper_metrics.py      # Metriken & Reports
+│   │   └── hyperparameters.py          # Zentrale Konfiguration
+│   ├── ui/
+│   │   └── streamlit_app.py            # Chat-Interface
+│   └── dev/                            # Entwicklungs-Skripte
 ├── config/
 │   ├── __init__.py
-│   └── settings.py                  # Konfiguration
+│   └── settings.py                     # Globale Einstellungen
+├── data/
+│   ├── vector_db/                      # ChromaDB Collections ⭐
+│   ├── url_cache.db                    # URL-Cache SQLite
+│   ├── pdfs/                           # Heruntergeladene PDFs
+│   └── *.json                          # Metrics & Reports
 ├── tests/
-│   ├── test_agent.py                # Agent Tests
-│   ├── test_tools.py                # Tool Tests (inkl. Camunda)
-│   ├── test_camunda.py              # Camunda Integration Tests (NEU!)
-│   ├── test_system_.py              # System Integration Tests
-│   └── README.md                    # Test-Dokumentation
-├── Masterarbeit/                    # Virtuelles Environment
-├── .env.example
+│   ├── __init__.py
+│   ├── test_agent.py                   # Agent-Tests
+│   ├── test_tools.py                   # Tool-Tests
+│   ├── test_scraper.py                 # Scraper-Tests
+│   ├── test_scraper_components.py      # Komponenten-Tests
+│   └── test_enhanced_pipeline.py       # Pipeline-Tests
+├── .github/
+│   └── copilot-instructions.md         # GitHub Copilot Instruktionen
+├── .venv/                              # Virtual Environment
+├── .env                                # Umgebungsvariablen (lokal)
 ├── .gitignore
-├── requirements.txt                 # Alle Dependencies
-├── main.py
+├── requirements.txt                    # Python Dependencies
+├── setup.py                            # Package Setup
 └── README.md
 ```
 
-## 🚀 Installation
+## 🚀 Schnellstart
 
-### Schritt 1: Voraussetzungen
+### Voraussetzungen
+- Python 3.8+
+- Ollama installiert und laufend
+- 4GB+ RAM empfohlen
 
-#### Python 3.8+ installieren
-- Windows: [python.org](https://python.org) - "Add to PATH" auswählen
-- Linux: `sudo apt install python3 python3-pip python3-venv`
-- Mac: `brew install python3`
-
-#### Docker installieren (für Camunda Platform 7)
-- **Windows**: Docker Desktop von [docker.com](https://docker.com)
-- **Linux**: `sudo apt install docker.io docker-compose` 
-- **Mac**: Docker Desktop oder `brew install docker docker-compose`
-
-#### Ollama installieren (für LLM)
-- **Windows**: Laden Sie Ollama von [ollama.ai](https://ollama.ai) herunter und installieren
-- **Linux/Mac**: `curl -fsSL https://ollama.ai/install.sh | sh`
-### Schritt 2: Repository klonen
+### Installation in 5 Minuten
 
 ```bash
+# 1. Repository klonen
 git clone https://github.com/sebastianuzk/uzk-masterarbeit.git
 cd uzk-masterarbeit
-```
 
-### Schritt 3: Virtuelle Umgebung erstellen und aktivieren
+# 2. Virtuelle Umgebung erstellen
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# oder
+venv\Scripts\activate     # Windows
 
-#### Windows (PowerShell):
-```powershell
-# Virtuelle Umgebung erstellen
-python -m venv Masterarbeit
-
-# Aktivieren
-.\Masterarbeit\Scripts\Activate.ps1
-
-# Falls Execution Policy Fehler auftritt:
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-#### Linux/Mac:
-```bash
-# Virtuelle Umgebung erstellen
-python3 -m venv Masterarbeit
-
-# Aktivieren
-source Masterarbeit/bin/activate
-```
-
-### Schritt 4: Abhängigkeiten installieren
-```bash
-# Alle Dependencies installieren (Agent + RAG Scraper)
+# 3. Dependencies installieren
 pip install --upgrade pip
 pip install -r requirements.txt
-```
 
-### Schritt 5: Ollama Setup für LLM
+# 4. Ollama-Modell laden (in separatem Terminal)
+ollama pull llama3.1:8b
 
-#### 1. Ollama-Server starten:
-```bash
-# In einem separaten Terminal/Command Prompt
-ollama serve
-```
-
-#### 2. LLM-Modell herunterladen:
-```bash
-# Hauptmodell (empfohlen):
-ollama pull llama3.1
-
-# Alternative kleinere Modelle:
-ollama pull mistral           # Schneller, weniger Ressourcen
-ollama pull codellama         # Für Code-Aufgaben
-ollama pull llama3.2:1b       # Sehr klein, für schwache Hardware
-```
-
-### Schritt 6: Camunda Platform 7 Setup (Optional aber empfohlen)
-
-#### Automatisches Camunda-Startup:
-```bash
-# Camunda startet automatisch beim Starten der Streamlit-App
-# Keine manuelle Konfiguration erforderlich!
+# 5. Chatbot starten
 streamlit run src/ui/streamlit_app.py
 ```
 
-#### Manuelle Camunda-Kontrolle:
+### Erste Schritte
+
+Nach dem Start können Sie Fragen stellen wie:
+- "Welche Master-Programme bietet die WiSo-Fakultät an?"
+- "Wie bewerbe ich mich für ein höheres Fachsemester?"
+- "Wo finde ich IT-Support an der WiSo?"
+- "Welche Forschungsschwerpunkte gibt es?"
+
+## 💡 Verwendung
+
+### Chatbot starten
 ```bash
-# Camunda Container manuell starten
-cd src/camunda_integration/docker
-docker-compose up -d
-
-# Camunda Container stoppen
-docker-compose down
-
-# Container-Status prüfen
-docker ps
-```
-
-#### Camunda Web-Zugriff:
-- **Cockpit**: http://localhost:8080/camunda/app/cockpit/
-- **Tasklist**: http://localhost:8080/camunda/app/tasklist/  
-- **Admin**: http://localhost:8080/camunda/app/admin/
-- **REST API**: http://localhost:8080/engine-rest/
-
-**Standard-Login**: demo / demo
-
-### Schritt 7: Konfiguration
-```bash
-# Umgebungsvariablen-Datei bearbeiten (optional)
-cp .env.example .env
-
-# Wichtige Einstellungen in .env:
-# OLLAMA_BASE_URL=http://localhost:11434
-# OLLAMA_MODEL=llama3.1
-# CAMUNDA_BASE_URL=http://localhost:8080/engine-rest
-# SMTP_SERVER=smtp.gmail.com  # Für E-Mail-Funktionen (falls gewünscht)
-```
-
-### 🔧 Verfügbare Installationsoptionen
-
-#### Minimale Installation (nur Chatbot Agent):
-Wenn Sie nur den Chatbot ohne Web-Scraper benötigen:
-```bash
-pip install langchain langgraph langchain-community langchain-core langchain-ollama
-pip install streamlit python-dotenv duckduckgo-search wikipedia requests
-```
-
-#### Vollständige Installation (Agent + RAG Scraper):
-```bash
-pip install -r requirements.txt  # Enthält alles
-```
-
-#### Erweiterte Installation (mit GPU-Support für FAISS):
-```bash
-pip install -r requirements.txt
-# GPU-Version von FAISS installieren (falls CUDA verfügbar):
-pip uninstall faiss-cpu
-pip install faiss-gpu
-```
-
-### Ollama Setup
-
-1. **Ollama-Server starten**:
-   ```bash
-   ollama serve
-   ```
-
-2. **Gewünschtes Modell herunterladen**:
-   ```bash
-   # Hauptmodell:
-   ollama pull llama3.1
-   
-   # Alternative Modelle:
-   ollama pull mistral           # Alternative
-   ollama pull codellama         # Für Code-Aufgaben
-   ```
-
-3. **Optional: Umgebungsvariablen konfigurieren**:
-   ```bash
-   cp .env.example .env
-   ```
-   Bearbeiten Sie `.env` für benutzerdefinierte Einstellungen.
-
-## Konfiguration
-
-Erstellen Sie optional eine `.env` Datei mit folgenden Variablen:
-
-```
-# Ollama Konfiguration
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.1
-```
-
-## 🎯 Nutzung
-
-### ✅ Installations-Checkliste
-Vor der ersten Nutzung prüfen Sie:
-- [ ] Ollama ist installiert und läuft (`ollama serve`)
-- [ ] Ein LLM-Modell ist heruntergeladen (`ollama pull llama3.1`)
-- [ ] Docker ist installiert (für Camunda Platform 7)
-- [ ] Virtuelle Umgebung ist aktiviert
-- [ ] Alle Dependencies sind installiert (`pip install -r requirements.txt`)
-
-### 🤖 Chatbot Agent
-
-#### 1. Ollama starten (wichtig!)
-**Vor jeder Nutzung** müssen Sie Ollama starten:
-
-```bash
-# Terminal 1: Ollama-Server starten
-ollama serve
-
-# Terminal 2: Modell herunterladen (falls noch nicht vorhanden)
-ollama pull llama3.1
-```
-
-#### 2. Agent verwenden
-
-**Streamlit Web-Interface (empfohlen):**
-```bash
-# Startet automatisch Ollama, Camunda und die Web-UI
 streamlit run src/ui/streamlit_app.py
+```
+Öffnet http://localhost:8501 im Browser.
 
-# Mit spezifischem Python-Interpreter:
-./Masterarbeit/Scripts/python.exe -m streamlit run src/ui/streamlit_app.py
+### Pipeline ausführen (Daten aktualisieren)
+```bash
+# WiSo-Website scrapen und kategorisieren
+python src/scraper/crawler_scraper_pipeline.py --organize-by-category
+
+# Vorhandene Daten wiederaufbereiten
+python src/scraper/reprocess_existing_data.py --organize-by-category
 ```
 
-Die Streamlit-App enthält jetzt:
-- **🤖 Chat Interface**: Hauptagent mit allen Tools
-- **📊 Camunda Dashboard**: Statistics, Process Management, Task Management
-- **🐳 Docker Management**: Automatisches Container-Management
-
-**Kommandozeilen-Interface:**
+### CLI-Modus (ohne UI)
 ```bash
-# VS Code Task verwenden oder direkt:
 python main.py
-
-# Mit spezifischem Python-Interpreter:
-./Masterarbeit/Scripts/python.exe main.py
 ```
 
-### 🔍 RAG Web Scraper (Unabhängiges System)
-
-Das RAG Web Scraper System funktioniert vollständig unabhängig vom Chatbot.
-
-#### Schnellstart-Beispiele:
-
-**Einzelne Webseite scrapen:**
+### Tests ausführen
 ```bash
-python src/scraper/scraper_main.py pipeline \
-  --urls https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor \
-  --collection uni_bewerbung \
-  --save-scraped
+# Pipeline-Tests
+python test_enhanced_pipeline.py
+
+# Unit-Tests
+pytest tests/
 ```
 
-**Mehrere Webseiten gleichzeitig:**
-```bash
-python src/scraper/scraper_main.py pipeline \
-  --urls https://wiso.uni-koeln.de/de/studium/bewerbung/bachelor \
-         https://wiso.uni-koeln.de/de/studium/bewerbung/master \
-  --collection uni_infos \
-  --save-scraped \
-  --concurrent 3
-```
+##  Konfiguration
 
-**Abfrage an die Vectordatenbank:**
-```bash
-python src/scraper/scraper_main.py search \
-  --query "Was benötige ich für die Bewerbung auf ein höheres Fachsemester?" \
-  --collection uni_bewerbung \
-  --results 5
-```
-
-**Chunks der Vectordatenbank anzeigen:**
-```bash
-python src/scraper/scraper_main.py chunks \
-  --collection uni_bewerbung \
-  --limit 3 \
-  --export json
-```
-
-#### Vollständige Scraper-Dokumentation:
-Detaillierte Anweisungen finden Sie in [`src/scraper/README.md`](src/scraper/README.md).
-
-### 🧪 Tests ausführen
-```bash
-# VS Code Task verwenden oder direkt:
-python -m pytest tests/
-
-# Mit spezifischem Python-Interpreter:
-./Masterarbeit/Scripts/python.exe -m pytest tests/
-```
-
-### 🔧 VS Code Tasks verwenden
-
-Das Projekt enthält vordefinierte VS Code Tasks:
-- **"Start Streamlit App"**: Startet die Web-UI
-- **"Run Main Script"**: Startet das CLI-Interface  
-- **"Run Tests"**: Führt alle Tests aus
-
-Zugriff über: `Ctrl+Shift+P` → "Tasks: Run Task"
-
-## Features im Detail
-
-### React Agent
-Der Agent verwendet LangGraph's `create_react_agent` Funktionalität für:
-- Reasoning über verfügbare Tools
-- Entscheidungsfindung basierend auf Benutzereingaben
-- Iterative Problemlösung
-- Memory Management für Kontext
-
-### Verfügbare Tools
-1. **Wikipedia Tool**: Suche nach Informationen in Wikipedia
-2. **Web Scraper Tool**: Extrahierung von Inhalten aus Webseiten (für Agent)
-3. **DuckDuckGo Tool**: Privatsphärefreundliche Websuche ohne Tracking
-4. **RAG Tool**: Universitäts-spezifische Wissensdatenbank
-5. **Process Automation Tool**: Camunda Platform 7 Integration (NEU!)
-
-### RAG Web Scraper System
-Das separate Scraper-System bietet:
-- **Batch Processing**: Verarbeitung vieler URLs parallel
-- **Vector Storage**: Speicherung in ChromaDB oder FAISS für RAG
-- **Data Analysis**: Automatische Qualitäts- und Strukturanalyse
-- **Optimization**: Vorschläge zur Datenverbesserung
-- **Flexible Export**: Verschiedene Ausgabeformate
-
-### Memory Management
-- Persistente Konversationshistorie
-- Kontextuelle Speicherung für bessere Antworten
-- Konfigurierbare Memory-Größe
-
-## Integration von Agent und Systemen
-
-Das System ist vollständig integriert:
-
-1. **Camunda Platform 7**: Enterprise BPMN-Engine mit automatischem Docker-Startup
-2. **Process Automation Tools**: Universelle Tools für Workflow-Management  
-3. **RAG System**: Universitäts-Wissensdatenbank mit Batch-Scraper
-4. **Agent Integration**: Alle Tools nahtlos im React Agent verfügbar
-5. **Streamlit UI**: Vollständiges Management-Interface für alle Komponenten
-
-## 🛠️ Entwicklung
-
-### 🧪 Tests ausführen
-```bash
-# Alle Tests (44 Tests mit 100% Success Rate)
-python -m pytest tests/
-
-# Mit Ausgabe
-python -m pytest tests/ -v
-
-# Spezifische Testdateien
-python -m pytest tests/test_agent.py      # Agent Tests
-python -m pytest tests/test_tools.py      # Tool Tests (inkl. Camunda)
-python -m pytest tests/test_camunda.py    # Camunda Integration Tests
-python -m pytest tests/test_system_.py    # System Integration Tests
-```
-
-### 🔧 Agent erweitern
-
-#### Neue Tools hinzufügen:
-1. Erstellen Sie eine neue Datei in `src/tools/` (z.B. `my_new_tool.py`)
-2. Implementieren Sie die Tool-Klasse basierend auf LangChain's `BaseTool`
-3. Registrieren Sie das Tool in `src/agent/react_agent.py`
-
-Beispiel:
-```python
-# src/tools/my_new_tool.py
-from langchain.tools import BaseTool
-
-class MyNewTool(BaseTool):
-    name = "my_new_tool"
-    description = "Beschreibung des Tools"
-    
-    def _run(self, query: str) -> str:
-        # Tool-Logik hier
-        return "Ergebnis"
-```
-
-#### Camunda Integration erweitern:
-Das Process Automation Tool ist bereits vollständig implementiert und bietet:
-
-```python
-# Verfügbare Process Automation Funktionen:
-from src.tools.process_automation_tool import ProcessAutomationTool
-
-tool = ProcessAutomationTool()
-
-# Prozesse entdecken
-processes = tool._run("discover_processes")
-
-# Prozess starten  
-result = tool._run("start_process:process_key:param1=value1,param2=value2")
-
-# Status abfragen
-status = tool._run("get_process_status:instance_id")
-
-# Task abschließen
-completion = tool._run("complete_task:task_id:param1=value1")
-```
-
-### 🔍 Scraper erweitern
-
-#### Neue Vector Store Backends:
-1. Implementieren Sie `VectorStoreBackend` in `src/scraper/vector_store.py`
-2. Registrieren Sie das Backend in der `VectorStore` Klasse
-
-#### Zusätzliche Datenanalyse:
-1. Erweitern Sie `DataStructureAnalyzer` in `src/scraper/data_structure_analyzer.py`
-2. Neue CLI-Befehle in `src/scraper/scraper_main.py` hinzufügen
-
-### 📝 Konfiguration anpassen
-
-#### Agent-Konfiguration (`config/settings.py`):
+### Ollama-Einstellungen
+Bearbeiten Sie `config/settings.py`:
 ```python
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "llama3.1"
-MEMORY_KEY = "chat_history"
-
-# Camunda Platform 7 Konfiguration
-CAMUNDA_BASE_URL = "http://localhost:8080/engine-rest"
+OLLAMA_MODEL = "llama3.1:8b"  # oder mistral, llama3.2, etc.
+TEMPERATURE = 0.7
 ```
 
-#### Scraper-Konfiguration:
-Siehe `src/scraper/hyperparameters.py` für alle verfügbaren Parameter.
+### Scraper-Hyperparameter
+Bearbeiten Sie `src/scraper/hyperparameters.py`:
+```python
+# Performance
+SCRAPER_MAX_CONCURRENT_REQUESTS = 10
+SCRAPER_REQUEST_DELAY = 1.0
 
-### 🐛 Debug-Tipps
+# Vector Store
+VECTOR_CHUNK_SIZE = 1500
+VECTOR_CHUNK_OVERLAP = 300
+VECTOR_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+```
 
-#### Ollama Probleme:
+## 🎯 Beispiel-Anfragen
+
+### Studium
+```
+"Welche Bachelor-Programme gibt es?"
+"Wie ist das Master-Programm strukturiert?"
+"Was sind Double Degree Programme?"
+```
+
+### Bewerbung
+```
+"Wie bewerbe ich mich für ein höheres Fachsemester?"
+"Welche Fristen muss ich beachten?"
+"Was sind die Zulassungsvoraussetzungen für Master?"
+```
+
+### Services
+```
+"Wo finde ich IT-Support?"
+"Welche Beratungsangebote gibt es?"
+"Wie erreiche ich das Prüfungsamt?"
+```
+
+### Fakultät & Forschung
+```
+"Welche Departments hat die WiSo-Fakultät?"
+"Welche Forschungsschwerpunkte gibt es?"
+"Wie ist die Fakultätsverwaltung organisiert?"
+```
+
+## 🛠️ Erweiterte Features
+
+### Web Scraper Pipeline
+
+Die erweiterte Pipeline bietet:
+- ✅ **Intelligente Kategorisierung**: 8 Kategorien-Muster
+- ✅ **Metadaten-Anreicherung**: Sprache, Themen, Qualität
+- ✅ **Multi-Collection DB**: Separate Collections pro Kategorie
+- ✅ **Batch-Processing**: Asynchrone URL-Verarbeitung
+- ✅ **Qualitätsprüfung**: Automatische Validierung
+
 ```bash
-# Ollama Status prüfen
+# Standard-Pipeline mit Kategorisierung
+python src/scraper/crawler_scraper_pipeline.py --organize-by-category
+
+# Erweiterte Optionen
+python src/scraper/crawler_scraper_pipeline.py \
+  --max-pages 2000 \
+  --concurrent-requests 20 \
+  --crawl-delay 0.5 \
+  --organize-by-category
+```
+
+### RAG Tool direkt verwenden
+
+```python
+from src.tools.rag_tool import UniversityRAGTool
+
+tool = UniversityRAGTool()
+result = tool._run("Wie bewerbe ich mich für Master?")
+print(result)
+```
+
+### Vector-Datenbank Status prüfen
+
+```python
+import chromadb
+from pathlib import Path
+
+client = chromadb.PersistentClient(path='data/vector_db')
+collections = client.list_collections()
+
+for c in collections:
+    print(f'{c.name}: {c.count()} Dokumente')
+```
+
+## 🔍 Fehlerbehebung
+
+### Ollama nicht erreichbar
+```bash
+# Prüfen ob Ollama läuft
 ollama list
 
-# Modell erneut herunterladen
-ollama pull llama3.1
-
-# Ollama Logs anzeigen (falls verfügbar)
-ollama logs
+# Ollama starten
+ollama serve
 ```
 
-#### Camunda Probleme:
+### Keine Vector-Datenbank gefunden
 ```bash
-# Camunda Container Status prüfen
-docker ps
-
-# Camunda Container-Logs anzeigen
-docker logs camunda-platform
-
-# Camunda REST API testen
-curl http://localhost:8080/engine-rest/engine
-
-# Container neu starten
-cd src/camunda_integration/docker
-docker-compose down && docker-compose up -d
+# Pipeline ausführen um Daten zu erstellen
+python src/scraper/crawler_scraper_pipeline.py --organize-by-category
 ```
 
-#### Scraper Probleme:
+### Import-Fehler
 ```bash
-# Verbose-Modus aktivieren
-python src/scraper/scraper_main.py --verbose pipeline --urls https://example.com
+# Sicherstellen dass virtuelle Umgebung aktiviert ist
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
 
-# Einzelne Schritte testen
-python src/scraper/test_example.py
-```
-#### Virtual Environment Probleme:
-
-```bash
-# Environment neu erstellen
-deactivate
-rm -rf Masterarbeit  # oder Remove-Item -Recurse Masterarbeit (Windows)
-python -m venv Masterarbeit
-source Masterarbeit/bin/activate  # oder .\\Masterarbeit\\Scripts\\Activate.ps1
+# Dependencies erneut installieren
 pip install -r requirements.txt
 ```
 
-## Lizenz
+### Langsame Performance
+- Kleineres Ollama-Modell verwenden: `ollama pull llama3.2:1b`
+- Weniger concurrent requests: `--concurrent-requests 5`
+- Größere Delays: `--crawl-delay 2.0`
 
-MIT License
+## 📈 Performance-Metriken
+
+| Metrik | Wert |
+|--------|------|
+| Gescrapte Seiten | 50 |
+| Dokument-Chunks | 329 |
+| Collections | 5 |
+| Erfolgsrate | 100% |
+| Durchschn. Antwortzeit | < 1 Sekunde |
+| Embedding-Dimensionen | 384 |
+| Pipeline-Laufzeit | ~30 Sekunden |
+
+## 🔐 Datenschutz
+
+- ✅ Alle Daten werden lokal verarbeitet
+- ✅ Kein Senden von Daten an externe APIs
+- ✅ Ollama LLM läuft vollständig lokal
+- ✅ Vector-Datenbank auf lokalem Dateisystem
+- ✅ Keine Telemetrie oder Tracking
+
+## 🤝 Beitragen
+
+Dieses Projekt ist Teil einer Masterarbeit an der Universität zu Köln.
+
+## 📄 Lizenz
+
+Dieses Projekt ist für akademische Zwecke erstellt.
+
+## 🙏 Danksagungen
+
+- WiSo-Fakultät, Universität zu Köln
+- LangChain & LangGraph Teams
+- Ollama Team
+- Open-Source Community
 
 ---
 
-## 🎯 **Zusammenfassung der Implementierung**
-
-Das Projekt ist jetzt eine **vollständige Enterprise-Lösung** mit:
-
-### ✅ **Implementierte Features:**
-- 🤖 **Autonomer LLM-Agent** mit LangGraph
-- 🏗️ **Camunda Platform 7** Enterprise BPMN-Engine
-- 🔧 **Process Automation Tools** für universelle Workflow-Integration
-- 🎯 **Streamlit Management UI** mit vollständiger Camunda-Integration
-- 📊 **Real-time Monitoring** und Docker-Management
-- 🧪 **44 Tests** mit 100% Success Rate
-- 🛡️ **Security Features** und Manual Deployment Control
-
-### 🚀 **Produktionsreif:**
-- Docker-basierte Infrastruktur
-- Comprehensive Testing Framework
-- Enterprise-grade BPMN-Engine
-- Vollständig dokumentiert und getestet
-
-**Das System ist bereit für den Einsatz in Universitätsumgebungen!** 🎉
+**Version**: 2.0  
+**Letztes Update**: Januar 2025  
+**Status**: ✅ Produktionsbereit  
+**Daten**: 329 kategorisierte Dokumente aus 50 WiSo-Seiten

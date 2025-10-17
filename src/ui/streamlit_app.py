@@ -4,6 +4,7 @@ Streamlit Web Interface für den Autonomen Chatbot-Agenten mit CAMUNDA Process E
 import streamlit as st
 import sys
 import os
+import uuid
 import logging
 import time
 import subprocess
@@ -129,6 +130,10 @@ def initialize_session_state():
             st.session_state.initialized = False
             st.session_state.error = str(e)
     
+    # Session-ID für LangSmith-Tracing
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    
     if 'messages' not in st.session_state:
         st.session_state.messages = []
 
@@ -153,10 +158,13 @@ def display_chat_interface():
             with st.chat_message("user"):
                 st.markdown(prompt)
         
-        # Generiere Antwort
+        # Generiere Antwort mit Session-ID für Tracing
         with st.spinner("Denke nach..."):
             try:
-                response = st.session_state.agent.chat(prompt)
+                response = st.session_state.agent.chat(
+                    prompt, 
+                    session_id=st.session_state.session_id
+                )
                 
                 # Füge Antwort hinzu
                 st.session_state.messages.append({"role": "assistant", "content": response})
@@ -260,8 +268,16 @@ def display_sidebar():
         st.write(f"Ollama URL: {settings.OLLAMA_BASE_URL}")
         st.write(f"Temperatur: {settings.TEMPERATURE}")
         
+        # LangSmith-Status
+        if settings.LANGSMITH_TRACING:
+            st.write(f"🔍 LangSmith: ✅ Aktiv")
+            st.write(f"📊 Projekt: {settings.LANGSMITH_PROJECT}")
+            st.write(f"🔑 Session: {st.session_state.session_id[:8]}...")
+        else:
+            st.write(f"🔍 LangSmith: ❌ Inaktiv")
+        
         # Ollama-Status
-        st.subheader("🦙 Ollama Status")
+        st.subheader("🤖 Ollama Status")
         try:
             import requests
             response = requests.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3)
@@ -343,7 +359,6 @@ def display_chat_tab():
         4. Starten Sie die App neu
         
         ### 📖 Verfügbare Open Source Tools:
-        - **Wikipedia**: Kostenlose Wissensdatenbank
         - **Web Scraper**: Direkter Zugriff auf Webseiten
         - **DuckDuckGo**: Privatsphärefreundliche Websuche
         - **BPMN Process Engine**: Echte BPMN 2.0 konforme Process Engine

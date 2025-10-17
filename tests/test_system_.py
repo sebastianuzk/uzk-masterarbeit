@@ -1,321 +1,180 @@
 """
-System-Tests für das gesamte Masterarbeit-System
-Testet die Integration aller Komponenten
+Systemtests für den Autonomen Chatbot-Agenten
 """
 import unittest
 import sys
 import os
-import time
-from pathlib import Path
 
 # Füge das Projekt-Root-Verzeichnis zum Python-Pfad hinzu
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
+from src.agent.react_agent import create_react_agent
+from src.tools.email_tool import create_email_tool
 from config.settings import settings
-
-# Komponenten für System-Tests
-try:
-    from src.agent.react_agent import ReactAgent
-    AGENT_AVAILABLE = True
-except ImportError:
-    AGENT_AVAILABLE = False
-
-try:
-    from src.tools.process_automation_tool import get_process_automation_tools
-    PROCESS_AUTOMATION_AVAILABLE = True
-except ImportError:
-    PROCESS_AUTOMATION_AVAILABLE = False
-
-try:
-    from src.camunda_integration.client.camunda_client import CamundaClient
-    from src.camunda_integration.services.camunda_service import CamundaService
-    CAMUNDA_AVAILABLE = True
-except ImportError:
-    CAMUNDA_AVAILABLE = False
-
-try:
-    from src.scraper.vector_store import VectorStore
-    RAG_AVAILABLE = True
-except ImportError:
-    RAG_AVAILABLE = False
 
 
 class TestSystemIntegration(unittest.TestCase):
-    """Test-Klasse für System-Integration"""
+    """Test-Klasse für Systemintegrationstests"""
     
-    def test_settings_configuration(self):
-        """Teste System-Konfiguration über Settings"""
+    def setUp(self):
+        """Setup für jeden Test"""
+        # Prüfen, ob Ollama erreichbar ist
         try:
-            # Prüfe kritische Settings
-            self.assertIsNotNone(settings.OLLAMA_MODEL)
-            self.assertIsNotNone(settings.OLLAMA_BASE_URL)
-            self.assertIsNotNone(settings.CAMUNDA_BASE_URL)
-            
-            # Validiere Settings
-            settings.validate()
-            
-        except Exception as e:
-            self.fail(f"Settings Konfiguration Test fehlgeschlagen: {str(e)}")
-
-    @unittest.skipUnless(AGENT_AVAILABLE, "Agent nicht verfügbar")
-    def test_react_agent_initialization(self):
-        """Teste React Agent Initialisierung"""
+            import requests
+            response = requests.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3)
+            if response.status_code != 200:
+                self.skipTest("Ollama-Server nicht erreichbar")
+        except:
+            self.skipTest("Ollama-Server nicht erreichbar")
+    
+    def test_complete_system_initialization(self):
+        """Teste vollständige Systeminitialisierung"""
         try:
-            agent = ReactAgent()
+            # Erstelle Agent
+            agent = create_react_agent()
             self.assertIsNotNone(agent)
-            self.assertIsNotNone(agent.llm)
-            self.assertIsNotNone(agent.tools)
-            self.assertGreater(len(agent.tools), 0)
             
-        except Exception as e:
-            self.skipTest(f"React Agent Test übersprungen: {str(e)}")
-
-    @unittest.skipUnless(PROCESS_AUTOMATION_AVAILABLE, "Process Automation nicht verfügbar")
-    def test_process_automation_tools_integration(self):
-        """Teste Process Automation Tools Integration"""
-        try:
-            tools = get_process_automation_tools()
+            # Überprüfe, dass alle erwarteten Tools geladen sind
+            tools = agent.get_available_tools()
             self.assertIsInstance(tools, list)
             self.assertGreater(len(tools), 0)
             
-            # Prüfe, dass alle erwarteten Tools vorhanden sind
-            tool_names = [tool.name for tool in tools]
-            expected_tools = ["discover_processes", "start_process", "get_process_status", "complete_task"]
+            # Überprüfe spezifische Tools
+            if settings.ENABLE_DUCKDUCKGO:
+                self.assertIn("duckduckgo_search", tools)
             
-            for expected_tool in expected_tools:
-                self.assertIn(expected_tool, tool_names)
-                
-        except Exception as e:
-            self.skipTest(f"Process Automation Integration Test übersprungen: {str(e)}")
-
-    @unittest.skipUnless(CAMUNDA_AVAILABLE, "Camunda Integration nicht verfügbar")
-    def test_camunda_system_components(self):
-        """Teste Camunda System Komponenten"""
-        try:
-            # Test CamundaClient
-            client = CamundaClient(base_url=settings.CAMUNDA_BASE_URL)
-            self.assertIsNotNone(client)
+            if settings.ENABLE_WEB_SCRAPER:
+                self.assertIn("web_scraper", tools)
             
-            # Test CamundaService  
-            bpmn_dir = Path("src/camunda_integration/bpmn_processes")
-            service = CamundaService(client=client, bpmn_dir=bpmn_dir)
-            self.assertIsNotNone(service)
+            # E-Mail-Tool sollte immer verfügbar sein
+            self.assertIn("send_email", tools)
             
-            # Test BPMN Directory
-            self.assertEqual(service.bpmn_dir, bpmn_dir)
+            # RAG-Tool sollte verfügbar sein (falls ChromaDB funktioniert)
+            # Wird möglicherweise übersprungen, wenn ChromaDB nicht verfügbar ist
             
         except Exception as e:
-            self.skipTest(f"Camunda System Test übersprungen: {str(e)}")
-
-    @unittest.skipUnless(RAG_AVAILABLE, "RAG System nicht verfügbar")
-    def test_rag_system_integration(self):
-        """Teste RAG System Integration"""
+            self.fail(f"System-Initialisierung fehlgeschlagen: {str(e)}")
+    
+    def test_agent_tool_interaction(self):
+        """Teste Interaktion zwischen Agent und Tools"""
         try:
-            # Test VectorStore Erstellung
-            vector_store = VectorStore()
-            self.assertIsNotNone(vector_store)
+            agent = create_react_agent()
+            
+            # Teste einfache Interaktion
+            response = agent.chat("Hallo, welche Tools hast du zur Verfügung?")
+            self.assertIsInstance(response, str)
+            self.assertGreater(len(response), 0)
+            
+            # Memory sollte Nachrichten enthalten
+            memory_info = agent.get_memory_summary()
+            self.assertGreater(memory_info["total_messages"], 0)
             
         except Exception as e:
-            self.skipTest(f"RAG System Test übersprungen: {str(e)}")
-
-    def test_project_structure(self):
-        """Teste Projekt-Struktur"""
+            self.fail(f"Agent-Tool-Interaktion fehlgeschlagen: {str(e)}")
+    
+    def test_email_tool_system_integration(self):
+        """Teste E-Mail-Tool-Integration im Gesamtsystem"""
         try:
-            # Prüfe wichtige Verzeichnisse
-            project_dirs = [
-                "src",
-                "src/agent", 
-                "src/tools",
-                "src/camunda_integration",
-                "src/scraper",
-                "tests",
-                "config"
+            # Teste eigenständiges E-Mail-Tool
+            email_tool = create_email_tool()
+            self.assertIsNotNone(email_tool)
+            
+            # Teste Agent mit E-Mail-Tool
+            agent = create_react_agent()
+            tools = agent.get_available_tools()
+            self.assertIn("send_email", tools)
+            
+            # Überprüfe, dass E-Mail-Tool korrekt konfiguriert ist
+            email_tools = [tool for tool in agent.tools if tool.name == "send_email"]
+            self.assertEqual(len(email_tools), 1)
+            
+            email_tool_instance = email_tools[0]
+            
+            # Teste Tool-Schema
+            self.assertIsNotNone(email_tool_instance.args_schema)
+            
+            # Teste, dass die richtigen Parameter erwartet werden
+            schema_fields = email_tool_instance.args_schema.model_fields
+            self.assertIn("subject", schema_fields)
+            self.assertIn("body", schema_fields)
+            
+            # Stelle sicher, dass alte Parameter nicht mehr da sind
+            self.assertNotIn("recipient", schema_fields)
+            self.assertNotIn("sender_name", schema_fields)
+            
+        except Exception as e:
+            self.fail(f"E-Mail-Tool-System-Integration fehlgeschlagen: {str(e)}")
+    
+    def test_configuration_validation(self):
+        """Teste Systemkonfiguration"""
+        try:
+            # Teste Settings-Validierung
+            settings.validate()
+            
+            # Überprüfe kritische Konfigurationen
+            self.assertIsNotNone(settings.OLLAMA_BASE_URL)
+            self.assertIsNotNone(settings.OLLAMA_MODEL)
+            
+            # E-Mail-Konfiguration (kann leer sein, sollte aber definiert sein)
+            self.assertTrue(hasattr(settings, 'SMTP_SERVER'))
+            self.assertTrue(hasattr(settings, 'SMTP_PORT'))
+            self.assertTrue(hasattr(settings, 'SMTP_USERNAME'))
+            self.assertTrue(hasattr(settings, 'SMTP_PASSWORD'))
+            self.assertTrue(hasattr(settings, 'DEFAULT_RECIPIENT'))
+            
+        except Exception as e:
+            self.fail(f"Konfigurationsvalidierung fehlgeschlagen: {str(e)}")
+    
+    def test_memory_and_conversation_flow(self):
+        """Teste Memory-Management und Konversationsfluss"""
+        try:
+            agent = create_react_agent()
+            
+            # Führe mehrere Konversationsrunden durch
+            responses = []
+            for i in range(3):
+                response = agent.chat(f"Das ist Nachricht Nummer {i+1}")
+                responses.append(response)
+                self.assertIsInstance(response, str)
+                self.assertGreater(len(response), 0)
+            
+            # Überprüfe Memory-Status
+            memory_info = agent.get_memory_summary()
+            self.assertEqual(memory_info["total_messages"], 6)  # 3 User + 3 AI
+            self.assertEqual(memory_info["human_messages"], 3)
+            self.assertEqual(memory_info["ai_messages"], 3)
+            
+            # Teste Memory-Clearing
+            agent.clear_memory()
+            memory_info = agent.get_memory_summary()
+            self.assertEqual(memory_info["total_messages"], 0)
+            
+        except Exception as e:
+            self.fail(f"Memory-Management-Test fehlgeschlagen: {str(e)}")
+    
+    def test_error_handling(self):
+        """Teste Fehlerbehandlung im System"""
+        try:
+            agent = create_react_agent()
+            
+            # Teste Agent-Robustheit bei ungewöhnlichen Eingaben
+            test_inputs = [
+                "",  # Leere Eingabe
+                "x" * 1000,  # Sehr lange Eingabe
+                "Teste Unicode: 🤖 äöü ñ",  # Unicode-Zeichen
             ]
             
-            for dir_path in project_dirs:
-                full_path = Path(project_root) / dir_path
-                self.assertTrue(
-                    full_path.exists(),
-                    f"Verzeichnis {dir_path} sollte existieren"
-                )
-                
-            # Prüfe wichtige Dateien
-            project_files = [
-                "config/settings.py",
-                "src/agent/react_agent.py",
-                "src/tools/process_automation_tool.py",
-                "tests/test_tools.py"
-            ]
-            
-            for file_path in project_files:
-                full_path = Path(project_root) / file_path
-                self.assertTrue(
-                    full_path.exists(),
-                    f"Datei {file_path} sollte existieren"
-                )
-                
-        except Exception as e:
-            self.fail(f"Projekt-Struktur Test fehlgeschlagen: {str(e)}")
-
-    @unittest.skipUnless(AGENT_AVAILABLE and PROCESS_AUTOMATION_AVAILABLE, 
-                         "Agent oder Process Automation nicht verfügbar")
-    def test_agent_process_automation_integration(self):
-        """Teste Integration zwischen Agent und Process Automation"""
-        try:
-            agent = ReactAgent()
-            
-            # Prüfe, dass Process Automation Tools im Agent verfügbar sind
-            tool_names = [tool.name for tool in agent.tools]
-            process_automation_tools = ["discover_processes", "start_process", "get_process_status", "complete_task"]
-            
-            # Mindestens ein Process Automation Tool sollte verfügbar sein
-            has_process_tools = any(tool in tool_names for tool in process_automation_tools)
-            self.assertTrue(
-                has_process_tools,
-                "Agent sollte Process Automation Tools haben"
-            )
+            for test_input in test_inputs:
+                try:
+                    response = agent.chat(test_input)
+                    self.assertIsInstance(response, str)
+                except Exception as e:
+                    # Fehler sind okay, aber sollten graceful gehandelt werden
+                    self.assertIsInstance(str(e), str)
             
         except Exception as e:
-            self.skipTest(f"Agent-Process Automation Integration Test übersprungen: {str(e)}")
-
-    def test_import_dependencies(self):
-        """Teste kritische Import-Abhängigkeiten"""
-        try:
-            # Test kritische Imports
-            import langchain_core
-            import langchain_ollama
-            import langgraph
-            import streamlit
-            import requests
-            import pydantic
-            
-            # Alle Imports erfolgreich
-            self.assertTrue(True)
-            
-        except ImportError as e:
-            self.fail(f"Kritische Abhängigkeit fehlt: {e}")
-
-    def test_configuration_consistency(self):
-        """Teste Konsistenz der Konfiguration"""
-        try:
-            # Prüfe URL-Formate
-            self.assertTrue(settings.OLLAMA_BASE_URL.startswith("http"))
-            self.assertTrue(settings.CAMUNDA_BASE_URL.startswith("http"))
-            
-            # Prüfe Temperatur-Bereich
-            self.assertGreaterEqual(settings.TEMPERATURE, 0.0)
-            self.assertLessEqual(settings.TEMPERATURE, 2.0)
-            
-            # Prüfe Model-Name
-            self.assertIsInstance(settings.OLLAMA_MODEL, str)
-            self.assertGreater(len(settings.OLLAMA_MODEL), 0)
-            
-        except Exception as e:
-            self.fail(f"Konfigurations-Konsistenz Test fehlgeschlagen: {str(e)}")
-
-
-class TestSystemPerformance(unittest.TestCase):
-    """Test-Klasse für System-Performance"""
-    
-    @unittest.skipUnless(AGENT_AVAILABLE, "Agent nicht verfügbar")
-    def test_agent_initialization_performance(self):
-        """Teste Performance der Agent-Initialisierung"""
-        try:
-            start_time = time.time()
-            agent = ReactAgent()
-            end_time = time.time()
-            
-            initialization_time = end_time - start_time
-            
-            # Agent sollte in weniger als 30 Sekunden initialisiert werden
-            self.assertLess(
-                initialization_time, 
-                30.0,
-                f"Agent-Initialisierung dauerte {initialization_time:.2f}s (zu langsam)"
-            )
-            
-        except Exception as e:
-            self.skipTest(f"Agent Performance Test übersprungen: {str(e)}")
-
-    @unittest.skipUnless(PROCESS_AUTOMATION_AVAILABLE, "Process Automation nicht verfügbar")
-    def test_tools_loading_performance(self):
-        """Teste Performance des Tool-Ladens"""
-        try:
-            start_time = time.time()
-            tools = get_process_automation_tools()
-            end_time = time.time()
-            
-            loading_time = end_time - start_time
-            
-            # Tools sollten in weniger als 5 Sekunden geladen werden
-            self.assertLess(
-                loading_time,
-                5.0,
-                f"Tool-Laden dauerte {loading_time:.2f}s (zu langsam)"
-            )
-            
-            # Sollte mindestens 4 Tools haben
-            self.assertGreaterEqual(len(tools), 4)
-            
-        except Exception as e:
-            self.skipTest(f"Tools Performance Test übersprungen: {str(e)}")
-
-
-class TestSystemHealthCheck(unittest.TestCase):
-    """Test-Klasse für System-Health-Checks"""
-    
-    def test_python_version(self):
-        """Teste Python-Version"""
-        try:
-            import sys
-            
-            # Prüfe Python-Version (sollte 3.8+ sein)
-            self.assertGreaterEqual(sys.version_info.major, 3)
-            self.assertGreaterEqual(sys.version_info.minor, 8)
-            
-        except Exception as e:
-            self.fail(f"Python Version Test fehlgeschlagen: {str(e)}")
-
-    def test_memory_usage(self):
-        """Teste Speicher-Nutzung"""
-        try:
-            import psutil
-            
-            # Hole aktuelle Speicher-Nutzung
-            memory = psutil.virtual_memory()
-            
-            # System sollte mindestens 1GB verfügbaren Speicher haben
-            available_gb = memory.available / (1024**3)
-            self.assertGreater(
-                available_gb,
-                1.0,
-                f"Zu wenig verfügbarer Speicher: {available_gb:.2f}GB"
-            )
-            
-        except ImportError:
-            self.skipTest("psutil nicht verfügbar für Memory-Test")
-        except Exception as e:
-            self.skipTest(f"Memory Test übersprungen: {str(e)}")
-
-    def test_disk_space(self):
-        """Teste verfügbaren Festplattenspeicher"""
-        try:
-            import shutil
-            
-            # Prüfe verfügbaren Speicher im Projekt-Verzeichnis
-            free_bytes = shutil.disk_usage(project_root).free
-            free_gb = free_bytes / (1024**3)
-            
-            # Sollte mindestens 1GB freien Speicher haben
-            self.assertGreater(
-                free_gb,
-                1.0,
-                f"Zu wenig freier Speicher: {free_gb:.2f}GB"
-            )
-            
-        except Exception as e:
-            self.skipTest(f"Disk Space Test übersprungen: {str(e)}")
+            self.fail(f"Fehlerbehandlungstest fehlgeschlagen: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -1,17 +1,35 @@
 """
 React Agent basierend auf LangGraph für autonomes Verhalten mit Ollama
 """
-from typing import List, Dict, Any
+import os
+import uuid
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import BaseTool
 
 from config.settings import settings
-from src.tools.wikipedia_tool import create_wikipedia_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
+from src.tools.email_tool import create_email_tool
+
+# BPMN Engine Tools - DEAKTIVIERT (nur Camunda verwendet)
+BPMN_ENGINE_AVAILABLE = False
+
+# Process Engine Tools - DEAKTIVIERT (nur Camunda verwendet)  
+PROCESS_ENGINE_AVAILABLE = False
+
+# Universal Process Automation Tools import (Camunda Integration)
+try:
+    from src.tools.process_automation_tool import get_process_automation_tools
+    PROCESS_AUTOMATION_AVAILABLE = True
+    print("OK Camunda Process Automation Tools werden geladen...")
+except ImportError as e:
+    print(f"WARNUNG Camunda Process Automation Tools nicht verfügbar: {e}")
+    PROCESS_AUTOMATION_AVAILABLE = False
 
 # BPMN Engine Tools - DEAKTIVIERT (nur Camunda verwendet)
 BPMN_ENGINE_AVAILABLE = False
@@ -36,6 +54,14 @@ class ReactAgent:
         # Validiere Einstellungen
         settings.validate()
         
+        # LangSmith Tracing konfigurieren (falls aktiviert)
+        if settings.LANGSMITH_TRACING and settings.LANGSMITH_API_KEY:
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
+            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+            os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
+            print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
+        
         # Initialisiere Ollama LLM
         self.llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
@@ -43,91 +69,43 @@ class ReactAgent:
             temperature=settings.TEMPERATURE,
         )
         
-        # Initialisiere Tools
+        # Initialisiere Tools (einschließlich E-Mail-Tool)
         self.tools = self._create_tools()
         
-        # System-Prompt für bessere Konversation
-        system_prompt = """Du bist ein hilfsbereiter, präziser Uni-Assistent, der Anfragen versteht, plant und gezielt Tools einsetzt.
-Nutze Tools nur, wenn sie echten Mehrwert liefern.
+        # System-Prompt für bessere Konversation UND Qualitätsbewertung
+        system_prompt = """Du bist ein hilfsreicher und freundlicher Chatbot-Assistent mit der Fähigkeit zur Selbstreflexion.
 
-## Grundprinzipien
-1) Verstehen → Planen → Handeln: Absicht erkennen, nächste Tool-Schritte planen, dann ausführen.
-2) Gezielt nachfragen: Fehlen Infos, frage NUR nach den konkret benötigten Feldern (mit Label + technischem Key in Klammern).
-3) Keine Halluzinationen: Erfinde keine Prozessnamen, Variablen, IDs oder URLs.
-4) Transparenz: Erwähne Tools funktional („Ich starte den Prozess…“), gib Links/URLs nur aus, wenn ein Tool sie EXPLIZIT liefert.
-5) Kurz & handlungsorientiert: Bestätige Erfolge knapp, sage immer, was als Nächstes gebraucht wird.
-6) Datensparsamkeit: Frage nur, was für den aktuellen Schritt nötig ist (Pflichtfelder, Task-Formfelder).
-7) Niemals Funktionsaufruf-JSON drucken. Verwende IMMER echte Tool-Calls (kein pseudo-JSON im Chat).
+WICHTIGE REGELN:
+1. Führe NORMALE UNTERHALTUNGEN, ohne automatisch nach Informationen zu suchen
+2. Verwende Tools NUR wenn explizit nach aktuellen Informationen, Fakten oder Recherche gefragt wird
+3. Bei Begrüßungen, Smalltalk oder persönlichen Fragen antworte direkt freundlich
+4. Wenn jemand seinen Namen sagt, begrüße ihn höflich - suche NICHT nach dem Namen!
+5. Bei Antworten immer die vom genutzten Tool mitgelieferten vollständigen URLs angeben
 
-## Tool-Verwendung nach Kontext
-### A) Prozessintention erkannt
-Schlüsselwörter (u. a.): bewerben, Bewerbung, Einschreibung, anmelden, beantragen, Antrag, Exmatrikulation,
-Bescheinigung, Unterlagen nachreichen, Studiengang wechseln.
-Pfad:
-1. `discover_processes()` aufrufen.
-2. Passenden Prozess anhand Name/Key auswählen.
-3. `required_fields` prüfen. Fehlt etwas → gezielt nach genau diesen Feldern fragen (Label + Key, z. B. „Name des Studenten (student_name)“).
-4. Alle Pflichtfelder vorhanden → `start_process(process_key, variables)`.
-   - Optional `business_key` setzen, wenn der/die Nutzer:in Identifikatoren nennt (z. B. Ticket-/Matrikel-Nr.).
-5. `get_process_status(process_instance_id)`. Bei offenen User Tasks → fehlende Task-Felder erfragen → `complete_task(...)`.
-6. 5 wiederholen, bis `process_status == "completed"`.
+QUALITÄTSBEWERTUNG:
+Nach jeder Antwort bewerte selbstkritisch OHNE dies im Chat zu erwähnen:
+- Konnte ich die Frage vollständig beantworten?
+- War meine Antwort präzise und hilfreich?
+- Hat der Benutzer möglicherweise eine unzufriedene Reaktion?
+- Sollte diese Anfrage eskaliert werden?
 
-### B) Wissensfrage ohne Prozessbezug
-Direkt beantworten (ohne Tool) oder ggf. Wissens-/Web-Tool nutzen. Keine Camunda-Tools verwenden.
+ESKALATION:
+Bei komplexen Anfragen, die du nicht beantworten kannst, oder wenn ein Benutzer explizit nach Support fragt,
+verwende das E-Mail-Tool für professionelle Support-Eskalation. Du benötigst nur:
+- subject: Kurze Zusammenfassung des Problems
+- body: Detaillierte Beschreibung mit Chat-Historie
 
-### C) Gemischte / unklare Intention
-Kurz nachfragen, ob eine Prozessausführung gewünscht ist („Soll ich den Bewerbungsprozess für dich starten?“). Bei Bestätigung → Pfad A.
+Empfänger und Absender werden automatisch aus der Konfiguration verwendet.
 
-## Verwende KEINE Tools bei
-- Smalltalk, kurze Definitionen/Erklärungen, Formulierungen/Schreibhilfen.
-- Offensichtlich tool-freien Antworten (kein Camunda-/Prozessbezug).
-- Unklarheit, welches Tool passt → zuerst kurze Rückfrage stellen.
+Verfügbare Tools:
+- Web-Scraping: Für Inhalte von spezifischen Webseiten  
+- DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
+- Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
+- E-Mail: Für Support-Eskalation bei ungelösten Anfragen
 
-## Verfügbare Tools (Schnittstellen & Erwartungen)
-1) `discover_processes()` → `{ success, processes: [ {id, key, name, version, required_fields[]} ] }`
-   - IMMER zuerst bei Prozessintention.
-   - `required_fields[]` enthält `id`, `label`, Validierungen (minlength, enum, pattern …). Verwende diese Felder in Rückfragen.
-2) `start_process(process_key, variables: dict, business_key?: str)` → `{ success, message, process_instance_id, next_tasks[], process_status, need_input?, missing? }`
-   - Nur starten, wenn alle Pflichtfelder vorhanden sind.
-   - Bei `need_input=True` oder `missing[]`: NICHT erneut starten – stattdessen GENAU diese Felder nachfragen.
-3) `get_process_status(process_instance_id)` → `{ success, process_status, next_tasks[] }`
-   - Nach jedem Start/Task-Abschluss verwenden, bis `completed`.
-4) `complete_task(process_instance_id, variables?: dict)` → `{ success, need_input?, missing?, next_tasks[], process_status }`
-   - Nur aufrufen, wenn alle geforderten Task-Felder vorliegen.
-   - Bei `need_input/missing`: GENAU diese Felder nachfragen.
+Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
 
-## Wichtige I/O-Regeln
-- Keine JSON-Strings bauen; IMMER strukturierte Argumente (Objekte/Dicts) an Tools übergeben.
-- Variablen-Keys exakt wie im BPMN/Tool angegeben (z. B. `student_name`, `studies`) – keine Synonyme erfinden.
-- IDs/Keys/Status nur aus Tool-Ergebnissen übernehmen (nicht raten).
-- URLs nur ausgeben, wenn Tools sie liefern.
-
-## Sprach- & Fragerichtlinien (für Felder)
-- Knapp, freundlich, möglichst Felder bündeln:
-- „Wie lautet dein vollständiger Name (**student_name**)?”
- - „Bitte bestätige den Studiengang (**studies**), z. B. ‚Informatik‘.“
-- Labels für Menschenfreundlichkeit, Keys in Klammern für Eindeutigkeit.
-- Ggf. Validierungen erwähnen („mind. 2 Zeichen“, „muss einer der Werte sein: …“).
-
-## Fehler- & Sonderfälle
-- Ungültige/fehlende Variablen → Tool liefert `need_input/missing`: Genau diese Felder nachfragen, DANN erneut `start_process/complete_task`.
-- Mehrdeutiger Prozess → kurze Klärungsfrage („Meintest du ‚Bewerbung Studiengang‘?“).
-- Kein passender Prozess → höflich melden und um Präzisierung/Alternativen bitten.
-- Keine offenen Tasks + `completed` → Abschluss freundlich bestätigen.
-
-## Mini-Beispiele
-Beispiel 1 (Bewerbung):
-1) (Tool) `discover_processes()`
-2) „Gern! Wie heißt du vollständig (**student_name**)? Bestätigst du **Informatik** als Studiengang (**studies**)?”
-3) (Tool) `start_process(process_key="bewerbung_process", variables={"student_name":"…","studies":"Informatik"})`
-4) (Tool) `get_process_status(process_instance_id="…")` → ggf. (Tool) `complete_task(...)` bis `completed`.
-
-Beispiel 2 (Exmatrikulation):
-Analog: discover → fehlende Felder → start → status → ggf. complete_task.
-
-Sei intelligent und kontextbewusst. Verstehe die echte Absicht hinter den Nachrichten und wähle die passenden Tools entsprechend aus."""
-
-        # Erstelle React Agent mit System-Prompt
+        # Erstelle React Agent mit erweitertem System-Prompt
         self.agent = create_langgraph_agent(
             self.llm,
             self.tools,
@@ -138,11 +116,8 @@ Sei intelligent und kontextbewusst. Verstehe die echte Absicht hinter den Nachri
         self.memory = []
     
     def _create_tools(self) -> List[BaseTool]:
-        """Erstelle Liste der verfügbaren Tools"""
+        """Erstelle Liste der verfügbaren Tools einschließlich E-Mail-Tool"""
         tools = []
-        
-        if settings.ENABLE_WIKIPEDIA:
-            tools.append(create_wikipedia_tool())
         
         if settings.ENABLE_WEB_SCRAPER:
             tools.append(create_web_scraper_tool())
@@ -154,9 +129,9 @@ Sei intelligent und kontextbewusst. Verstehe die echte Absicht hinter den Nachri
         try:
             rag_tool = create_university_rag_tool()
             tools.append(rag_tool)
-            print("OK Universitaets-RAG-Tool erfolgreich geladen")
+            print("✅ Universitaets-RAG-Tool erfolgreich geladen")
         except Exception as e:
-            print(f"WARNUNG Universitaets-RAG-Tool konnte nicht geladen werden: {e}")
+            print(f"⚠️ Universitaets-RAG-Tool konnte nicht geladen werden: {e}")
             print("   -> Universitaets-spezifische Anfragen funktionieren moeglicherweise nicht optimal")
         
         # Camunda Process Automation Tools (Hauptsystem für Prozessautomatisierung)
@@ -170,29 +145,69 @@ Sei intelligent und kontextbewusst. Verstehe die echte Absicht hinter den Nachri
                 print(f"WARNUNG Camunda Process Automation Tools konnten nicht geladen werden: {e}")
                 print("   -> Prozessautomatisierung ist nicht verfügbar")
         
+        # E-Mail-Tool für Support-Eskalation immer hinzufügen
+        try:
+            email_tool = create_email_tool()
+            tools.append(email_tool)
+            print("✅ E-Mail-Tool erfolgreich geladen")
+        except Exception as e:
+            print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
+            print("   → Support-Eskalation per E-Mail nicht verfügbar")
+        
+        # E-Mail-Tool für Support-Eskalation immer hinzufügen
+        try:
+            email_tool = create_email_tool()
+            tools.append(email_tool)
+            print("✅ E-Mail-Tool erfolgreich geladen")
+        except Exception as e:
+            print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
+            print("   → Support-Eskalation per E-Mail nicht verfügbar")
+        
         return tools
     
-    def chat(self, message: str) -> str:
+    def chat(self, message: str, session_id: str = None) -> str:
         """Führe eine Unterhaltung mit dem Agenten"""
         try:
+            # Session-ID für Tracing (falls nicht übergeben)
+            if session_id is None:
+                session_id = str(uuid.uuid4())
+            
             # Füge Nachricht zum Memory hinzu
-            self.memory.append(HumanMessage(content=message))
+            human_message = HumanMessage(content=message)
+            self.memory.append(human_message)
             
             # Begrenze Memory-Größe
             if len(self.memory) > settings.MEMORY_SIZE:
                 self.memory = self.memory[-settings.MEMORY_SIZE:]
             
-            # Führe Agent aus
-            response = self.agent.invoke({
+            # Führe Agent aus (mit automatischem LangSmith-Tracing)
+            agent_input = {
                 "messages": self.memory
-            })
+            }
+
+            # Erstelle Config mit Metadaten für LangSmith-Tracing (falls aktiv)
+            config = None
+            if settings.LANGSMITH_TRACING:
+                config = {
+                    "metadata": {
+                        "session_id": session_id,
+                        "user_message": message[:100] + "..." if len(message) > 100 else message,
+                        "available_tools": len(self.tools)
+                    }
+                }
+
+            if config is not None:
+                response = self.agent.invoke(agent_input, config=config)
+            else:
+                response = self.agent.invoke(agent_input)
             
             # Extrahiere Antwort
             ai_message = response["messages"][-1]
             response_text = ai_message.content
             
             # Füge Antwort zum Memory hinzu
-            self.memory.append(AIMessage(content=response_text))
+            ai_response = AIMessage(content=response_text)
+            self.memory.append(ai_response)
             
             return response_text
             
@@ -221,7 +236,6 @@ Sei intelligent und kontextbewusst. Verstehe die echte Absicht hinter den Nachri
             "last_messages": [msg.content[:100] + "..." if len(msg.content) > 100 else msg.content 
                             for msg in self.memory[-5:]]
         }
-
 
 def create_react_agent() -> ReactAgent:
     """Factory-Funktion für den React Agent"""
