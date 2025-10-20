@@ -1,7 +1,7 @@
 """
 DuckDuckGo Search Tool für den Autonomen Chatbot-Agenten
 """
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from langchain_core.tools import BaseTool
 from typing import Type, List
 from pydantic import BaseModel, Field
@@ -9,9 +9,9 @@ from urllib.parse import urlparse
 import re
 
 search_max_k: int = 10  # Maximale Anzahl der Suchergebnisse des DuckDuckGo-Tools
-search_max_len: int = 300  # Maximale Länge des Snippets pro Suchergebnis
-search_max_tail: int = 200  # Maximale Verlängerung über min_len hinaus, um Satzende zu finden
-search_min_len: int = 200  # Minimale Länge des Snippets pro Suchergebnis
+search_max_len: int = 500  # Maximale Länge des Snippets pro Suchergebnis
+search_max_tail: int = 300  # Maximale Verlängerung über min_len hinaus, um Satzende zu finden
+search_min_len: int = 300  # Minimale Länge des Snippets pro Suchergebnis
 
 
 class WebSearchResult(BaseModel):
@@ -35,11 +35,11 @@ class DuckDuckGoTool(BaseTool):
     """Tool für DuckDuckGo Web Search"""
     
     name: str = "duckduckgo_search"
-    description: str = ("Nutze dieses Tool, um das Web zu durchsuchen, falls du keine relevanten Informationen zur Beantwortung der Frage findest. "
-                        "Bei der Wiedergabe der Suchergebnisse solltest du die relevantesten und vertrauenswürdigsten Quellen priorisieren und immer einen Link zur Quelle angeben. "
-                        "Für Quellenangaben verwende bitte die vollständige URLs aus den Suchergebnissen. "
-                        "In jedem Fall musst du den Nutzer explizit darauf aufmerksam machen, dass die Informationen möglicherweise nicht von der Universität zu Köln stammen und nicht aktuell sind. "
-    )
+    description: str = ("Nutze dieses Tool, um das Web zu durchsuchen und aktuelle Informationen zu finden. "
+                        "Das Tool durchsucht das Internet nach relevanten und aktuellen Informationen zu deiner Anfrage. "
+                        "Bei der Wiedergabe der Suchergebnisse priorisiere die relevantesten und vertrauenswürdigsten Quellen. "
+                        "Gib immer die vollständigen URLs aus den Suchergebnissen als Quellenangaben an. "
+                        "Wichtig: Weise den Nutzer darauf hin, dass externe Informationen möglicherweise nicht von der Universität zu Köln stammen.")
     args_schema: Type[BaseModel] = DuckDuckGoSearchInput
     
     def _run(self, query: str) -> str:
@@ -47,17 +47,39 @@ class DuckDuckGoTool(BaseTool):
         try:
             # Führe Suche aus
             with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=search_max_k))
+                results = list(ddgs.text(query, max_results=search_max_k, safesearch="off"))
+            
+            print(f"\n🔍 DUCKDUCKGO TOOL DEBUG:")
+            print(f"📝 Query: '{query}'")
+            print(f"📊 Raw Results Count: {len(results)}")
             
             if not results:
+                print("❌ Keine Suchergebnisse erhalten")
                 return f"Keine Suchergebnisse gefunden für '{query}'"
+            
+            # Debug: Zeige erste raw results
+            print(f"\n📋 First Raw Result Sample:")
+            if results:
+                first_result = results[0]
+                print(f"  Title: {first_result.get('title', 'N/A')[:100]}")
+                print(f"  URL: {first_result.get('href', 'N/A')}")
+                print(f"  Body Length: {len(first_result.get('body', ''))}")
+                print(f"  Body Sample: {first_result.get('body', '')[:150]}...")
             
             # Erstelle Liste von WebSearchResult-Objekten
             formatted_results: List[WebSearchResult] = []
-            for result in results:
+            for i, result in enumerate(results):
                 titel = result.get('title', 'Unbekannter Titel')
                 url = result.get('href', '')
                 snippet = result.get('body', '')
+                
+                # Debug für jeden Result
+                if i < 3:  # Zeige Details für die ersten 3 Results
+                    print(f"\n🔄 Processing Result {i+1}:")
+                    print(f"  Original Title: {titel[:80]}")
+                    print(f"  Original Snippet Length: {len(snippet)}")
+                    print(f"  URL: {url}")
+                
                 # Extrahiere Domain aus URL
                 try:
                     parsed_url = urlparse(url)
@@ -70,9 +92,15 @@ class DuckDuckGoTool(BaseTool):
                 
 
                 # Begrenze Snippet-Länge
+                original_snippet_len = len(snippet)
                 if len(snippet) > search_max_len:
                     snippet = trim_snippet(snippet)
 
+                # Debug für Snippet-Verarbeitung
+                if i < 3:
+                    print(f"  Domain: {domain}")
+                    print(f"  Snippet: {original_snippet_len} -> {len(snippet)} chars")
+                    print(f"  Processed Snippet: {snippet[:100]}...")
                                                     
                 # Erstelle WebSearchResult-Objekt
                 search_result = WebSearchResult(
@@ -84,8 +112,17 @@ class DuckDuckGoTool(BaseTool):
                 formatted_results.append(search_result)
             
             # Formatiere Ausgabe
+            print(f"\n✅ FINAL RESULTS:")
+            print(f"📊 Formatted Results Count: {len(formatted_results)}")
+            print(f"📏 Total Output Length: {sum(len(str(result)) for result in formatted_results)} chars")
+            
             result_strings = [str(result) for result in formatted_results]
-            return f"DuckDuckGo-Suchergebnisse für '{query}':\n\n" + "\n".join(result_strings)
+            final_output = f"DuckDuckGo-Suchergebnisse für '{query}':\n\n" + "\n".join(result_strings)
+            
+            print(f"🎯 Final Output Length: {len(final_output)} chars")
+            print(f"🔚 DEBUG END\n")
+            
+            return final_output
             
         except Exception as e:
             return f"Fehler bei der DuckDuckGo-Suche: {str(e)}"

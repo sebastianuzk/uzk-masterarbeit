@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Leichtgewichtiger Test für E-Mail Tool
+Simple Plan-and-Execute Agent Test (Synchronous)
 """
 
 import sys
@@ -10,23 +10,25 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.tools.email_tool import create_email_tool
+from src.agent.plan_and_execute_agent import app
 
-# Tool erstellen und testen
-email_tool = create_email_tool()
+def main():
+    # Your query here
+    query = "Was ist die Heimatstadt des Gewinners der Australian Open 2024 bei den Herren?"
+    #query = "Wann fand die Australian Open 2024 statt?"
 
-# Einfache E-Mail senden (nur subject und body erforderlich)
-subject = "Test E-Mail vom Chatbot"
-body = "Dies ist eine Test-E-Mail vom autonomen Chatbot-System."
+    # Run the agent (synchronous)
+    config = {"configurable": {"thread_id": "test-thread"}, "recursion_limit": 50}
+    inputs = {"input": query}
 
-result = email_tool._run(
-    subject=subject,
-    body=body
-)
+    print(f"🚀 Query: {query}")
+    print("=" * 60)
 
-print(f"E-Mail Test")
-print("-" * 40)
-print(f"Betreff: {subject}")
-print("-" * 40)
-print("Ergebnis:")
-print(result)
+    for event in app.stream(inputs, config=config):
+        for k, v in event.items():
+            if k != "__end__":
+                print(f"[{k}] {v}")
+                print("-" * 40)
+
+if __name__ == "__main__":
+    main()
