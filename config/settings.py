@@ -33,7 +33,7 @@ class Settings:
     DEFAULT_RECIPIENT = os.getenv("DEFAULT_RECIPIENT")
     
     # Streamlit Konfiguration
-    PAGE_TITLE = "🤖 Autonomer Chatbot-Agent"
+    PAGE_TITLE = "Autonomer Chatbot-Agent"
     PAGE_ICON = "🤖"
     
     # LangSmith Tracing Konfiguration

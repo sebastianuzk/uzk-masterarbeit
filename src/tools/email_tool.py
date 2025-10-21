@@ -22,18 +22,14 @@ class EmailTool(BaseTool):
     
     name: str = "send_email"
     description: str = """
-    Sendet eine E-Mail an die vorkonfigurierte Standard-E-Mail-Adresse.
-    
-    🎯 Verwendet automatisch die konfigurierten Umgebungsvariablen:
-    🎯 Empfänger: DEFAULT_RECIPIENT aus .env
-    🎯 Absender: SMTP_USERNAME aus .env
+    Bei Anfragen, die du nicht beantworten kannst, wenn ein Benutzer explizit nach Support fragt, oder der Benutzer unzufrieden wirkt, 
+    verwende das E-Mail-Tool für professionelle Support-Unterstützung. Nutze dieses Tool ebenfalls, wenn der Benutzer wiederholt (maximal 3 Mal) nicht zufrieden mit der Antwort ist. Nutze dieses Tool auch, wenn du selbst das Gefühl hast bei der Bearbeitung der Anfrage Hilfe zu benötigen.
+
+    Absender und Empfänger werden automatisch aus der Konfiguration verwendet.
 
     Verwendung:
-    - subject: Betreff der E-Mail
-    - body: Inhalt der E-Mail
-    
-    Beispiel: send_email(subject="Test", body="Nachricht")
-    ➜ Geht automatisch an die konfigurierte Standard-E-Mail-Adresse!
+    - subject: Thematische Einordnung des Problems
+    - body: Eine kurze Beschreibung aus deiner Sicht sowie den gesamten Verlauf der Unterhaltung
     """
     args_schema: type = EmailInput
     
