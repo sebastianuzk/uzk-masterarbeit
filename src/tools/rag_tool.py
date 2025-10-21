@@ -27,10 +27,11 @@ class UniversityRAGTool(BaseTool):
     
     name: str = "university_knowledge_search"
     description: str = (
-        "Durchsucht die Universitäts-Wissensdatenbank für Fragen zu "
+        "Nutze dieses Tool ausschließlich für Fragen zur Universität zu Köln. Für andere Fragen nutze das DuckDuckGo-Tool. "
+        "Dieses Tool durchsucht die Universitäts-Wissensdatenbank für Fragen zu "
         "Bewerbungen, Studiengängen, Fristen, Prüfungen, Fachsemestern "
         "und anderen Themen der Universität zu Köln / WiSo-Fakultät. "
-        "Nutze dieses Tool für spezifische Uni-Fragen."
+        "Nutze dieses Tool für spezifische Fragen zur Uni-Köln."
     )
     
     def _run(self, query: str) -> str:

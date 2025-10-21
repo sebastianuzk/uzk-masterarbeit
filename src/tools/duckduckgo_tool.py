@@ -35,7 +35,7 @@ class DuckDuckGoTool(BaseTool):
     """Tool für DuckDuckGo Web Search"""
     
     name: str = "duckduckgo_search"
-    description: str = ("Nutze dieses Tool, um das Web zu durchsuchen und aktuelle Informationen zu finden. "
+    description: str = ("Nutze dieses Tool, um nicht-spezifische Fragen über die Universität zu Köln zu beantworten. "
                         "Das Tool durchsucht das Internet nach relevanten und aktuellen Informationen zu deiner Anfrage. "
                         "Bei der Wiedergabe der Suchergebnisse priorisiere die relevantesten und vertrauenswürdigsten Quellen. "
                         "Gib immer die vollständigen URLs aus den Suchergebnissen als Quellenangaben an. "

@@ -14,8 +14,9 @@ from src.agent.plan_and_execute_agent import app
 
 def main():
     # Your query here
-    query = "Was ist die Heimatstadt des Gewinners der Australian Open 2024 bei den Herren?"
-    #query = "Wann fand die Australian Open 2024 statt?"
+    #query = "Hi :)"
+    #query = "Was ist die Heimatstadt des Gewinners der Australian Open 2024 bei den Herren?"
+    query = "Was kannst du mir über das Bafög sagen?"
 
     # Run the agent (synchronous)
     config = {"configurable": {"thread_id": "test-thread"}, "recursion_limit": 50}

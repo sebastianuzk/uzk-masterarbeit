@@ -88,25 +88,25 @@ agent_executor = create_react_agent(llm, tools)
 planner_prompt = ChatPromptTemplate.from_messages([
     ("system",
      "Du bist ein Planer-Agent, welcher lediglich einen Plan erstellt. "
-     "Für das gegebene Ziel darfst du ausschließlich einen einfachen schrittweisen Plan erstellen. "
-     "Dieser Plan muss einzelne Aufgaben enthalten, die minimal notwendig sind, um das Ziel zu erreichen. "
-     "Füge keine überflüssigen Schritte hinzu. Das Ergebnis des letzten Schritts sollte die endgültige Antwort sein. "
-     "Stelle sicher, dass jeder Schritt alle benötigten Informationen enthält - überspringe keine Schritte."
-     "Stelle sicher, dass die Schritte möglichst kurz und prägnant sind. "
-     "Du selber darfst keine Schritte ausführen, sondern nur den Plan erstellen."),
+     "Für das gegebene Ziel darfst du ausschließlich einen einfachen schrittweisen KLEINEN Plan erstellen. "
+     "Dieser Plan enthält einzelne logische Aufgaben, die absolut notwendig sind, um das Ziel zu erreichen. "
+     "Füge keine überflüssigen Schritte hinzu. Erstelle einen möglichst kleinen Plan. Das Ergebnis des letzten Schritts sollte die endgültige Antwort sein. "
+     "Stelle sicher, dass jeder Schritt nur logische Anweisungen enthält. Dir bekanntes eigenes Wissen, wie Allgemeinwissen, ist verboten."
+     "Stelle sicher, dass die Schritte möglichst kurz und prägnant sind und überspringe keine Schritte. "
+     "Du selber darfst keine Schritte ausführen, sondern nur den Plan erstellen."
+     ),
     ("placeholder", "{messages}"),
 ])
 planner = planner_prompt | llmp.with_structured_output(Plan)
 
 replanner_prompt = ChatPromptTemplate.from_template(
-    """Du bist ein Replanner-Agent, welcher lediglich einen bestehenden Plan aktualisiert.
-Für das gegebene Ziel darfst du ausschließlich einen einfachen schrittweisen Plan erstellen.
-Dieser Plan muss einzelne Aufgaben enthalten, die minimal notwendig sind, um das Ziel zu erreichen.
+    """Du bist ein Replanner-Agent. Du darfst dem Benutzer antworten, erst wenn alle Schritte erfolgreich abgeschlossen wurden. Eigenwissen ist verboten. 
+Ansonsten sollst du einen bestehenden Plan aktualisieren und für das gegebene Ziel einen einfachen schrittweisen Plan erstellen. Dieser Plan muss einzelne Aufgaben enthalten, die minimal notwendig sind, um das Ziel zu erreichen.
 Füge keine überflüssigen Schritte hinzu. Das Ergebnis des letzten Schritts sollte die endgültige Antwort sein.
 Stelle sicher, dass jeder Schritt alle benötigten Informationen enthält - überspringe keine Schritte.
+
 Stelle sicher, dass die Schritte möglichst kurz und prägnant sind.
 Das Erstellen der Antwort darf kein Teil des Plans sein.
-Du selber darfst keine Schritte ausführen, sondern nur den Plan erstellen.
 
 Dein Ziel war:
 {input}
@@ -117,10 +117,9 @@ Dein ursprünglicher Plan war:
 Bereits durchgeführte Schritte:
 {past_steps}    
 
-Erfolgreich erledigte Schritte des Plans dürfen nicht erneut durchgeführt werden. Falls ein Schritt nicht erfolgreich war, behalte ihn unverändert im Plan bei.
-Füge nur Schritte zum Plan hinzu, die noch erfolgreich abzuschließen sind. Wenn alle Schritte erfolgreich sind und du dem Benutzer antworten kannst, dann antworte ihm. Ansonsten fülle den Plan aus.
+Erfolgreich erledigte Schritte des Plans dürfen nicht erneut aufgeführt werden. Wenn sinnvoll, ergänze bisher unbekannte Informationen mit Ergebnissen aus erfolgreich erledigten Schritten in ihren nachfolgenden Schritten. Ein Beispiel hierfür wären: Wenn ein Schritt erfolgreich die Information "X ist Y" ermittelt hat, ist diese Information in einem späteren Schritt zu verwenden. Behalte ausschließlich fehlgeschlagene Schritte unverändert im Plan bei. Füge nur Schritte zum Plan hinzu, die noch erfolgreich abzuschließen sind.
 
-Antworte dem Benutzer, sobald das Ziel erreicht wurde. Das Ziel gilt als erreicht, sobald alle notwendigen Schritte erfolgreich abgeschlossen sind. Falls das Ziel noch nicht erreicht wurde, aktualisiere deinen Plan basierend auf den vorliegenden Informationen.
+Sobald alle notwendigen Schritte erfolgreich abgeschlossen sind, gilt das Ziel als erreicht. Wenn das Ziel erreicht wurde, antworte dem Benutzer. Falls das Ziel noch nicht erreicht wurde, aktualisiere deinen Plan basierend auf den vorliegenden Informationen.
 """
 )
 
@@ -146,7 +145,7 @@ def execute_step(state: PlanExecute):
     plan_str = "\n".join(f"{i + 1}. {step}" for i, step in enumerate(plan))
     task = plan[0]
     task_formatted = f"""Für den folgenden Plan:
-{plan_str}\n\nDu sollst Schritt {1} ausführen: {task}. Fasse die Ergebnisse kurz und prägnant zusammen. Gebe kurz zurück, ob der Schritt erfolgreich erledigt wurde."""
+{plan_str}\n\nDu sollst Schritt {1} ausführen: {task}. Fasse die Ergebnisse kurz und prägnant zusammen. Gebe kurz zurück, ob der Schritt erfolgreich erledigt wurde. Beziehe dich nur auf diesen Schritt und nicht auf den gesamten Plan."""
     
     agent_response = agent_executor.invoke({"messages": [("user", task_formatted)]})
     return {"past_steps": [(task, agent_response["messages"][-1].content)]}
@@ -168,19 +167,32 @@ def plan_step(state: PlanExecute):
 
 
 def replan_step(state: PlanExecute):
-    # Replanning mit Retry bei Fehlern
+    # Replanning mit Retry bei null-Outputs
     for attempt in range(3):
         try:
             output = replanner.invoke(state)
-            if output and hasattr(output, 'action') and output.action:
-                if isinstance(output.action, Response):
-                    return {"response": output.action.response}
-                else:
-                    return {"plan": output.action.steps}
-            print(f"🔄 Replan retry {attempt + 1}/3")
+            
+            # Prüfe auf null/None Output
+            if output is None:
+                print(f"🔄 Null output - retry {attempt + 1}/3")
+                continue
+                
+            # Prüfe auf fehlende action
+            if not hasattr(output, 'action') or output.action is None:
+                print(f"🔄 Null action - retry {attempt + 1}/3")
+                continue
+            
+            # Valider Output gefunden
+            if isinstance(output.action, Response):
+                return {"response": output.action.response}
+            else:
+                return {"plan": output.action.steps}
+                
         except Exception as e:
-            print(f"❌ Replan error: {e}")
+            print(f"❌ Replan error: {e} - retry {attempt + 1}/3")
+            continue
     
+    # Fallback nach allen Versuchen
     return {"response": "Entschuldigung, ich konnte die Anfrage nicht vollständig verarbeiten."}
 
 
