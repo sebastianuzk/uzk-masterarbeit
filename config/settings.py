@@ -12,10 +12,10 @@ class Settings:
     
     # Ollama Konfiguration
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
     
     # Camunda Konfiguration
-    CAMUNDA_BASE_URL = os.getenv("CAMUNDA_BASE_URL", "http://localhost:8080/engine-rest")
+    CAMUNDA_BASE_URL = os.getenv("CAMUNDA_BASE_URL")
     
     # LLM Konfiguration
     TEMPERATURE = 0.7

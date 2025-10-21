@@ -1,7 +1,7 @@
 """
 DuckDuckGo Search Tool für den Autonomen Chatbot-Agenten
 """
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from langchain_core.tools import BaseTool
 from typing import Type, List
 from pydantic import BaseModel, Field
