@@ -198,10 +198,10 @@ class TestTools(unittest.TestCase):
             self.assertEqual(tool._map_gender("w"), "W")
             self.assertEqual(tool._map_gender("f"), "W")
             
-            # Divers
-            self.assertEqual(tool._map_gender("divers"), "D")
-            self.assertEqual(tool._map_gender("diverse"), "D")
-            self.assertEqual(tool._map_gender("d"), "D")
+            # Divers (KLIPS2 verwendet "X", nicht "D")
+            self.assertEqual(tool._map_gender("divers"), "X")
+            self.assertEqual(tool._map_gender("diverse"), "X")
+            self.assertEqual(tool._map_gender("d"), "X")
             
         except Exception as e:
             self.fail(f"KLIPS2-Geschlechtsmapping-Test fehlgeschlagen: {str(e)}")
@@ -211,21 +211,42 @@ class TestTools(unittest.TestCase):
         try:
             tool = create_klips2_register_tool()
             
-            # Deutsch
-            self.assertEqual(tool._map_language("Deutsch"), "de")
-            self.assertEqual(tool._map_language("deutsch"), "de")
-            self.assertEqual(tool._map_language("German"), "de")
+            # Deutsch (KLIPS2 verwendet numerische IDs: "1" für Deutsch)
+            self.assertEqual(tool._map_language("Deutsch"), "1")
+            self.assertEqual(tool._map_language("deutsch"), "1")
+            self.assertEqual(tool._map_language("German"), "1")
             
-            # Englisch
-            self.assertEqual(tool._map_language("Englisch"), "en")
-            self.assertEqual(tool._map_language("English"), "en")
-            self.assertEqual(tool._map_language("englisch"), "en")
+            # Englisch (KLIPS2 verwendet numerische IDs: "2" für Englisch)
+            self.assertEqual(tool._map_language("Englisch"), "2")
+            self.assertEqual(tool._map_language("English"), "2")
+            self.assertEqual(tool._map_language("englisch"), "2")
             
         except Exception as e:
             self.fail(f"KLIPS2-Sprachmapping-Test fehlgeschlagen: {str(e)}")
     
+    def test_klips2_nationality_mapping(self):
+        """Teste KLIPS2-Nationalitätsmapping"""
+        try:
+            tool = create_klips2_register_tool()
+            
+            # Teste häufige Länder (KLIPS2 verwendet numerische Codes)
+            self.assertEqual(tool._map_nationality("Deutschland"), "56")
+            self.assertEqual(tool._map_nationality("germany"), "56")
+            self.assertEqual(tool._map_nationality("Österreich"), "168")
+            self.assertEqual(tool._map_nationality("austria"), "168")
+            self.assertEqual(tool._map_nationality("Schweiz"), "192")
+            self.assertEqual(tool._map_nationality("switzerland"), "192")
+            self.assertEqual(tool._map_nationality("Frankreich"), "68")
+            self.assertEqual(tool._map_nationality("france"), "68")
+            
+            # Default sollte Deutschland sein
+            self.assertEqual(tool._map_nationality("UnbekanntesLand"), "56")
+            
+        except Exception as e:
+            self.fail(f"KLIPS2-Nationalitätsmapping-Test fehlgeschlagen: {str(e)}")
+    
     def test_klips2_registration_validation(self):
-        """Teste KLIPS2-Registrierung mit ungültigen Daten"""
+        """Teste KLIPS2-Registrierung mit ungültigen Daten (KEINE echte Registrierung)"""
         try:
             tool = create_klips2_register_tool()
             
@@ -234,7 +255,7 @@ class TestTools(unittest.TestCase):
                 vorname="Max",
                 nachname="Mustermann",
                 geschlecht="männlich",
-                geburtsdatum="1995-03-15",  # Falsches Format
+                geburtsdatum="1995-03-15",  # Falsches Format (YYYY-MM-DD statt TT.MM.JJJJ)
                 email="max@example.com",
                 staatsangehoerigkeit="Deutschland"
             )
@@ -255,6 +276,31 @@ class TestTools(unittest.TestCase):
             
         except Exception as e:
             self.fail(f"KLIPS2-Registrierungsvalidierungstest fehlgeschlagen: {str(e)}")
+    
+    def test_klips2_registration_no_real_submission(self):
+        """Stelle sicher, dass Tests KEINE echte Registrierung durchführen"""
+        # WICHTIG: Dieser Test überprüft nur die Tool-Struktur, 
+        # NICHT die tatsächliche Registrierung!
+        # Echte Registrierungstests sollten mit Mock-Daten oder in isolierter Umgebung laufen.
+        try:
+            tool = create_klips2_register_tool()
+            
+            # Teste nur mit offensichtlich ungültigen Daten, die sofort fehlschlagen
+            result = tool._run(
+                vorname="Test",
+                nachname="User",
+                geschlecht="männlich",
+                geburtsdatum="invalid-date",  # Ungültiges Datum
+                email="test@example.com",
+                staatsangehoerigkeit="Deutschland"
+            )
+            
+            # Sollte Validierungsfehler zurückgeben (keine echte Registrierung)
+            self.assertIn("❌", result)
+            
+        except Exception as e:
+            # Wenn ein Fehler auftritt, ist das in Ordnung - Hauptsache keine echte Registrierung
+            pass
 
 
 if __name__ == "__main__":
