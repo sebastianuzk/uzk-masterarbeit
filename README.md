@@ -17,7 +17,8 @@ Dieses Projekt bietet einen intelligenten Chatbot, der:
 - **Autonomer Agent**: LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
 - **Ollama Integration**: Vollständig Open-Source LLM (llama3.1) ohne API-Kosten
 - **Universitäts-RAG**: Durchsucht 329 kategorisierte Dokumente der WiSo-Fakultät
-- **Multiple Tools**: Wikipedia, Web-Scraping, DuckDuckGo-Suche
+- **Multiple Tools**: Web-Scraping, DuckDuckGo-Suche, KLIPS2-Registrierung, E-Mail-Eskalation
+- **KLIPS2-Integration** (NEU): Unterstützt Benutzer bei der Erstellung von Basis-Accounts
 - **Streamlit UI**: Moderne, benutzerfreundliche Chat-Oberfläche
 - **Konversations-Memory**: Persistente Chat-Historie
 
@@ -66,6 +67,7 @@ uzk-masterarbeit/
 │   │   ├── rag_tool.py                 # RAG für WiSo-Fakultät ⭐
 │   │   ├── web_scraper_tool.py         # Web-Scraping Tool
 │   │   ├── duckduckgo_tool.py          # DuckDuckGo-Suche
+│   │   ├── klips2_register_tool.py     # KLIPS2-Registrierung ⭐
 │   │   └── email_tool.py               # E-Mail Support-Eskalation
 │   ├── scraper/                        # Erweiterte Web Scraper Pipeline ⭐
 │   │   ├── core/                       # Kern-Komponenten
@@ -240,6 +242,36 @@ VECTOR_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 ```
 
 ## 🛠️ Erweiterte Features
+
+### Verfügbare Tools
+
+Der Chatbot verfügt über folgende intelligente Tools:
+
+#### 1. **Universitäts-RAG-Tool** 📚
+- Durchsucht 329 kategorisierte WiSo-Dokumente
+- 5 Kategorien: Studium, Fakultät, Services, Forschung, Allgemein
+- Kontextbasierte Antworten mit Quellenangaben
+
+#### 2. **Web-Scraping-Tool** 🌐
+- Extrahiert Inhalte von beliebigen Webseiten
+- Automatische Text-Bereinigung
+- Für aktuelle Informationen außerhalb der Wissensdatenbank
+
+#### 3. **DuckDuckGo-Suche** 🔍
+- Privatsphärefreundliche Websuche
+- Für allgemeine Internetrecherche
+- Keine Tracking-Cookies
+
+#### 4. **KLIPS2-Registrierungs-Tool** ✅ (NEU)
+- Unterstützt bei der Erstellung von Basis-Accounts
+- Validiert Eingabedaten (Datum, E-Mail, etc.)
+- Gibt strukturierte Anleitungen zur manuellen Registrierung
+- Siehe: [KLIPS2_REGISTRATION_TOOL.md](docs/KLIPS2_REGISTRATION_TOOL.md)
+
+#### 5. **E-Mail-Support-Eskalation** 📧
+- Automatische Weiterleitung komplexer Anfragen
+- SMTP-Integration für professionellen Support
+- Siehe: [EMAIL_SETUP.md](docs/EMAIL_SETUP.md)
 
 ### Web Scraper Pipeline
 
