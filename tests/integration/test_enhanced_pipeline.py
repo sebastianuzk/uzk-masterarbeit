@@ -23,15 +23,15 @@ logging.basicConfig(
 )
 
 
-@pytest.mark.asyncio
-async def test_enhanced_pipeline_small():
+def test_enhanced_pipeline_small():
     """Test 0: Enhanced Pipeline mit kleinem Datenset (20 Seiten)"""
     print("\n" + "="*70)
     print("TEST 0: Enhanced Scraping Pipeline (Klein)")
     print("="*70)
     
     try:
-        from src.scraper.crawler_scraper_pipeline import run_crawler_scraper_pipeline
+        import asyncio
+        from src.scraper.pipelines.crawler_scraper_pipeline import run_crawler_scraper_pipeline
         
         output_dir = Path("data/test_enhanced_small")
         
@@ -44,7 +44,7 @@ async def test_enhanced_pipeline_small():
         print("  • Metriken")
         print()
         
-        stats = await run_crawler_scraper_pipeline(
+        stats = asyncio.run(run_crawler_scraper_pipeline(
             output_dir=output_dir,
             max_pages=20,
             crawl_delay=0.5,
@@ -54,7 +54,7 @@ async def test_enhanced_pipeline_small():
             enable_caching=True,
             enable_deduplication=True,
             enable_content_cleaning=True
-        )
+        ))
         
         print("\n✓ Pipeline erfolgreich ausgeführt")
         print(f"✓ URLs entdeckt: {stats['results']['urls_discovered']}")
@@ -220,7 +220,7 @@ def test_categorization():
     print("="*70)
     
     try:
-        from src.scraper.crawler_scraper_pipeline import categorize_url
+        from src.scraper.pipelines.crawler_scraper_pipeline import categorize_url
         
         test_urls = {
             "https://wiso.uni-koeln.de/de/studium/bachelor": "studium",

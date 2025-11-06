@@ -1,0 +1,42 @@
+# Production environment (main branch)
+version: '3.8'
+
+services:
+  chatbot-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wiso-chatbot-prod
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+      - OLLAMA_BASE_URL=http://ollama-prod:11434
+    volumes:
+      - prod-data:/app/data
+      - ./config:/app/config
+    restart: always
+    networks:
+      - prod-network
+    depends_on:
+      - ollama-prod
+
+  ollama-prod:
+    image: ollama/ollama:latest
+    container_name: ollama-prod
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-prod-data:/root/.ollama
+    restart: always
+    networks:
+      - prod-network
+
+volumes:
+  prod-data:
+  ollama-prod-data:
+
+networks:
+  prod-network:
+    driver: bridge
