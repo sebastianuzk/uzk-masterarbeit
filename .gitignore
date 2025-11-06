@@ -110,7 +110,6 @@ celerybeat.pid
 # ENVIRONMENTS
 # ============================================================================
 
-.venv/
 .venv
 env/
 venv/
@@ -182,6 +181,7 @@ start_streamlit.bat
 start_streamlit.ps1
 run_pipeline_*.py
 test_*.py
+!tests/**/test_*.py
 
 # ============================================================================
 # DATA & DATABASES
