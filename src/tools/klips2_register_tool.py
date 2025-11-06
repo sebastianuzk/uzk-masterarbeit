@@ -240,7 +240,8 @@ class KLIPS2RegisterTool(BaseTool):
             form_data[field_mapping['geburtsdatum']] = geburtsdatum
             form_data[field_mapping['email']] = email
             form_data[field_mapping['staatsangehoerigkeit']] = self._map_nationality(staatsangehoerigkeit)
-            form_data[field_mapping['sprache']] = self._map_language(sprache)
+            if 'sprache' in field_mapping:
+                form_data[field_mapping['sprache']] = self._map_language(sprache)
             
             if geburtsname and 'geburtsname' in field_mapping:
                 form_data[field_mapping['geburtsname']] = geburtsname
