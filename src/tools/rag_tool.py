@@ -158,9 +158,12 @@ class UniversityRAGTool(BaseTool):
                         elif source_url:
                             source_info = f" (Quelle: {source_url})"
                     
-                    formatted_results.append(
-                        f"📄 **Information {i}**{source_info}{collection_info}:\n{doc.strip()}"
-                    )
+                    # Sicherstellen dass doc nicht None ist
+                    doc_text = doc.strip() if doc and isinstance(doc, str) else ""
+                    if doc_text:  # Nur hinzufügen wenn Text vorhanden
+                        formatted_results.append(
+                            f"📄 **Information {i}**{source_info}{collection_info}:\n{doc_text}"
+                        )
             
             if not formatted_results:
                 return (
