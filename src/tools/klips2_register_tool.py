@@ -82,7 +82,7 @@ class KLIPS2RegisterTool(BaseTool):
             return "W"
         elif geschlecht_lower in ["w", "f"]:
             return "W"
-        elif "männlich" in geschlecht_lower or "male" in geschlecht_lower:
+        elif "männlich" in geschlecht_lower or geschlecht_lower == "male":
             return "M"
         elif geschlecht_lower == "m":
             return "M"
