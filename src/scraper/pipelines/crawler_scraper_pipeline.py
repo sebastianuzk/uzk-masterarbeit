@@ -6,11 +6,12 @@ This module combines the WiSo crawler with the batch scraper to create
 a complete pipeline for discovering and scraping WiSo faculty content.
 
 Features:
-- Comprehensive content discovery and extraction
-- Intelligent content categorization
-- Enhanced metadata enrichment
-- Optimized chunking for RAG systems
-- Progress tracking and reporting
+- NAIVE RAG MODE (default): Basic crawling + scraping + simple chunking
+- ADVANCED RAG MODE (configurable): All optimizations via scraper.env
+
+Modes:
+- Naive: Pure content extraction without optimizations
+- Advanced: Intelligent categorization, deduplication, semantic chunking, etc.
 """
 
 import asyncio
@@ -22,35 +23,95 @@ from datetime import datetime
 from collections import defaultdict
 from urllib.parse import urlparse
 
+# Core modules (always needed)
 from src.scraper.core.wiso_crawler import WisoCrawler, CrawlerConfig
 from src.scraper.core.batch_scraper import BatchScraper, ScrapingConfig, ScrapedContent
 from src.scraper.core.vector_store import VectorStore, VectorStoreConfig, VectorDocument
 from src.scraper.utils.pdf_extractor import PDFExtractor, PDFContent
 
-# Enhancement-Module
-from src.scraper.utils.url_cache import URLCache
-from src.scraper.utils.content_deduplicator import ContentDeduplicator
-from src.scraper.utils.content_cleaner import ContentCleaner
-from src.scraper.utils.semantic_chunker import SemanticChunker
-from src.scraper.analysis.scraper_metrics import ScraperMetrics
-from src.scraper.core.resilient_scraper import ResilientScraper, RetryConfig
-from src.scraper.core.incremental_scraper import IncrementalScraper
+# Configuration system
+from src.scraper.config import ScraperConfig, load_scraper_config
+
+# Advanced features (only imported if needed)
+try:
+    from src.scraper.utils.url_cache import URLCache
+except ImportError:
+    URLCache = None
+    
+try:
+    from src.scraper.utils.content_deduplicator import ContentDeduplicator
+except ImportError:
+    ContentDeduplicator = None
+    
+try:
+    from src.scraper.utils.content_cleaner import ContentCleaner
+except ImportError:
+    ContentCleaner = None
+    
+try:
+    from src.scraper.utils.semantic_chunker import SemanticChunker
+except ImportError:
+    SemanticChunker = None
+    
+try:
+    from src.scraper.analysis.scraper_metrics import ScraperMetrics
+except ImportError:
+    ScraperMetrics = None
+    
+try:
+    from src.scraper.core.resilient_scraper import ResilientScraper, RetryConfig
+except ImportError:
+    ResilientScraper = None
+    RetryConfig = None
+    
+try:
+    from src.scraper.core.incremental_scraper import IncrementalScraper
+except ImportError:
+    IncrementalScraper = None
 
 logger = logging.getLogger(__name__)
 
-def categorize_url(url: str) -> str:
+
+def simple_categorize_url(url: str) -> str:
     """
-    Kategorisiere URL basierend auf ihrem Pfad für bessere Inhaltsorganisation.
+    Simple URL categorization for Naive RAG mode.
     
     Args:
-        url: Die zu kategorisierende URL
+        url: The URL to categorize
         
     Returns:
-        Kategoriename
+        Category name
     """
     url_lower = url.lower()
     
-    # Definiere Kategorie-Muster
+    # Simple pattern matching
+    if 'bewerbung' in url_lower:
+        return 'bewerbung'
+    elif 'studium' in url_lower or 'bachelor' in url_lower or 'master' in url_lower:
+        return 'studium'
+    elif 'forschung' in url_lower or 'research' in url_lower:
+        return 'forschung'
+    elif 'fakultaet' in url_lower or 'dekanat' in url_lower:
+        return 'fakultaet'
+    elif 'pruefung' in url_lower or 'exam' in url_lower:
+        return 'pruefungen'
+    else:
+        return 'allgemein'
+
+
+def advanced_categorize_url(url: str) -> str:
+    """
+    Advanced URL categorization for Advanced RAG mode.
+    
+    Args:
+        url: The URL to categorize
+        
+    Returns:
+        Category name
+    """
+    url_lower = url.lower()
+    
+    # Definiere erweiterte Kategorie-Muster
     categories = {
         'studium': ['studium', 'bachelor', 'master', 'study', 'studies', 'programme'],
         'bewerbung': ['bewerbung', 'application', 'admission', 'zulassung'],
@@ -70,62 +131,78 @@ def categorize_url(url: str) -> str:
     return 'allgemein'
 
 
-def enrich_metadata(content: ScrapedContent, category: str) -> Dict[str, Any]:
+def simple_chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[Dict[str, Any]]:
     """
-    Reichere Metadaten von gescrapeten Inhalten für besseres Retrieval an.
+    Simple text chunking for Naive RAG mode.
     
     Args:
-        content: ScrapedContent-Objekt
+        text: Text to chunk
+        chunk_size: Size of each chunk
+        overlap: Overlap between chunks
+        
+    Returns:
+        List of text chunks
+    """
+    if not text or len(text) <= chunk_size:
+        return [{'text': text, 'chunk_index': 0, 'total_chunks': 1}]
+    
+    chunks = []
+    start = 0
+    chunk_index = 0
+    
+    while start < len(text):
+        end = start + chunk_size
+        if end > len(text):
+            end = len(text)
+        
+        chunk_text = text[start:end]
+        
+        # Try to break at sentence boundary
+        if end < len(text):
+            last_period = chunk_text.rfind('.')
+            if last_period > chunk_size // 2:  # Only if it's not too short
+                end = start + last_period + 1
+                chunk_text = text[start:end]
+        
+        chunks.append({
+            'text': chunk_text.strip(),
+            'chunk_index': chunk_index,
+            'total_chunks': 0  # Will be filled later
+        })
+        
+        start = end - overlap if end < len(text) else end
+        chunk_index += 1
+    
+    # Update total chunks
+    for chunk in chunks:
+        chunk['total_chunks'] = len(chunks)
+    
+    return chunks
+
+
+def simple_enrich_metadata(content: ScrapedContent, category: str) -> Dict[str, Any]:
+    """
+    Simple metadata enrichment for Naive RAG mode.
+    
+    Args:
+        content: ScrapedContent object
         category: URL category
         
     Returns:
-        Enhanced metadata dictionary
+        Basic metadata dictionary
     """
     metadata = content.metadata.copy()
     
-    # Add category
+    # Add basic category
     metadata['category'] = category
     
-    # Add URL path components for filtering
+    # Add basic URL info
     parsed = urlparse(content.url)
-    path_parts = [p for p in parsed.path.split('/') if p]
-    metadata['url_path'] = '/'.join(path_parts)
-    metadata['url_depth'] = len(path_parts)
+    metadata['url_path'] = parsed.path
     
-    # Add language detection
-    if '/de/' in content.url or '/de' in content.url:
-        metadata['language'] = 'de'
-    elif '/en/' in content.url or '/en' in content.url:
-        metadata['language'] = 'en'
-    else:
-        metadata['language'] = 'unknown'
-    
-    # Analyze content for additional context
-    content_lower = content.content.lower()
-    
-    # Detect specific topics
-    topics = []
-    topic_keywords = {
-        'bewerbung': ['bewerbung', 'application', 'fristen', 'deadline'],
-        'pruefung': ['prüfung', 'klausur', 'exam', 'thesis'],
-        'praktikum': ['praktikum', 'internship'],
-        'ausland': ['ausland', 'international', 'exchange', 'abroad'],
-        'bachelor': ['bachelor'],
-        'master': ['master'],
-        'promotion': ['promotion', 'phd', 'doktor'],
-    }
-    
-    for topic, keywords in topic_keywords.items():
-        if any(keyword in content_lower for keyword in keywords):
-            topics.append(topic)
-    
-    if topics:
-        metadata['topics'] = topics
-    
-    # Add content quality indicators
+    # Add basic content info
     metadata['has_title'] = bool(content.title)
     metadata['content_length'] = len(content.content)
-    metadata['is_substantial'] = len(content.content) > 500
     
     return metadata
 
@@ -136,13 +213,10 @@ async def run_crawler_scraper_pipeline(
     crawl_delay: float = 1.0,
     scrape_delay: float = 1.0,
     concurrent_requests: int = 10,
-    organize_by_category: bool = True,
-    enable_caching: bool = True,
-    enable_deduplication: bool = True,
-    enable_content_cleaning: bool = True
+    config_file: str = "scraper.env"
 ) -> Dict[str, Any]:
     """
-    Run the complete crawler-scraper pipeline with enhanced features.
+    Run the complete crawler-scraper pipeline in Naive or Advanced RAG mode.
     
     Args:
         output_dir: Directory to store results
@@ -150,46 +224,77 @@ async def run_crawler_scraper_pipeline(
         crawl_delay: Delay between crawler requests
         scrape_delay: Delay between scraper requests
         concurrent_requests: Number of concurrent requests
-        organize_by_category: Whether to organize content by category in separate collections
-        enable_caching: Aktiviere intelligentes Caching
-        enable_deduplication: Aktiviere Content-Deduplizierung
-        enable_content_cleaning: Aktiviere Content-Bereinigung
+        config_file: Path to scraper configuration file
         
     Returns:
         Dictionary with pipeline statistics and results
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    # Load configuration from scraper.env
+    config = load_scraper_config(config_file)
+    config.log_configuration()
+    
     logger.info("=" * 80)
-    logger.info("Starting WiSo Faculty Crawler-Scraper Pipeline (Enhanced)")
+    if config.is_naive_mode():
+        logger.info("Starting WiSo Faculty Crawler-Scraper Pipeline (NAIVE RAG MODE)")
+    else:
+        logger.info("Starting WiSo Faculty Crawler-Scraper Pipeline (ADVANCED RAG MODE)")
     logger.info("=" * 80)
     
-    # Initialisiere Enhancement-Module
-    url_cache = URLCache(str(output_dir / "url_cache.db")) if enable_caching else None
-    deduplicator = ContentDeduplicator() if enable_deduplication else None
-    content_cleaner = ContentCleaner() if enable_content_cleaning else None
-    semantic_chunker = SemanticChunker()
-    metrics = ScraperMetrics()
+    # Choose functions based on mode
+    if config.is_naive_mode():
+        categorize_func = simple_categorize_url
+        enrich_func = simple_enrich_metadata
+        chunk_func = simple_chunk_text
+    else:
+        categorize_func = advanced_categorize_url
+        enrich_func = simple_enrich_metadata  # Keep simple for now, can be enhanced
+        chunk_func = simple_chunk_text  # Will be replaced with semantic chunking if enabled
     
-    # Resilient Scraper mit angepasster Konfiguration
-    retry_config = RetryConfig(
-        max_retries=3,
-        initial_delay=2.0,
-        max_delay=60.0,
-        exponential_base=2.0
-    )
-    resilient_scraper = ResilientScraper(retry_config)
+    # Initialize enhancement modules (only if enabled)
+    url_cache = None
+    deduplicator = None
+    content_cleaner = None
+    semantic_chunker = None
+    metrics = None
+    resilient_scraper = None
+    incremental_scraper = None
     
-    # Incremental Scraper
-    incremental_scraper = IncrementalScraper(url_cache) if enable_caching else None
+    if config.enable_caching and URLCache:
+        url_cache = URLCache(str(output_dir / "url_cache.db"))
+        logger.info("✅ Intelligent caching enabled")
     
-    logger.info(f"📦 Enhancement-Module aktiv:")
-    logger.info(f"   • Intelligentes Caching: {enable_caching}")
-    logger.info(f"   • Content-Deduplizierung: {enable_deduplication}")
-    logger.info(f"   • Content-Bereinigung: {enable_content_cleaning}")
-    logger.info(f"   • Semantisches Chunking: Aktiviert")
-    logger.info(f"   • Resilient Scraping: Aktiviert (max {retry_config.max_retries} Retries)")
-    logger.info(f"   • Metriken: Aktiviert")
+    if config.enable_deduplication and ContentDeduplicator:
+        deduplicator = ContentDeduplicator()
+        logger.info("✅ Content deduplication enabled")
+    
+    if config.enable_content_cleaning and ContentCleaner:
+        content_cleaner = ContentCleaner()
+        logger.info("✅ Content cleaning enabled")
+    
+    if config.enable_semantic_chunking and SemanticChunker:
+        semantic_chunker = SemanticChunker()
+        chunk_func = semantic_chunker.chunk_document
+        logger.info("✅ Semantic chunking enabled")
+    
+    if config.enable_detailed_metrics and ScraperMetrics:
+        metrics = ScraperMetrics()
+        logger.info("✅ Detailed metrics enabled")
+    
+    if config.enable_resilient_scraping and ResilientScraper and RetryConfig:
+        retry_config = RetryConfig(
+            max_retries=config.max_retries,
+            initial_delay=config.initial_retry_delay,
+            max_delay=config.max_retry_delay,
+            exponential_base=2.0
+        )
+        resilient_scraper = ResilientScraper(retry_config)
+        logger.info(f"✅ Resilient scraping enabled (max {config.max_retries} retries)")
+    
+    if config.enable_incremental_scraping and IncrementalScraper and url_cache:
+        incremental_scraper = IncrementalScraper(url_cache)
+        logger.info("✅ Incremental scraping enabled")
     
     # Stage 1: Crawling
     logger.info("\n[Stage 1/4] Crawling WiSo Faculty Website...")
@@ -202,8 +307,13 @@ async def run_crawler_scraper_pipeline(
     crawler = WisoCrawler(crawler_config)
     discovered_urls = await crawler.crawl()
     
+    # Debug mode URL limiting
+    if config.debug_max_urls > 0:
+        discovered_urls = discovered_urls[:config.debug_max_urls]
+        logger.info(f"🐛 Debug mode: Limited to {len(discovered_urls)} URLs")
+    
     # Save discovered URLs
-    urls_file = Path(__file__).parent / "data_analysis" / "discovered_urls.json"
+    urls_file = output_dir / "discovered_urls.json"
     with urls_file.open('w', encoding='utf-8') as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),
@@ -214,14 +324,18 @@ async def run_crawler_scraper_pipeline(
     logger.info(f"✓ Discovered {len(discovered_urls)} URLs")
     logger.info(f"✓ Found {len(crawler.pdf_urls)} PDF documents")
     
-    # Stage 2: Scraping HTML Content
-    logger.info(f"\n[Stage 2/5] Scraping HTML Content from {len(discovered_urls)} URLs...")
+    # Dry run mode
+    if config.dry_run:
+        logger.info("🐛 Dry run mode: Stopping after crawling")
+        return {"mode": "dry_run", "urls_discovered": len(discovered_urls), "pdfs_found": len(crawler.pdf_urls)}
     
-    # Inkrementelles Scraping: Filtere URLs
+    # Stage 2: URL Filtering (only if incremental scraping enabled)
     urls_to_scrape = discovered_urls
     if incremental_scraper:
-        # Kategorisiere URLs für besseres Caching
-        url_categories = {url: categorize_url(url) for url in discovered_urls}
+        logger.info("\n[Stage 2a/5] Incremental URL Filtering...")
+        
+        # Categorize URLs for better caching
+        url_categories = {url: categorize_func(url) for url in discovered_urls}
         
         filtered = incremental_scraper.filter_urls_for_scraping(
             discovered_urls,
@@ -230,16 +344,19 @@ async def run_crawler_scraper_pipeline(
         
         urls_to_scrape = filtered['to_scrape']
         
-        logger.info(f"📊 Inkrementelles Scraping:")
-        logger.info(f"   • Neue URLs: {len(filtered['new'])}")
-        logger.info(f"   • Abgelaufene Cache-Einträge: {len(filtered['expired'])}")
-        logger.info(f"   • Zuvor fehlgeschlagen: {len(filtered['failed_before'])}")
-        logger.info(f"   • Übersprungen (frischer Cache): {len(filtered['skipped'])}")
-        logger.info(f"   • Zu scrapen: {len(urls_to_scrape)}/{len(discovered_urls)}")
+        logger.info(f"📊 Incremental filtering results:")
+        logger.info(f"   • New URLs: {len(filtered['new'])}")
+        logger.info(f"   • Expired cache entries: {len(filtered['expired'])}")
+        logger.info(f"   • Previously failed: {len(filtered['failed_before'])}")
+        logger.info(f"   • Skipped (fresh cache): {len(filtered['skipped'])}")
+        logger.info(f"   • To scrape: {len(urls_to_scrape)}/{len(discovered_urls)}")
+        
+        if not urls_to_scrape:
+            logger.info("All URLs are cached and fresh - no scraping needed!")
+            urls_to_scrape = discovered_urls  # Fallback for first run
     
-    if not urls_to_scrape:
-        logger.info("Alle URLs sind im Cache und aktuell - kein Scraping erforderlich!")
-        urls_to_scrape = discovered_urls  # Fallback für erste Ausführung
+    # Stage 3: Scraping HTML Content
+    logger.info(f"\n[Stage 2/4] Scraping HTML Content from {len(urls_to_scrape)} URLs...")
     
     scraping_config = ScrapingConfig(
         request_delay=scrape_delay,
@@ -247,125 +364,124 @@ async def run_crawler_scraper_pipeline(
     )
     
     scraper = BatchScraper(scraping_config)
-    
-    # Verwende Resilient Scraper für robustes Scraping
-    import aiohttp
     scraped_data = []
     
-    async with aiohttp.ClientSession() as session:
-        for url in urls_to_scrape:
-            start_time = datetime.now()
-            
-            try:
-                # Resilient Scraping mit Retries
-                content = await resilient_scraper.scrape_with_retry(
-                    session=session,
-                    url=url,
-                    scraper=scraper
-                )
+    # Choose scraping method based on resilient scraping config
+    if resilient_scraper:
+        # Advanced scraping with retries
+        import aiohttp
+        
+        async with aiohttp.ClientSession() as session:
+            for url in urls_to_scrape:
+                start_time = datetime.now()
                 
-                if content and content.success:
-                    # Content-Bereinigung (Text wird nochmal bereinigt)
-                    if content_cleaner and content.content:
-                        cleaned_text = content_cleaner._clean_text(content.content)
-                        content.content = cleaned_text
-                        content.metadata['cleaned'] = True
-                    
-                    # Change Detection
-                    if incremental_scraper:
-                        change_info = incremental_scraper.detect_changes(url, content.content)
-                        content.metadata['change_info'] = change_info
-                    
-                    # Metrics erfassen
-                    duration = (datetime.now() - start_time).total_seconds()
-                    metrics.record_url(
+                try:
+                    content = await resilient_scraper.scrape_with_retry(
+                        session=session,
                         url=url,
-                        success=True,
-                        response_time=duration,
-                        content_size=len(content.content),
-                        category=categorize_url(url)
+                        scraper=scraper
                     )
                     
-                    # Cache aktualisieren
-                    if url_cache:
-                        url_cache.put(
-                            url=url,
-                            content=content.content,
-                            success=True,
-                            category=categorize_url(url),
-                            metadata=content.metadata
-                        )
-                    
-                    scraped_data.append(content)
-                else:
-                    # Fehlschlag
-                    duration = (datetime.now() - start_time).total_seconds()
-                    metrics.record_url(
-                        url=url,
-                        success=False,
-                        response_time=duration,
-                        error=content.error_message if content else 'Unknown error'
-                    )
-                    
-                    if url_cache:
-                        url_cache.put(
-                            url=url,
-                            content="",
-                            success=False,
-                            category=categorize_url(url),
-                            metadata={'error': content.error_message if content else 'Unknown error'}
-                        )
-                    
-                    if content:
+                    if content and content.success:
+                        # Content cleaning
+                        if content_cleaner and content.content:
+                            cleaned_text = content_cleaner._clean_text(content.content)
+                            content.content = cleaned_text
+                            content.metadata['cleaned'] = True
+                        
+                        # Change detection
+                        if incremental_scraper:
+                            change_info = incremental_scraper.detect_changes(url, content.content)
+                            content.metadata['change_info'] = change_info
+                        
+                        # Metrics
+                        if metrics:
+                            duration = (datetime.now() - start_time).total_seconds()
+                            metrics.record_url(
+                                url=url,
+                                success=True,
+                                response_time=duration,
+                                content_size=len(content.content),
+                                category=categorize_func(url)
+                            )
+                        
+                        # Cache update
+                        if url_cache:
+                            url_cache.put(
+                                url=url,
+                                content=content.content,
+                                success=True,
+                                category=categorize_func(url),
+                                metadata=content.metadata
+                            )
+                        
                         scraped_data.append(content)
-            
-            except Exception as e:
-                logger.error(f"Fehler beim Scrapen von {url}: {e}")
-                duration = (datetime.now() - start_time).total_seconds()
-                metrics.record_url(
-                    url=url,
-                    success=False,
-                    response_time=duration,
-                    error=f"{type(e).__name__}: {str(e)}"
-                )
+                        
+                    else:
+                        # Handle failure
+                        if metrics:
+                            duration = (datetime.now() - start_time).total_seconds()
+                            metrics.record_url(
+                                url=url,
+                                success=False,
+                                response_time=duration,
+                                error=content.error_message if content else 'Unknown error'
+                            )
+                        
+                        if url_cache:
+                            url_cache.put(
+                                url=url,
+                                content="",
+                                success=False,
+                                category=categorize_func(url),
+                                metadata={'error': content.error_message if content else 'Unknown error'}
+                            )
+                        
+                        if content:
+                            scraped_data.append(content)
+                
+                except Exception as e:
+                    logger.error(f"Error scraping {url}: {e}")
+                    if metrics:
+                        duration = (datetime.now() - start_time).total_seconds()
+                        metrics.record_url(
+                            url=url,
+                            success=False,
+                            response_time=duration,
+                            error=f"{type(e).__name__}: {str(e)}"
+                        )
+    else:
+        # Simple scraping (Naive mode)
+        scraped_data = await scraper.scrape_batch(urls_to_scrape)
     
     # Filter successful scrapes
     successful_scrapes = [content for content in scraped_data if content.success]
     
-    # Content-Deduplizierung
+    # Content deduplication (only if enabled)
     if deduplicator and successful_scrapes:
-        logger.info(f"\n🔍 Content-Deduplizierung...")
+        logger.info(f"\n🔍 Content deduplication...")
         original_count = len(successful_scrapes)
         
-        # Konvertiere zu dict format für deduplicator
         docs = [{'url': c.url, 'content': c.content} for c in successful_scrapes]
         unique_docs, duplicate_docs = deduplicator.deduplicate_batch(docs)
         
-        # Erstelle Mapping zurück zu ScrapedContent
         unique_urls = {d['url'] for d in unique_docs}
         successful_scrapes = [c for c in successful_scrapes if c.url in unique_urls]
         
-        duplicate_count = len(duplicate_docs)
-        
-        logger.info(f"   • Original: {original_count} Dokumente")
-        logger.info(f"   • Duplikate entfernt: {duplicate_count}")
-        logger.info(f"   • Unique: {len(successful_scrapes)} Dokumente")
+        logger.info(f"   • Original: {original_count} documents")
+        logger.info(f"   • Duplicates removed: {len(duplicate_docs)}")
+        logger.info(f"   • Unique: {len(successful_scrapes)} documents")
     
-    # Save scraped content
-    content_file = Path(__file__).parent / "data_analysis" / "scraped_data.json"
-    with content_file.open('w', encoding='utf-8') as f:
-        json.dump([content.__dict__ for content in scraped_data], f, indent=2, ensure_ascii=False)
-        
     logger.info(f"✓ Successfully scraped {len(successful_scrapes)}/{len(scraped_data)} HTML pages")
     
-    # Stage 2.5: Extract PDF Content
+    
+    # Stage 3: Extract PDF Content
     pdf_contents = []
     if crawler.pdf_urls:
-        logger.info(f"\n[Stage 2.5/5] Extracting Content from {len(crawler.pdf_urls)} PDFs...")
+        logger.info(f"\n[Stage 3/4] Extracting Content from {len(crawler.pdf_urls)} PDFs...")
         
         pdf_extractor = PDFExtractor(download_dir=str(output_dir / "pdfs"))
         
-        # Process PDFs with progress tracking
         import aiohttp
         async with aiohttp.ClientSession() as session:
             pdf_tasks = [pdf_extractor.extract_from_url(session, pdf_url) for pdf_url in crawler.pdf_urls]
@@ -388,30 +504,26 @@ async def run_crawler_scraper_pipeline(
                 'error': pdf.error
             } for pdf in pdf_contents], f, indent=2, ensure_ascii=False)
     
-    # Stage 3: Content Categorization and Enrichment
-    logger.info("\n[Stage 3/5] Categorizing and Enriching Content...")
+    # Stage 4: Content Processing and Vector Storage
+    logger.info("\n[Stage 4/4] Processing Content and Storing in Vector Database...")
     
-    categorized_content = defaultdict(list)
+    # Prepare all content for processing
+    all_content = []
     category_stats = defaultdict(int)
     
-    # Categorize HTML content
+    # Process HTML content
     for content in successful_scrapes:
-        category = categorize_url(content.url)
-        enriched_metadata = enrich_metadata(content, category)
-        
-        # Update content metadata
+        category = categorize_func(content.url)
+        enriched_metadata = enrich_func(content, category)
         content.metadata.update(enriched_metadata)
-        
-        # Organize by category
-        categorized_content[category].append(content)
+        all_content.append(content)
         category_stats[category] += 1
     
-    # Categorize PDF content
+    # Process PDF content
     for pdf_content in pdf_contents:
         if not pdf_content.success:
             continue
         
-        # Convert PDFContent to ScrapedContent format
         scraped_pdf = ScrapedContent(
             url=pdf_content.url,
             title=pdf_content.title,
@@ -428,44 +540,39 @@ async def run_crawler_scraper_pipeline(
             timestamp=datetime.now().isoformat()
         )
         
-        category = categorize_url(pdf_content.url)
-        # PDFs with Prüfungsordnung should always go to pruefungsordnungen category
-        if 'pruefungsordnung' in pdf_content.url.lower() or 'document_type' in pdf_content.metadata:
+        category = categorize_func(pdf_content.url)
+        if 'pruefungsordnung' in pdf_content.url.lower():
             category = 'pruefungsordnungen'
         
-        enriched_metadata = enrich_metadata(scraped_pdf, category)
+        enriched_metadata = enrich_func(scraped_pdf, category)
         scraped_pdf.metadata.update(enriched_metadata)
         
-        categorized_content[category].append(scraped_pdf)
+        all_content.append(scraped_pdf)
         category_stats[category] += 1
     
     logger.info(f"✓ Categorized content into {len(category_stats)} categories:")
     for category, count in sorted(category_stats.items()):
         logger.info(f"  - {category}: {count} documents")
     
-    # Stage 4: Vector Store Integration with Semantic Chunking
-    logger.info("\n[Stage 4/5] Storing Content in Vector Database...")
-    
-    # Semantisches Chunking für alle Inhalte
-    logger.info("📝 Wende semantisches Chunking an...")
+    # Text chunking - choose method based on configuration
+    logger.info("📝 Chunking documents...")
     chunked_contents = []
     
-    for category, contents in categorized_content.items():
-        for content in contents:
-            # Chunks erstellen
+    if semantic_chunker and config.enable_semantic_chunking:
+        # Semantic chunking
+        for content in all_content:
             chunks = semantic_chunker.chunk_document(
                 text=content.content,
                 metadata={
                     'url': content.url,
                     'title': content.title,
-                    'category': category,
+                    'category': content.metadata.get('category', 'allgemein'),
                     **content.metadata
                 }
             )
             
-            # Konvertiere Chunks in ScrapedContent-Objekte
             for i, chunk in enumerate(chunks):
-                chunked_content = ScrapedContent(
+                chunk_content = ScrapedContent(
                     url=f"{content.url}#chunk_{i}",
                     title=f"{content.title} (Teil {i+1}/{len(chunks)})",
                     content=chunk['text'],
@@ -480,23 +587,43 @@ async def run_crawler_scraper_pipeline(
                     error_message=None,
                     timestamp=content.timestamp
                 )
-                chunked_contents.append((category, chunked_content))
-    
-    logger.info(f"   • {len(chunked_contents)} Chunks erstellt aus {sum(len(c) for c in categorized_content.values())} Dokumenten")
-    
-    if organize_by_category:
-        # Create separate collection for each category
-        total_docs = 0
-        category_chunk_counts = defaultdict(int)
-        
-        for category, chunked_content in chunked_contents:
-            category_chunk_counts[category] += 1
-        
-        for category, count in category_chunk_counts.items():
-            # Sammle alle Chunks für diese Kategorie
-            category_chunks = [content for cat, content in chunked_contents if cat == category]
+                chunked_contents.append(chunk_content)
+    else:
+        # Simple chunking
+        for content in all_content:
+            chunks = chunk_func(content.content)
             
-            if not category_chunks:
+            for i, chunk in enumerate(chunks):
+                chunk_content = ScrapedContent(
+                    url=f"{content.url}#chunk_{i}",
+                    title=f"{content.title} (Teil {i+1}/{len(chunks)})",
+                    content=chunk['text'],
+                    metadata={
+                        **content.metadata,
+                        'chunk_index': chunk.get('chunk_index', i),
+                        'total_chunks': chunk.get('total_chunks', len(chunks)),
+                        'original_url': content.url
+                    },
+                    success=True,
+                    error_message=None,
+                    timestamp=content.timestamp
+                )
+                chunked_contents.append(chunk_content)
+    
+    logger.info(f"   • {len(chunked_contents)} chunks created from {len(all_content)} documents")
+    
+    # Store in vector database
+    if config.organize_by_category:
+        # Separate collections per category
+        total_docs = 0
+        category_chunks = defaultdict(list)
+        
+        for chunk in chunked_contents:
+            category = chunk.metadata.get('category', 'allgemein')
+            category_chunks[category].append(chunk)
+        
+        for category, chunks in category_chunks.items():
+            if not chunks:
                 continue
                 
             collection_name = f"wiso_{category}"
@@ -506,127 +633,127 @@ async def run_crawler_scraper_pipeline(
             )
             
             vector_store = VectorStore(vector_config)
-            doc_count = vector_store.add_scraped_content(category_chunks)
+            doc_count = vector_store.add_scraped_content(chunks)
             total_docs += doc_count
             
             logger.info(f"  ✓ Stored {doc_count} chunks in collection '{collection_name}'")
     else:
-        # Single collection for all content
+        # Single collection
         vector_config = VectorStoreConfig(
             persist_directory=str(output_dir / "vector_db"),
             collection_name="wiso_scraped_content"
         )
         
         vector_store = VectorStore(vector_config)
-        all_chunks = [content for _, content in chunked_contents]
-        total_docs = vector_store.add_scraped_content(all_chunks)
+        total_docs = vector_store.add_scraped_content(chunked_contents)
         logger.info(f"  ✓ Stored {total_docs} chunks in single collection")
     
-    # Stage 5: Generate Reports and Export Metrics
-    logger.info("\n[Stage 5/5] Generiere Reports und Metriken...")
+    # Save scraped content (for analysis)
+    content_file = output_dir / "scraped_data.json"
+    with content_file.open('w', encoding='utf-8') as f:
+        json.dump([content.__dict__ for content in scraped_data], f, indent=2, ensure_ascii=False)
     
-    # Metrics-Export
-    metrics_file = output_dir / "scraper_metrics.json"
-    metrics.export_report(metrics_file)
-    logger.info(f"  ✓ Metriken exportiert nach {metrics_file}")
-    
-    # Cache-Statistiken
-    if url_cache:
-        cache_stats = url_cache.get_statistics()
-        cache_file = output_dir / "cache_statistics.json"
-        with cache_file.open('w', encoding='utf-8') as f:
-            json.dump(cache_stats, f, indent=2, ensure_ascii=False)
-        logger.info(f"  ✓ Cache-Statistiken exportiert nach {cache_file}")
-    
-    # Incremental Scraping Report
-    if incremental_scraper:
-        changes_file = output_dir / "content_changes.json"
-        incremental_scraper.export_changes_report(changes_file)
-        logger.info(f"  ✓ Änderungs-Report exportiert nach {changes_file}")
-    
-    # Resilient Scraper Report
-    failed_urls = resilient_scraper.get_failed_urls()
-    if failed_urls:
-        failed_file = output_dir / "failed_urls.json"
-        resilient_scraper.export_failed_urls(failed_file)
-        logger.info(f"  ✓ Fehlgeschlagene URLs exportiert nach {failed_file}")
-    
-    # Deduplication Report
-    if deduplicator:
-        dedup_stats = deduplicator.get_statistics()
-        dedup_file = output_dir / "deduplication_report.json"
-        with dedup_file.open('w', encoding='utf-8') as f:
-            json.dump(dedup_stats, f, indent=2, ensure_ascii=False)
-        logger.info(f"  ✓ Deduplizierungs-Report exportiert nach {dedup_file}")
-    
-    # Generate comprehensive pipeline report
-    metrics_stats = metrics.get_statistics()
-    
+    # Generate pipeline report
     pipeline_stats = {
         "timestamp": datetime.now().isoformat(),
+        "mode": "advanced" if not config.is_naive_mode() else "naive",
         "configuration": {
             "max_pages": max_pages,
             "crawl_delay": crawl_delay,
             "scrape_delay": scrape_delay,
             "concurrent_requests": concurrent_requests,
-            "organize_by_category": organize_by_category,
-            "enhancements": {
-                "caching": enable_caching,
-                "deduplication": enable_deduplication,
-                "content_cleaning": enable_content_cleaning,
-                "semantic_chunking": True,
-                "resilient_scraping": True
-            }
+            "organize_by_category": config.organize_by_category,
+            "active_features": config.get_active_features()
         },
         "results": {
             "urls_discovered": len(discovered_urls),
-            "urls_scraped": len(urls_to_scrape) if 'urls_to_scrape' in locals() else len(discovered_urls),
-            "urls_skipped_cache": len(discovered_urls) - len(urls_to_scrape) if 'urls_to_scrape' in locals() else 0,
+            "urls_scraped": len(urls_to_scrape),
+            "urls_skipped_cache": len(discovered_urls) - len(urls_to_scrape) if incremental_scraper else 0,
             "pdfs_found": len(crawler.pdf_urls),
             "pages_scraped": len(scraped_data),
             "successful_scrapes": len(successful_scrapes),
             "failed_scrapes": len(scraped_data) - len(successful_scrapes),
-            "duplicates_removed": metrics_stats.get('duplicates_removed', 0) if deduplicator else 0,
             "pdfs_extracted": len([p for p in pdf_contents if p.success]),
             "pdfs_failed": len([p for p in pdf_contents if not p.success]),
             "categories_found": len(category_stats),
             "category_distribution": dict(category_stats),
             "total_chunks_created": len(chunked_contents),
             "total_documents_stored": total_docs
-        },
-        "metrics": {
+        }
+    }
+    
+    # Add advanced metrics if available
+    if metrics:
+        metrics_stats = metrics.get_statistics()
+        pipeline_stats["metrics"] = {
             "success_rate": metrics_stats.get('success_rate', 0),
             "average_response_time": metrics_stats.get('avg_response_time', 0),
             "total_content_size": metrics_stats.get('total_content_size', 0),
             "error_summary": metrics_stats.get('error_summary', {})
-        },
-        "cache_stats": url_cache.get_statistics() if url_cache else {},
-        "changes_detected": incremental_scraper.get_statistics() if incremental_scraper else {}
-    }
+        }
     
     # Save pipeline report
-    report_file = Path(__file__).parent / "data_analysis" / "pipeline_report.json"
+    report_file = output_dir / "pipeline_report.json"
     with report_file.open('w', encoding='utf-8') as f:
         json.dump(pipeline_stats, f, indent=2, ensure_ascii=False)
+    
+    # Export additional reports if enabled
+    if config.enable_report_export:
+        # Metrics export
+        if metrics:
+            metrics_file = output_dir / "scraper_metrics.json"
+            metrics.export_report(metrics_file)
+            logger.info(f"  ✓ Metrics exported to {metrics_file}")
+        
+        # Cache statistics
+        if url_cache:
+            cache_stats = url_cache.get_statistics()
+            cache_file = output_dir / "cache_statistics.json"
+            with cache_file.open('w', encoding='utf-8') as f:
+                json.dump(cache_stats, f, indent=2, ensure_ascii=False)
+            logger.info(f"  ✓ Cache statistics exported to {cache_file}")
+        
+        # Incremental scraping report
+        if incremental_scraper:
+            changes_file = output_dir / "content_changes.json"
+            incremental_scraper.export_changes_report(changes_file)
+            logger.info(f"  ✓ Changes report exported to {changes_file}")
+        
+        # Failed URLs report
+        if resilient_scraper:
+            failed_urls = resilient_scraper.get_failed_urls()
+            if failed_urls:
+                failed_file = output_dir / "failed_urls.json"
+                resilient_scraper.export_failed_urls(failed_file)
+                logger.info(f"  ✓ Failed URLs exported to {failed_file}")
+        
+        # Deduplication report
+        if deduplicator:
+            dedup_stats = deduplicator.get_statistics()
+            dedup_file = output_dir / "deduplication_report.json"
+            with dedup_file.open('w', encoding='utf-8') as f:
+                json.dump(dedup_stats, f, indent=2, ensure_ascii=False)
+            logger.info(f"  ✓ Deduplication report exported to {dedup_file}")
     
     logger.info("\n" + "=" * 80)
     logger.info("Pipeline Completed Successfully!")
     logger.info("=" * 80)
     logger.info(f"📊 Results Summary:")
+    logger.info(f"   • Mode: {pipeline_stats['mode'].upper()}")
     logger.info(f"   • URLs Discovered: {len(discovered_urls)}")
-    logger.info(f"   • URLs Scraped: {len(urls_to_scrape) if 'urls_to_scrape' in locals() else len(discovered_urls)}")
-    if enable_caching and 'urls_to_scrape' in locals():
+    logger.info(f"   • URLs Scraped: {len(urls_to_scrape)}")
+    if incremental_scraper:
         logger.info(f"   • URLs Skipped (Cache): {len(discovered_urls) - len(urls_to_scrape)}")
     logger.info(f"   • PDFs Found: {len(crawler.pdf_urls)}")
     logger.info(f"   • HTML Pages Scraped: {len(successful_scrapes)}/{len(scraped_data)}")
-    if deduplicator:
-        logger.info(f"   • Duplicates Removed: {pipeline_stats['results']['duplicates_removed']}")
     logger.info(f"   • PDFs Extracted: {len([p for p in pdf_contents if p.success])}/{len(pdf_contents)}")
     logger.info(f"   • Total Chunks Created: {len(chunked_contents)}")
     logger.info(f"   • Total Documents Stored: {total_docs}")
     logger.info(f"   • Categories: {len(category_stats)}")
-    logger.info(f"   • Success Rate: {metrics_stats.get('success_rate', 0):.1f}%")
-    logger.info(f"   • Avg Response Time: {metrics_stats.get('avg_response_time', 0):.2f}s")
+    if metrics:
+        metrics_stats = metrics.get_statistics()
+        logger.info(f"   • Success Rate: {metrics_stats.get('success_rate', 0):.1f}%")
+        logger.info(f"   • Avg Response Time: {metrics_stats.get('avg_response_time', 0):.2f}s")
     logger.info(f"   • Report saved to: {report_file}")
     logger.info("=" * 80)
     
@@ -638,21 +765,28 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="WiSo Faculty Crawler-Scraper Pipeline",
+        description="WiSo Faculty Crawler-Scraper Pipeline (Naive & Advanced RAG)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run with default settings
+  # Run in Naive RAG mode (default - no optimizations)
   python crawler_scraper_pipeline.py
   
   # Run with custom settings
   python crawler_scraper_pipeline.py --max-pages 500 --crawl-delay 2.0
   
-  # Organize content by category
-  python crawler_scraper_pipeline.py --organize-by-category
+  # Use custom scraper configuration file
+  python crawler_scraper_pipeline.py --config advanced_scraper.env
   
-  # Fast mode (more concurrent requests, less delay)
+  # Fast mode for testing
   python crawler_scraper_pipeline.py --concurrent-requests 20 --crawl-delay 0.5
+
+Advanced RAG Mode:
+  Enable features by setting them to 'true' in scraper.env:
+  - ENABLE_CACHING=true
+  - ENABLE_DEDUPLICATION=true
+  - ENABLE_SEMANTIC_CHUNKING=true
+  - etc.
         """
     )
     parser.add_argument(
@@ -686,24 +820,10 @@ Examples:
         help="Number of concurrent requests (default: 10)"
     )
     parser.add_argument(
-        "--organize-by-category",
-        action="store_true",
-        help="Organize content into separate collections by category"
-    )
-    parser.add_argument(
-        "--no-caching",
-        action="store_true",
-        help="Disable intelligent caching"
-    )
-    parser.add_argument(
-        "--no-deduplication",
-        action="store_true",
-        help="Disable content deduplication"
-    )
-    parser.add_argument(
-        "--no-cleaning",
-        action="store_true",
-        help="Disable content cleaning"
+        "--config",
+        type=str,
+        default="scraper.env",
+        help="Path to scraper configuration file (default: scraper.env)"
     )
     parser.add_argument(
         "--log-level",
@@ -729,13 +849,11 @@ Examples:
             crawl_delay=args.crawl_delay,
             scrape_delay=args.scrape_delay,
             concurrent_requests=args.concurrent_requests,
-            organize_by_category=args.organize_by_category,
-            enable_caching=not args.no_caching,
-            enable_deduplication=not args.no_deduplication,
-            enable_content_cleaning=not args.no_cleaning
+            config_file=args.config
         ))
         
-        print("\n✅ Pipeline completed successfully!")
+        print(f"\n✅ Pipeline completed successfully!")
+        print(f"📊 Mode: {stats['mode'].upper()} RAG")
         print(f"📁 Results saved to: {args.output_dir}")
         
     except KeyboardInterrupt:
