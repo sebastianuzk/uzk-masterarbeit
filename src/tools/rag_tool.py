@@ -152,8 +152,12 @@ class UniversityRAGTool(BaseTool):
                     
                     if metadata:
                         title = metadata.get('title', '')
-                        source_url = metadata.get('source_url', '')
-                        if title:
+                        # Prüfe beide möglichen URL-Felder
+                        source_url = metadata.get('source_url', '') or metadata.get('original_url', '') or metadata.get('url', '')
+                        
+                        if title and source_url:
+                            source_info = f" (Quelle: {title} - {source_url})"
+                        elif title:
                             source_info = f" (Quelle: {title})"
                         elif source_url:
                             source_info = f" (Quelle: {source_url})"

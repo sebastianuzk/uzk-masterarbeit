@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Leichtgewichtiger Test für E-Mail Tool
+Leichtgewichtiger Test für RAG Tool - Eine Query
 """
 
 import sys
@@ -10,23 +10,21 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.tools.email_tool import create_email_tool
+from src.tools.rag_tool import create_university_rag_tool
 
 # Tool erstellen und testen
-email_tool = create_email_tool()
+rag_tool = create_university_rag_tool()
 
-# Einfache E-Mail senden (nur subject und body erforderlich)
-subject = "Test E-Mail vom Chatbot"
-body = "Dies ist eine Test-E-Mail vom autonomen Chatbot-System."
+# Test-Query
+query = "Was benötige ich für die Bewerbung auf ein höheres Fachsemester?"
 
-result = email_tool._run(
-    subject=subject,
-    body=body
-)
+print(f"RAG Tool Test")
+print("=" * 60)
+print(f"Query: {query}")
+print("=" * 60)
 
-print(f"E-Mail Test")
-print("-" * 40)
-print(f"Betreff: {subject}")
-print("-" * 40)
+# RAG-Tool ausführen
+result = rag_tool._run(query=query)
+
 print("Ergebnis:")
 print(result)
