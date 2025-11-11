@@ -23,7 +23,7 @@ class Settings:
     
     # Tool Konfiguration
     ENABLE_WEB_SCRAPER = True
-    ENABLE_DUCKDUCKGO = True
+    ENABLE_DUCKDUCKGO = False
     
     # E-Mail-Konfiguration
     SMTP_SERVER = os.getenv("SMTP_SERVER")

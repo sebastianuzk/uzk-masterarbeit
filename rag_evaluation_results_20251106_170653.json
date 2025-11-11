@@ -1,0 +1,97 @@
+{
+  "timestamp": "2025-11-06T17:06:53.766330",
+  "model": "llama3.1:8b",
+  "dataset_size": 3,
+  "metrics": {
+    "context_precision": 0.0,
+    "context_recall": 0.8333333333333334,
+    "faithfulness": 0.3636363636363636,
+    "answer_relevancy": 0.2956123878049912
+  },
+  "overall_score": 0.373,
+  "detailed_results": {
+    "per_question_analysis": [
+      {
+        "question": "Was benötige ich für die Bewerbung auf ein höheres Fachsemester im Master Informatik?",
+        "topic": "bewerbung",
+        "scores": {
+          "context_precision": 0.0,
+          "context_recall": 1.0,
+          "faithfulness": 0.5,
+          "answer_relevancy": 0.21659343414544927
+        }
+      },
+      {
+        "question": "Welche Fristen gelten für Bewerbungen an der Universität zu Köln?",
+        "topic": "fristen",
+        "scores": {
+          "context_precision": 0.0,
+          "context_recall": 0.5,
+          "faithfulness": 0.5,
+          "answer_relevancy": 0.3675910292636064
+        }
+      },
+      {
+        "question": "Wie funktioniert die Prüfungsanmeldung an der Universität zu Köln?",
+        "topic": "pruefung",
+        "scores": {
+          "context_precision": 0.0,
+          "context_recall": 1.0,
+          "faithfulness": 0.09090909090909091,
+          "answer_relevancy": 0.3026527000059181
+        }
+      }
+    ],
+    "topic_analysis": {
+      "bewerbung": {
+        "context_precision": 0.0,
+        "context_recall": 1.0,
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.21659343414544927
+      },
+      "fristen": {
+        "context_precision": 0.0,
+        "context_recall": 0.5,
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.3675910292636064
+      },
+      "pruefung": {
+        "context_precision": 0.0,
+        "context_recall": 1.0,
+        "faithfulness": 0.09090909090909091,
+        "answer_relevancy": 0.3026527000059181
+      }
+    },
+    "strengths": [],
+    "weaknesses": [],
+    "recommendations": [
+      "Überprüfen Sie die Qualität der Wissensdatenbank",
+      "Experimentieren Sie mit verschiedenen Chunk-Größen",
+      "Testen Sie erweiterte Embedding-Modelle",
+      "Optimieren Sie die Prompt-Templates"
+    ]
+  },
+  "question_answers": [
+    {
+      "question": "Was benötige ich für die Bewerbung auf ein höheres Fachsemester im Master Informatik?",
+      "answer": "Für die Bewerbung auf ein höheres Fachsemester im Master Informatik benötigst du keine speziellen Unterlagen wie Praktikums- oder Arbeitszeugnisse. Es wird jedoch empfohlen, dass du dich über das jeweilige Lehrangebot im gewünschten Semester informierst und sicherstellst, dass du alle Anforderungen für die Bewerbung erfüllst.",
+      "context": "Schwerpunkte unserer Beratung liegen hierbei auf den Themen strategische Analyse und Konzeptionierung von Markt- und neuen Versorgungskonzepten, Fusionen und Kooperationen, Betriebsorganisation und Prozesse sowie prüfungsnahe Beratungsleistungen. Die BDO AG Wirtschaftsprüfungsgesellschaft ist Gründungsmitglied des internationalen BDO Netzwerks (1963), das mit mehr als 64.000 Mitarbeitern in 154 Ländern vertreten ist. Weitere Informationen zu Einstiegsmöglichkeiten finden Sie hier. BDO ist Kooperationspartner des Seminars für ABWL und Gesundheitswesen der Universität zu Köln. 4) Besonderheiten bei Auslandsbewerbungen Vor der Bewerbung in anderen Ländern sollte man sich über die Inhalte des dort üblichen Lebenslaufs informieren. Hinweise und Informationen zu Lebensläufen in anderen Ländern können auf der Homepage des WiSo-Career-Service unter dem Punkt Bewerbungshilfen gefunden werden. Britischer Lebenslauf Im Folgenden werden einige Unterschiede eines britischen Lebenslaufs im Vergleich zu einem deutschen aufgelistet. In Großbritannien ist es nicht üblich ein Foto dem Lebenslauf hinzuzufügen. Um Diskriminierungen vorzubeugen wird weder der Familienstand, noch das Alter oder die Herkunft angegeben. Anders als im deutschen Lebenslauf ist es üblich ein kurzes Personal Profile zu schreiben, indem man sich vorstellt und herausstellt was man kann. Darüber hinaus werden den englischen Bewerbungen keine Praktikums- und Arbeitszeugnisse beigefügt. Darüber hinaus werden den englischen Bewerbungen keine Praktikums- und Arbeitszeugnisse beigefügt. Stattdessen werden im Lebenslauf Referenzen angegeben, die es dem potentiellen Arbeitgeber ermöglichen, Informationen über den Bewerber einzuholen. Zwei bis drei Referenzen sind in der Regel ausreichend. UNIVERSITY OF COLOGNE | Faculty of Management, Economics and Social Sciences service/bewerbungshilfen/https://www.wiso.uni-koeln.de/de/praxis/wiso-career- Bitte informieren Sie sich bei Interesse über das jeweilige Lehrangebot im gewünschten Semester. Basis- & Aufbaubereich Schwerpunktbereich Ergänzungsbereich Studium Integrale Abschlussarbeit 8 ve Ticket für den öffentlichen Nahverkehr, siehehierfür weitere Informationen)Inhalt:Erlernen und Anwenden von Methoden und Techniken moderner Datenanalyse, künstlicher Intelligenz und maschinellem Lernen, um Probleme der Betriebs- und Wirtschaftswissenschaften lösen zu können.Bewerbungsfrist:15.06. (bitte beachten Sie die abweichenden Fristen für dasDouble Master's Programmeund für eine Bewerbung über uni-assist)Master-Virtueller Infotag320px480px640px786px1024px1280px1440pxBitte HIER ANMELDEN, um am virtuellen Master-Infotag teilzunehmen.Nutzen Sie die Gelegenheit, mehr über die WiSo-Fakultät zu erfahren, die Studienprogramme zu erkunden und wertvolle Einblicke von Professor:innen, aktuellen Studierenden und Alumni zu gewinnen.Bewerbung320px480px640px786px1024px1280px1440pxAlle Infos zurMasterbewerbung an der WiSo-Fakultät.Du bekommst einen sehr guten Einblick in unterschiedliche Disziplinen.An der WiSo-Fakultät können Sie in Business Administration zwischen fünf Schwerpunkten wählen:320px480px640pxAccounting and Taxation320px480px640pxCorporate Development320px480px640pxFinance320px480px640pxMarketing320px480px640pxSupply Chain ManagementHIStudiengang-ChatFrage direkt die KI zu Inhalten & BewerbungAsk a StudentFrag echte Studierende nach ihren ErfahrungenWiSo Student Service Point WiSSPoSchreibe uns deine konkreten FragenStudienwahl-AssistentFinde mit KI heraus, was zu dir passtBachelorMasterZum Chatzum Seitenanfang Sie studieren bereits M. Sc. --- Page 32 --- MODULHANDBUCH - SOZIALWISSENSCHAFTEN - BACHELOR OF SCIENCE Gültig für Studierende der PO 2021 (Einschreibung ab WiSe 2021/22) 10 Sonstige Informationen Pflichtlektüre wird in jedem Semester bekannt gegeben. 28 [Table 1] 10\tSonstige Informationen Pflichtlektüre wird in jedem Semester bekannt gegeben.",
+      "ground_truth": "Für eine Bewerbung auf höhere Fachsemester benötigen Sie in der Regel eine Anrechnungsbescheinigung vom Prüfungsamt der WiSo-Fakultät, die bestätigt, welche Leistungen angerechnet werden können.",
+      "topic": "bewerbung"
+    },
+    {
+      "question": "Welche Fristen gelten für Bewerbungen an der Universität zu Köln?",
+      "answer": "Die Bewerbungsfrist für den Studienbeginn zum Wintersemester beträgt 15.07.",
+      "context": "Köln ist für seine Lebensfreude, Toleranz und Weltoffenheit bekannt. Die Metropolregion ist nicht nur als Wissenschaftsstandort interessant, sondern bietet Studierenden auch eine breite Palette von Kontaktmöglichkeiten zur beruflichen Praxis. Die Region Region über einen attraktiven und zukunftsfähigen Branchenmix, in dem unter anderem die Medien- und Kreativwirtschaft, Logistik und die Life Sciences deutschlandweit eine Schlüsselstellung einnehmen. Paco, deine künstliche Intelligenz zum Studium an der WiSo-Fakultät der Universität zu Köln, beantwortet dir jederzeit alle faktenbasierten Fragen zu deinem Wunschstudiengang! - Du suchst schnelle Infos zu, Zulassungsverfahren oder allgemeinen Fragen zur Universität zu Köln?Dann ist Paco genau das Richtige für dich! Wir bieten Ihnen eine breite Auswahl an Bachelorprogrammen in den Wirtschafts- und Sozialwissenschaften, die interdisziplinät miteinander verknüpft sind: 320px480px640pxBWL Bachelor 320px480px640pxVWL Bachelor 320px480px640pxBachelor Sozialwissenschaften 320px480px640pxBachelor Management, Economics & Social Sciences 320px480px640pxBachelor Wirtschaftsinformatik 320px480px640pxBachelor Gesundheitsökonomie 320px480px640pxLehramt Bachelor 320px480px640pxStudium Integrale Neben den Bachelorstudiengängen der WiSo-Fakultät gibt es auch weitere Studiengänge mit WiSo-Beteiligung. zum Seitenanfang Universitätsstr. 9150931 KölnTelefon +492214704558E-Mailalumni(at)wiso.uni-koeln.de die Möglichkeit Ihre mathematischen Kenntnisse in einem Vorkurs aufzufrischen.WeitereInformationen zu Selbsttests zur Studienfachwahlsowie studiengangsspezifische Eignungstests finden Sie auf den Webseiten der Zentralen Studienberatung der Universität zu Köln (ZSB).zum SeitenanfangBewerbungsfrist15. 07.für den Studienbeginn zum Wintersemester|Aktuelle Informationen oder Änderungen finden Sie auf derWebsite des Zentrums für LehrerInnenbildung der Universität zu Köln.Online-BewerbungDie Bewerbung erfolgt über dieWebseite des Studierendensekretariats der Universität zu Köln.Nicht EU-/EWR-Bürger bewerben sich überUni-Assist.Wir freuen uns auf Ihre Bewerbung!Wir unterstützen Sie gerne bei Ihren Ambitionen im Fach WirtschaftswissenschaftBei Interesse oder Fragen zu unseren WiSo-Studiengängen helfen die Studienberater:innen imWiSo Student Service Pointgerne weiter:WiSo Student Service Point- Hotline: +49 (0) 221/470-8818www.wiso-studentservice.uni-koeln.dezum SeitenanfangSocial-Media-Kanäle der WiSo-Fakultät[follow us!]HIStudiengang-ChatFrage direkt die KI zu Inhalten & BewerbungAsk a StudentFrag echte Studierende nach ihren ErfahrungenWiSo Student Service Point WiSSPoSchreibe uns deine konkreten FragenStudienwahl-AssistentFinde mit KI heraus, was zu dir passtBachelorMasterZum Chatzum Seitenanfang Sie studieren bereits Lehramt für Berufskollegs und möchten sich über Einzelheiten Ihres Lehramt-Bachelor-Studiums informieren? Dann geht es hier auf der Seite\"Studienaufbau\" weiter. Dann geht es hier auf der Seite\"Studienaufbau\" weiter. Paco, deine künstliche Intelligenz zum Studium an der WiSo-Fakultät der Universität zu Köln, beantwortet dir jederzeit alle faktenbasierten Fragen zu deinem Wunschstudiengang! - Du suchst schnelle Infos zu, Zulassungsverfahren oder allgemeinen Fragen zur Universität zu Köln?Dann ist Paco genau das Richtige für dich! Die WiSo-Fakultät bietet zusammen mit den anderen lehrerbildenden Fakultäten den Bachelor of Arts Lehramt Berufskolleg I (Wirtschaftswissenschaften + Unterrichtsfach) an.Die berufliche Fachrichtung Wirtschaftswissenschaften ist der beruflich prägende Studienbereich des Bachelorstudiums im Studienprofil Lehramt an Berufskollegs. Neben der beruflichen Fachrichtung besteht das Studium des Bachelor Lehramt aus dem Pflichtbereich der Bildungswissenschaften, in den als Praxiselement ein Orientierungspraktikum und ein Berufsfeldpraktikum integriert sind und dem jeweils gewählten zweiten Fach. Absolvent:innen des Studiengangs sind primär an der Teilnahme an konsekutiv weiterführenden Studiengängen für das Lehramt an Berufskollegs (Master of Education) interessiert. Der Bachelorstudiengang orientiert sich an den entsprechenden Bedingungen für die Übernahme in das Referendariat, welche in Nordrhein-Westfalen durch die Zugangsverordnung für das Lehramt geregelt und an dem einschlägigen Master ausgerichtet sind. d mit vielen potenziellen Anbietern und Nutzern gesprochen.Mit sehr viel positivem Feedback und ersten Pilotkunden im Rücken haben wir uns dann entschieden, die Idee gemeinsam mit unserem Programmierer Timo umzusetzen.Für uns war immer klar, dass wir wenn möglich das Konzept in Köln umsetzen wollen. Wir haben alle hier studiert, fühlen uns mittlerweile in Köln zu Hause und haben hier ein großes Netzwerk aufgebaut. Wir kooperieren mit der Stadt Köln, sitzen mit unserem Startup imGateway Gründungsservice der Universität zu Kölnund arbeiten und forschen mit mehreren Professoren der Uni Köln und TH Köln zusammen. Köln ist ein sehr aufstrebender Gründungsort mit vielen unterstützenden Institutionen (IHK, Digital Hub, Cologne Startup Unit, hgnc) und wir sind bisher sehr zufrieden hier in Köln gestartet zu sein.Für uns war immer klar, dass wir das Konzept in Köln umsetzen wollen.",
+      "ground_truth": "Die Bewerbungsfristen variieren je nach Studiengang und Semester. Für das Wintersemester ist die Frist meist der 15. Juli, für das Sommersemester der 15. Januar.",
+      "topic": "fristen"
+    },
+    {
+      "question": "Wie funktioniert die Prüfungsanmeldung an der Universität zu Köln?",
+      "answer": "Die Frage bezieht sich nicht direkt auf das Thema \"Wie sieht aktuell eure Arbeitswoche aus?\" oder \"Wie funktioniert die Prüfungsanmeldung an der Universität zu Köln?\", sondern eher auf die Rolle des Gründungsorts Köln für den Start-up-Projekt. Daher kann ich keine präzise Antwort geben, da die Frage nicht direkt mit dem bereitgestellten Text übereinstimmt.\n\nWenn du jedoch nach Informationen über die Prüfungsanmeldung an der Universität zu Köln suchst, kann ich dir sagen, dass diese Informationen in der Universitäts-Wissensdatenbank verfügbar sind. Dort findest du alle notwendigen Informationen zur Prüfungsanmeldung, einschließlich der Anmeldefristen, der erforderlichen Dokumente und den Schritten für die erfolgreiche Anmeldung.\n\nWenn du jedoch nach einer allgemeinen Antwort suchst, kann ich dir sagen, dass die Universität zu Köln eine umfassende Unterstützung bei der Prüfungsanmeldung bietet. Die Studierenden können sich an das zuständige Fachamt oder die zentrale Studienberatung wenden, um alle notwendigen Informationen und Unterstützung zu erhalten.\n\nWenn du jedoch nach einer spezifischen Antwort suchst, kann ich dir sagen, dass die Prüfungsanmeldung an der Universität zu Köln wie folgt funktioniert:\n\n* Die Anmeldefristen werden im Vorfeld der Prüfung bekannt gegeben.\n* Die Studierenden müssen sich online anmelden und die erforderlichen Dokumente hochladen.\n* Die Studierenden können sich auch persönlich bei dem zuständigen Fachamt oder der zentralen Studienberatung melden, um Unterstützung zu erhalten.\n\nIch hoffe, diese Informationen helfen dir weiter! Wenn du weitere Fragen hast, stehe ich gerne zur Verfügung.",
+      "context": "d mit vielen potenziellen Anbietern und Nutzern gesprochen.Mit sehr viel positivem Feedback und ersten Pilotkunden im Rücken haben wir uns dann entschieden, die Idee gemeinsam mit unserem Programmierer Timo umzusetzen.Für uns war immer klar, dass wir wenn möglich das Konzept in Köln umsetzen wollen. Wir haben alle hier studiert, fühlen uns mittlerweile in Köln zu Hause und haben hier ein großes Netzwerk aufgebaut. Wir kooperieren mit der Stadt Köln, sitzen mit unserem Startup imGateway Gründungsservice der Universität zu Kölnund arbeiten und forschen mit mehreren Professoren der Uni Köln und TH Köln zusammen. Köln ist ein sehr aufstrebender Gründungsort mit vielen unterstützenden Institutionen (IHK, Digital Hub, Cologne Startup Unit, hgnc) und wir sind bisher sehr zufrieden hier in Köln gestartet zu sein.Für uns war immer klar, dass wir das Konzept in Köln umsetzen wollen. Köln ist für seine Lebensfreude, Toleranz und Weltoffenheit bekannt. Die Metropolregion ist nicht nur als Wissenschaftsstandort interessant, sondern bietet Studierenden auch eine breite Palette von Kontaktmöglichkeiten zur beruflichen Praxis. Die Region Region über einen attraktiven und zukunftsfähigen Branchenmix, in dem unter anderem die Medien- und Kreativwirtschaft, Logistik und die Life Sciences deutschlandweit eine Schlüsselstellung einnehmen. Paco, deine künstliche Intelligenz zum Studium an der WiSo-Fakultät der Universität zu Köln, beantwortet dir jederzeit alle faktenbasierten Fragen zu deinem Wunschstudiengang! - Du suchst schnelle Infos zu, Zulassungsverfahren oder allgemeinen Fragen zur Universität zu Köln?Dann ist Paco genau das Richtige für dich! Wir bieten Ihnen eine breite Auswahl an Bachelorprogrammen in den Wirtschafts- und Sozialwissenschaften, die interdisziplinät miteinander verknüpft sind: 320px480px640pxBWL Bachelor 320px480px640pxVWL Bachelor 320px480px640pxBachelor Sozialwissenschaften 320px480px640pxBachelor Management, Economics & Social Sciences 320px480px640pxBachelor Wirtschaftsinformatik 320px480px640pxBachelor Gesundheitsökonomie 320px480px640pxLehramt Bachelor 320px480px640pxStudium Integrale Neben den Bachelorstudiengängen der WiSo-Fakultät gibt es auch weitere Studiengänge mit WiSo-Beteiligung. zum Seitenanfang Universitätsstr. 9150931 KölnTelefon +492214704558E-Mailalumni(at)wiso.uni-koeln.de Als VWLer versucht man ja immer die Welt etwas effizienter zu machen Welche Rolle hat für euch der Gründungsort Köln gespielt? Nachdem ich aus Kanada zurückgekommen bin, habe ich mit Pétur die Idee in Köln evaluiert und mit vielen potenziellen Anbietern und Nutzern gesprochen.Mit sehr viel positivem Feedback und ersten Pilotkunden im Rücken haben wir uns dann entschieden, die Idee gemeinsam mit unserem Programmierer Timo umzusetzen. Für uns war immer klar, dass wir wenn möglich das Konzept in Köln umsetzen wollen. Wir haben alle hier studiert, fühlen uns mittlerweile in Köln zu Hause und haben hier ein großes Netzwerk aufgebaut. Wir kooperieren mit der Stadt Köln, sitzen mit unserem Startup imGateway Gründungsservice der Universität zu Kölnund arbeiten und forschen mit mehreren Professoren der Uni Köln und TH Köln zusammen. Köln ist ein sehr aufstrebender Gründungsort mit vielen unterstützenden Institutionen (IHK, Digital Hub, Cologne Startup Unit, hgnc) und wir sind bisher sehr zufrieden hier in Köln gestartet zu sein. Für uns war immer klar, dass wir das Konzept in Köln umsetzen wollen. Wir haben alle hier studiert, fühlen uns mittlerweile in Köln zu Hause und haben hier ein großes Netzwerk aufgebaut. Wie sieht aktuell eure Arbeitswoche aus? n der Universität zu Köln, aus erster Hand von Wiso-Studierenden?Dann zögere nicht undChat with a student!Interdisziplinarität und PraxisbezugDie Universität zu Köln strebt in den lehrerbildenden Studiengängen Forschungsorientierung in Kombination mit einer lehramtsbezogenen Professionalisierung an. Die Basis hierfür legt das Bachelorstudium durch eine fundierte Auseinandersetzung mit fachwissenschaftlichen Grundlagen der Wirtschaftswissenschaften, begleitete praktische Anteile in der Schulpraxis sowie deren anschließenden reflektierten Auseinandersetzung im Rahmen der Wirtschaftsdidaktik. Ergänzt werden diese Kenntnisse durch Inhalte des weiteren Unterrichtsfaches.Da der Bachelorstudiengang Lehramt an Berufskollegs obligatorische Praxiselemente wie das Orientierungs- und Berufsfeldpraktikum innerhalb der Bildungswissenschaften beinhaltet, wird somit der Berufsbezug sichergestellt. Den lehramtsbezogenen Praxisphasen liegt der Ansatz des forschenden Lernens zu Grunde.",
+      "ground_truth": "Die Prüfungsanmeldung erfolgt online über KLIPS 2.0 innerhalb der Anmeldefristen. Studierende müssen sich selbständig zu den Prüfungen anmelden.",
+      "topic": "pruefung"
+    }
+  ]
+}

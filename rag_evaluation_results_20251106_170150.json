@@ -1,0 +1,74 @@
+{
+  "timestamp": "2025-11-06T17:01:50.199442",
+  "model": "llama3.1:8b",
+  "dataset_size": 3,
+  "metrics": {
+    "context_precision": 0.0,
+    "context_recall": 0.6666666666666666,
+    "faithfulness": 0.6166666666666667,
+    "answer_relevancy": 0.12550245373690924
+  },
+  "overall_score": 0.352,
+  "detailed_results": {
+    "per_question_analysis": [
+      {
+        "question": "Was benötige ich für die Bewerbung auf ein höheres Fachsemester im Master Informatik?",
+        "topic": "bewerbung",
+        "scores": {
+          "context_precision": 0.0,
+          "context_recall": 1.0,
+          "faithfulness": 0.75,
+          "answer_relevancy": 0.0
+        }
+      },
+      {
+        "question": "Welche Fristen gelten für Bewerbungen an der Universität zu Köln?",
+        "topic": "fristen",
+        "scores": {
+          "context_precision": 0.0,
+          "context_recall": 0.5,
+          "faithfulness": 0.5,
+          "answer_relevancy": 0.3765073612107277
+        }
+      },
+      {
+        "question": "Wie funktioniert die Prüfungsanmeldung an der Universität zu Köln?",
+        "topic": "pruefung",
+        "scores": {
+          "context_precision": 0.0,
+          "context_recall": 0.5,
+          "faithfulness": 0.6,
+          "answer_relevancy": 0.0
+        }
+      }
+    ],
+    "topic_analysis": {
+      "bewerbung": {
+        "context_precision": 0.0,
+        "context_recall": 1.0,
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.0
+      },
+      "fristen": {
+        "context_precision": 0.0,
+        "context_recall": 0.5,
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.3765073612107277
+      },
+      "pruefung": {
+        "context_precision": 0.0,
+        "context_recall": 0.5,
+        "faithfulness": 0.6,
+        "answer_relevancy": 0.0
+      }
+    },
+    "strengths": [],
+    "weaknesses": [],
+    "recommendations": [
+      "Überprüfen Sie die Qualität der Wissensdatenbank",
+      "Experimentieren Sie mit verschiedenen Chunk-Größen",
+      "Testen Sie erweiterte Embedding-Modelle",
+      "Optimieren Sie die Prompt-Templates"
+    ]
+  }
+}
