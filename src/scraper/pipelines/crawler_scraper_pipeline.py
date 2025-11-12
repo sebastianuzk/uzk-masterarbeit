@@ -202,6 +202,8 @@ async def run_crawler_scraper_pipeline(
         crawl_delay=crawl_delay,
         concurrent_requests=concurrent_requests
     )
+    # Add the new log_url_max_length attribute
+    crawler_config.log_url_max_length = 80
     
     crawler = WisoCrawler(crawler_config, html_cache=html_cache)
     discovered_urls = await crawler.crawl()
@@ -599,6 +601,14 @@ async def run_crawler_scraper_pipeline(
         failed_file = output_dir / "failed_urls.json"
         resilient_scraper.export_failed_urls(failed_file)
         logger.info(f"  ✓ Fehlgeschlagene URLs exportiert nach {failed_file}")
+    
+    # Crawler Failed URLs Report
+    if hasattr(crawler, 'get_failed_urls'):
+        crawler_failed_urls = crawler.get_failed_urls()
+        if crawler_failed_urls:
+            crawler_failed_file = output_dir / "crawler_failed_urls.json"
+            crawler.export_failed_urls(crawler_failed_file)
+            logger.info(f"  ✓ Crawler-fehlgeschlagene URLs exportiert nach {crawler_failed_file}")
     
     # Deduplication Report
     if deduplicator:

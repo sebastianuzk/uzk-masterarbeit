@@ -80,7 +80,13 @@ class HTMLContentCache:
 
     def _init_database(self):
         """Initialisiere SQLite-Datenbank für Metadaten."""
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+            # Optimierungen für Concurrency und Performance
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA cache_size=10000")
+            
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS html_cache (
                     url TEXT PRIMARY KEY,
@@ -126,18 +132,23 @@ class HTMLContentCache:
     def contains(self, url: str) -> bool:
         """Prüfe ob URL im Cache ist und noch gültig."""
         with self.lock:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute(
-                    "SELECT timestamp FROM html_cache WHERE url = ?", 
-                    (url,)
-                )
-                result = cursor.fetchone()
-                
-                if result:
-                    timestamp = result[0]
-                    age_days = (time.time() - timestamp) / (24 * 3600)
-                    return age_days <= self.max_age_days
-                
+            try:
+                with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+                    conn.execute("PRAGMA busy_timeout=10000")
+                    cursor = conn.execute(
+                        "SELECT timestamp FROM html_cache WHERE url = ?", 
+                        (url,)
+                    )
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        timestamp = result[0]
+                        age_days = (time.time() - timestamp) / (24 * 3600)
+                        return age_days <= self.max_age_days
+                    
+                    return False
+            except Exception as e:
+                logger.warning(f"Fehler bei Cache-Check für {url}: {e}")
                 return False
 
     def get(self, url: str) -> Optional[CachedHTMLEntry]:
@@ -151,60 +162,67 @@ class HTMLContentCache:
             CachedHTMLEntry oder None
         """
         with self.lock:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute("""
-                    SELECT file_path, content_type, status_code, headers, timestamp,
-                           content_length, encoding, etag, last_modified, cache_hash
-                    FROM html_cache WHERE url = ?
-                """, (url,))
-                
-                result = cursor.fetchone()
-                if not result:
-                    self.stats['misses'] += 1
-                    return None
-                
-                file_path, content_type, status_code, headers_json, timestamp, \
-                content_length, encoding, etag, last_modified, cache_hash = result
-                
-                # Prüfe Alter
-                age_days = (time.time() - timestamp) / (24 * 3600)
-                if age_days > self.max_age_days:
-                    self.stats['misses'] += 1
-                    return None
-                
-                # Lade Content
-                try:
-                    file_path_obj = Path(file_path)
-                    if not file_path_obj.exists():
+            try:
+                with sqlite3.connect(self.db_path, timeout=10.0) as conn:
+                    conn.execute("PRAGMA busy_timeout=10000")
+                    cursor = conn.execute("""
+                        SELECT file_path, content_type, status_code, headers, timestamp,
+                               content_length, encoding, etag, last_modified, cache_hash
+                        FROM html_cache WHERE url = ?
+                    """, (url,))
+                    
+                    result = cursor.fetchone()
+                    if not result:
                         self.stats['misses'] += 1
                         return None
                     
-                    with open(file_path_obj, 'rb') as f:
-                        compressed_data = f.read()
+                    file_path, content_type, status_code, headers_json, timestamp, \
+                    content_length, encoding, etag, last_modified, cache_hash = result
                     
-                    content = self._decompress_content(compressed_data)
-                    headers = json.loads(headers_json) if headers_json else {}
+                    # Prüfe Alter
+                    age_days = (time.time() - timestamp) / (24 * 3600)
+                    if age_days > self.max_age_days:
+                        self.stats['misses'] += 1
+                        return None
                     
-                    self.stats['hits'] += 1
-                    
-                    return CachedHTMLEntry(
-                        url=url,
-                        content=content,
-                        content_type=content_type or 'text/html',
-                        status_code=status_code or 200,
-                        headers=headers,
-                        timestamp=timestamp,
-                        content_length=content_length or len(content),
-                        encoding=encoding or 'utf-8',
-                        etag=etag,
-                        last_modified=last_modified,
-                        cache_hash=cache_hash
-                    )
-                    
-                except Exception as e:
-                    logger.error(f"Fehler beim Laden von Cache-Content für {url}: {e}")
-                    self.stats['misses'] += 1
-                    return None
+                    # Lade Content
+                    try:
+                        file_path_obj = Path(file_path)
+                        if not file_path_obj.exists():
+                            self.stats['misses'] += 1
+                            return None
+                        
+                        with open(file_path_obj, 'rb') as f:
+                            compressed_data = f.read()
+                        
+                        content = self._decompress_content(compressed_data)
+                        headers = json.loads(headers_json) if headers_json else {}
+                        
+                        self.stats['hits'] += 1
+                        
+                        return CachedHTMLEntry(
+                            url=url,
+                            content=content,
+                            content_type=content_type or 'text/html',
+                            status_code=status_code or 200,
+                            headers=headers,
+                            timestamp=timestamp,
+                            content_length=content_length or len(content),
+                            encoding=encoding or 'utf-8',
+                            etag=etag,
+                            last_modified=last_modified,
+                            cache_hash=cache_hash
+                        )
+                        
+                    except Exception as e:
+                        logger.error(f"Fehler beim Laden von Cache-Content für {url}: {e}")
+                        self.stats['misses'] += 1
+                        return None
+                        
+            except Exception as e:
+                logger.error(f"Fehler bei DB-Zugriff für {url}: {e}")
+                self.stats['misses'] += 1
+                return None
 
     def put(self, url: str, content: str, content_type: str = 'text/html', 
             status_code: int = 200, headers: Optional[Dict[str, str]] = None,
@@ -234,17 +252,6 @@ class HTMLContentCache:
                 file_path = self._generate_file_path(url)
                 headers = headers or {}
                 
-                # Prüfe auf Deduplizierung
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.execute(
-                        "SELECT url FROM html_cache WHERE cache_hash = ? AND url != ?",
-                        (cache_hash, url)
-                    )
-                    duplicate = cursor.fetchone()
-                    if duplicate:
-                        logger.debug(f"Content bereits vorhanden (Hash-Duplikat): {duplicate[0]}")
-                        self.stats['deduplicated'] += 1
-                
                 # Erstelle Verzeichnisstruktur
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 
@@ -253,8 +260,23 @@ class HTMLContentCache:
                 with open(file_path, 'wb') as f:
                     f.write(compressed_data)
                 
-                # Speichere Metadaten in DB
-                with sqlite3.connect(self.db_path) as conn:
+                # Alle DB-Operationen in einer einzigen Transaktion
+                with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+                    # Setze WAL-Mode für bessere Concurrency
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.execute("PRAGMA busy_timeout=30000")
+                    
+                    # Prüfe auf Deduplizierung
+                    cursor = conn.execute(
+                        "SELECT url FROM html_cache WHERE cache_hash = ? AND url != ?",
+                        (cache_hash, url)
+                    )
+                    duplicate = cursor.fetchone()
+                    if duplicate:
+                        logger.debug(f"Content bereits vorhanden (Hash-Duplikat): {duplicate[0]}")
+                        self.stats['deduplicated'] += 1
+                    
+                    # Speichere Metadaten in DB
                     conn.execute("""
                         INSERT OR REPLACE INTO html_cache 
                         (url, file_path, content_type, status_code, headers, timestamp,
