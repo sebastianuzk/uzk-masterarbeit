@@ -2,6 +2,8 @@
 LLM RAG Quality Tests - Testet die Qualität der RAG-basierten Antworten
 """
 import pytest
+
+pytestmark = pytest.mark.llm  # Markiere alle Tests in dieser Datei als LLM-Tests
 import sys
 import os
 from typing import List, Dict
@@ -20,7 +22,7 @@ class TestLLMRAGQuality:
     
     @pytest.fixture(scope="class")
     def agent(self):
-        """Agent-Fixture für alle Tests"""
+        """Agent-Fixture für alle Tests mit kleinem, schnellem Modell"""
         try:
             import requests
             response = requests.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3)
@@ -29,7 +31,12 @@ class TestLLMRAGQuality:
         except:
             pytest.skip("Ollama-Server nicht erreichbar")
         
-        return ReactAgent()
+        # Verwende kleines Modell für schnelle Tests
+        original_model = settings.OLLAMA_MODEL
+        settings.OLLAMA_MODEL = "qwen2.5:0.5b"
+        agent = ReactAgent()
+        settings.OLLAMA_MODEL = original_model
+        return agent
     
     @pytest.fixture(scope="class")
     def rag_tool(self):

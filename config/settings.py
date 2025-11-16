@@ -16,9 +16,10 @@ class Settings:
     
     # LLM Konfiguration
     TEMPERATURE = 0.7
+    REQUEST_TIMEOUT = 30  # Sekunden für Ollama-Anfragen
     
     # Agent Konfiguration
-    MAX_ITERATIONS = 10
+    MAX_ITERATIONS = 5  # Balance zwischen Funktionalität und Geschwindigkeit
     MEMORY_SIZE = 100
     
     # Tool Konfiguration

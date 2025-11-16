@@ -30,17 +30,26 @@ class TestReactAgent(unittest.TestCase):
     def test_agent_initialization(self):
         """Teste Agent-Initialisierung"""
         try:
+            original_model = settings.OLLAMA_MODEL
+            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
+            
             agent = ReactAgent()
             self.assertIsNotNone(agent)
             self.assertIsNotNone(agent.llm)
             self.assertIsNotNone(agent.tools)
             self.assertIsNotNone(agent.agent)
+            
+            settings.OLLAMA_MODEL = original_model
         except Exception as e:
+            settings.OLLAMA_MODEL = original_model
             self.fail(f"Agent-Initialisierung fehlgeschlagen: {str(e)}")
     
     def test_available_tools(self):
         """Teste verfügbare Tools"""
         try:
+            original_model = settings.OLLAMA_MODEL
+            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
+            
             agent = ReactAgent()
             tools = agent.get_available_tools()
             
@@ -55,13 +64,18 @@ class TestReactAgent(unittest.TestCase):
             
             # E-Mail-Tool sollte immer verfügbar sein
             self.assertIn("send_email", tools)
-                
+            
+            settings.OLLAMA_MODEL = original_model
         except Exception as e:
+            settings.OLLAMA_MODEL = original_model
             self.fail(f"Tool-Test fehlgeschlagen: {str(e)}")
     
     def test_memory_management(self):
         """Teste Memory-Management"""
         try:
+            original_model = settings.OLLAMA_MODEL
+            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
+            
             agent = ReactAgent()
             
             # Initiales Memory sollte leer sein
@@ -73,12 +87,18 @@ class TestReactAgent(unittest.TestCase):
             memory_info = agent.get_memory_summary()
             self.assertEqual(memory_info["total_messages"], 0)
             
+            settings.OLLAMA_MODEL = original_model
         except Exception as e:
+            settings.OLLAMA_MODEL = original_model
             self.fail(f"Memory-Test fehlgeschlagen: {str(e)}")
     
     def test_simple_chat(self):
-        """Teste einfache Chat-Funktionalität"""
+        """Teste einfache Chat-Funktionalität mit kleinem, schnellem Modell"""
         try:
+            # Temporär kleineres Modell für schnellere Tests verwenden
+            original_model = settings.OLLAMA_MODEL
+            settings.OLLAMA_MODEL = "qwen2.5:0.5b"  # Sehr schnelles, kleines Modell
+            
             agent = ReactAgent()
             
             # Einfache Frage stellen
@@ -91,12 +111,20 @@ class TestReactAgent(unittest.TestCase):
             memory_info = agent.get_memory_summary()
             self.assertGreater(memory_info["total_messages"], 0)
             
+            # Original-Modell wiederherstellen
+            settings.OLLAMA_MODEL = original_model
+            
         except Exception as e:
+            # Original-Modell wiederherstellen auch bei Fehler
+            settings.OLLAMA_MODEL = original_model
             self.fail(f"Chat-Test fehlgeschlagen: {str(e)}")
     
     def test_email_tool_integration(self):
         """Teste E-Mail-Tool-Integration im Agent"""
         try:
+            original_model = settings.OLLAMA_MODEL
+            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
+            
             agent = ReactAgent()
             
             # Überprüfe, dass E-Mail-Tool geladen wurde
@@ -112,12 +140,17 @@ class TestReactAgent(unittest.TestCase):
             self.assertIsNotNone(email_tool.description)
             self.assertIn("E-Mail", email_tool.description)
             
+            settings.OLLAMA_MODEL = original_model
         except Exception as e:
+            settings.OLLAMA_MODEL = original_model
             self.fail(f"E-Mail-Tool-Integration-Test fehlgeschlagen: {str(e)}")
     
     def test_agent_system_prompt_contains_email_info(self):
         """Teste, dass System-Prompt E-Mail-Informationen enthält"""
         try:
+            original_model = settings.OLLAMA_MODEL
+            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
+            
             agent = ReactAgent()
             
             # Da wir nicht direkt auf system_prompt zugreifen können,
@@ -129,7 +162,9 @@ class TestReactAgent(unittest.TestCase):
             email_tools = [tool for tool in agent.tools if tool.name == "send_email"]
             self.assertGreater(len(email_tools), 0)
             
+            settings.OLLAMA_MODEL = original_model
         except Exception as e:
+            settings.OLLAMA_MODEL = original_model
             self.fail(f"System-Prompt-Test fehlgeschlagen: {str(e)}")
 
 
