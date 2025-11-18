@@ -6,9 +6,10 @@ Greift auf die vom Web-Scraper erstellte ChromaDB-Vectordatenbank zu.
 """
 
 import os
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from langchain.tools import BaseTool
 from pydantic import Field
+from langsmith import traceable
 
 # Import hyperparameters
 try:
@@ -33,6 +34,88 @@ class UniversityRAGTool(BaseTool):
         "Nutze dieses Tool für spezifische Uni-Fragen."
     )
     
+    @traceable(run_type="retriever")
+    def _retrieve_documents(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Führt eine Suche in der Universitäts-Vectordatenbank durch.
+        
+        Args:
+            query: Die Suchanfrage des Benutzers
+            
+        Returns:
+            Relevante Informationen aus der Wissensdatenbank
+        """
+        import chromadb
+        from pathlib import Path
+        
+        # Verbindung zur ChromaDB
+        vector_db_paths = [
+            Path("data/vector_db").resolve(),
+            Path("src/scraper/vector_db").resolve()
+        ]
+        
+        vector_db_path = None
+        for path in vector_db_paths:
+            if path.exists():
+                vector_db_path = path
+                break
+        
+        if vector_db_path is None:
+            return []
+        
+        client = chromadb.PersistentClient(path=str(vector_db_path))
+        collections = client.list_collections()
+        available_collections = [c.name for c in collections]
+        
+        if not available_collections:
+            return []
+        
+        # Durchsuche alle Collections
+        all_results = []
+        
+        for collection_name in available_collections:
+            try:
+                collection = client.get_collection(name=collection_name)
+                results = collection.query(
+                    query_texts=[query],
+                    n_results=3
+                )
+                
+                if results['documents'] and results['documents'][0]:
+                    documents = results['documents'][0]
+                    metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(documents)
+                    distances = results['distances'][0] if results['distances'] else [0] * len(documents)
+                    
+                    for doc, metadata, distance in zip(documents, metadatas, distances):
+                        enhanced_metadata = metadata.copy() if metadata else {}
+                        enhanced_metadata['collection'] = collection_name
+                        enhanced_metadata['distance'] = float(distance)
+                        enhanced_metadata['relevance_score'] = float(max(0, 1 - distance))
+                        
+                        all_results.append({
+                            'document': doc,
+                            'metadata': enhanced_metadata,
+                            'distance': distance
+                        })
+            except Exception as e:
+                print(f"Warnung: Fehler beim Zugriff auf Collection '{collection_name}': {str(e)}")
+                continue
+        
+        # Sortiere nach Relevanz und nehme Top-K
+        all_results.sort(key=lambda x: x['distance'])
+        top_results = all_results[:RAG_SEARCH_RESULTS]
+        
+        # Konvertiere zu LangSmith-Format (WICHTIG für korrektes Tracing!)
+        langsmith_docs = []
+        for result in top_results:
+            langsmith_docs.append({
+                "page_content": result['document'],
+                "type": "Document",
+                "metadata": result['metadata']
+            })
+        
+        return langsmith_docs
+    
     def _run(self, query: str) -> str:
         """
         Führt eine Suche in der Universitäts-Vectordatenbank durch.
@@ -44,123 +127,41 @@ class UniversityRAGTool(BaseTool):
             Relevante Informationen aus der Wissensdatenbank
         """
         try:
-            # ChromaDB direkt importieren und verwenden
-            import chromadb
-            from pathlib import Path
+            # Dokumente abrufen (mit LangSmith Tracing via @traceable Decorator)
+            retrieved_docs = self._retrieve_documents(query)
             
-            # Verbindung zur ChromaDB mit absolutem Pfad
-            # Try both possible locations
-            vector_db_paths = [
-                Path("data/vector_db").resolve(),
-                Path("src/scraper/vector_db").resolve()
-            ]
-            
-            vector_db_path = None
-            for path in vector_db_paths:
-                if path.exists():
-                    vector_db_path = path
-                    break
-            
-            if vector_db_path is None:
-                return (
-                    f"❌ Universitäts-Wissensdatenbank nicht gefunden. "
-                    f"Gesucht in: {', '.join(str(p) for p in vector_db_paths)}. "
-                    f"Bitte stellen Sie sicher, dass die Daten vorher mit dem "
-                    f"Web-Scraper erfasst wurden."
-                )
-            
-            client = chromadb.PersistentClient(path=str(vector_db_path))
-            
-            # Alle verfügbaren Collections abrufen
-            collections = client.list_collections()
-            available_collections = [c.name for c in collections]
-            
-            if not available_collections:
-                return (
-                    f"❌ Keine Universitäts-Wissensdatenbank gefunden. "
-                    f"Bitte stellen Sie sicher, dass die Daten vorher mit dem "
-                    f"Web-Scraper erfasst wurden."
-                )
-            
-            # Durchsuche alle verfügbaren Collections
-            all_results = []
-            searched_collections = []
-            
-            for collection_name in available_collections:
-                try:
-                    collection = client.get_collection(name=collection_name)
-                    
-                    # Suche in dieser Collection durchführen
-                    results = collection.query(
-                        query_texts=[query],
-                        n_results=3
-                    )
-                    
-                    if results['documents'] and results['documents'][0]:
-                        # Ergebnisse mit Collection-Info erweitern
-                        documents = results['documents'][0]
-                        metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(documents)
-                        distances = results['distances'][0] if results['distances'] else [0] * len(documents)
-                        
-                        for doc, metadata, distance in zip(documents, metadatas, distances):
-                            # Erweitere Metadaten um Collection-Info
-                            enhanced_metadata = metadata.copy() if metadata else {}
-                            enhanced_metadata['collection'] = collection_name
-                            
-                            all_results.append({
-                                'document': doc,
-                                'metadata': enhanced_metadata,
-                                'distance': distance
-                            })
-                    
-                    searched_collections.append(collection_name)
-                    
-                except Exception as e:
-                    print(f"Warnung: Fehler beim Zugriff auf Collection '{collection_name}': {str(e)}")
-                    continue
-            
-            if not all_results:
+            if not retrieved_docs:
                 return (
                     f"❌ Keine relevanten Informationen zu '{query}' gefunden. "
-                    f"Durchsuchte Collections: {searched_collections}. "
                     f"Möglicherweise sind noch keine Daten zu diesem Thema "
                     f"in der Universitäts-Wissensdatenbank verfügbar."
                 )
             
-            # Sortiere alle Ergebnisse nach Relevanz (niedrigere Distance = höhere Relevanz)
-            all_results.sort(key=lambda x: x['distance'])
-            
-            # Nehme die besten Ergebnisse (maximal aus Hyperparametern)
-            best_results = all_results[:RAG_SEARCH_RESULTS]
-            
-            # Ergebnisse formatieren
+            # Ergebnisse formatieren für Antwort
             formatted_results = []
+            searched_collections = set()
             
-            for i, result in enumerate(best_results, 1):
-                doc = result['document']
-                metadata = result['metadata']
-                distance = result['distance']
+            for i, doc_dict in enumerate(retrieved_docs, 1):
+                page_content = doc_dict.get('page_content', '')
+                metadata = doc_dict.get('metadata', {})
                 
-                # Relevanz-Score (niedrigere Distance = höhere Relevanz)
-                relevance = max(0, 1 - distance)
+                searched_collections.add(metadata.get('collection', 'unbekannt'))
                 
-                # Nur Ergebnisse mit ausreichender Relevanz
-                # Niedrigerer Schwellwert für bessere Recall mit sentence-transformers
-                if relevance > 0.1:  # Angepasster Schwellwert
+                relevance = metadata.get('relevance_score', 0)
+                
+                if relevance > 0.1:
                     source_info = ""
                     collection_info = f" [aus: {metadata.get('collection', 'unbekannt')}]"
                     
-                    if metadata:
-                        title = metadata.get('title', '')
-                        source_url = metadata.get('source_url', '')
-                        if title:
-                            source_info = f" (Quelle: {title})"
-                        elif source_url:
-                            source_info = f" (Quelle: {source_url})"
+                    title = metadata.get('title', '')
+                    source_url = metadata.get('source_url', '')
+                    if title:
+                        source_info = f" (Quelle: {title})"
+                    elif source_url:
+                        source_info = f" (Quelle: {source_url})"
                     
-                    # Sicherstellen dass doc nicht None ist
-                    doc_text = doc.strip() if doc and isinstance(doc, str) else ""
-                    if doc_text:  # Nur hinzufügen wenn Text vorhanden
+                    doc_text = page_content.strip() if page_content else ""
+                    if doc_text:
                         formatted_results.append(
                             f"📄 **Information {i}**{source_info}{collection_info}:\n{doc_text}"
                         )

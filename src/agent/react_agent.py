@@ -49,6 +49,7 @@ class ReactAgent:
 WICHTIGE REGELN:
 1. Führe NORMALE UNTERHALTUNGEN, ohne automatisch nach Informationen zu suchen
 2. Verwende Tools NUR wenn explizit nach aktuellen Informationen, Fakten oder Recherche gefragt wird
+3. Nutze zur Beantwortung von Fragen über die Universität zu Köln / WiSo-Fakultät sowie studiumsbezogene Themen das Universitäts-Wissensdatenbank-Tool
 3. Bei Begrüßungen, Smalltalk oder persönlichen Fragen antworte direkt freundlich
 4. Wenn jemand seinen Namen sagt, begrüße ihn höflich - suche NICHT nach dem Namen!
 5. Bei Antworten immer die vom genutzten Tool mitgelieferten vollständigen URLs angeben
