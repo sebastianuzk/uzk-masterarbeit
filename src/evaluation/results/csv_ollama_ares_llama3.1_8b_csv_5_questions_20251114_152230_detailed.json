@@ -1,0 +1,135 @@
+{
+  "run_id": "csv_ollama_ares_llama3.1_8b_csv_5_questions_20251114_152230",
+  "timestamp": "2025-11-14T15:22:30.377275",
+  "evaluation_config": {
+    "timestamp": "2025-11-14T15:22:30.377275",
+    "evaluation_type": "csv_ollama_ares",
+    "model_name": "llama3.1:8b",
+    "test_source": "csv_5_questions",
+    "total_questions": 5,
+    "evaluation_duration_minutes": 3.3137794499999997,
+    "system_info": {
+      "python_version": "3.13",
+      "platform": "Windows"
+    }
+  },
+  "questions": [
+    "Welche Studienbereiche deckt der Menüpunkt „Studium“ der WiSo-Fakultät ab?",
+    "Wodurch zeichnet sich das Studium an der WiSo-Fakultät besonders aus?",
+    "Welche Kosten fallen für reguläre Studienprogramme der WiSo-Fakultät an?",
+    "Wie wird die Qualität der WiSo-Absolvent:innen in Rankings und durch Arbeitgebereinschätzungen beschrieben?",
+    "Wie ist die internationale Ausrichtung der WiSo-Fakultät beschrieben?"
+  ],
+  "responses": [
+    "Der Menüpunkt „Studium“ der WiSo-Fakultät umfasst folgende Bereiche:\n\n1. **Studium Integrale**  \n   - Ein Modul mit 12 Leistungspunkten, das interdisziplinäre Kompetenzen fördert (z. B. gesellschaftliche Themen, wissenschaftliches Arbeiten, Literaturrecherche).  \n   - Angebote wie Ringvorlesungen, Workshops und Sprachkurse.  \n   - Praktika und qualifizierende Auslandsaufenthalte können angerechnet werden.  \n   *(Quellen: b_mhb_po2021_mes, b_mhb_po2021_sowi)*\n\n2. **Extracurriculare Angebote**  \n   - Kurse des **Professional Centers** und **SchreibArt Programms** zur Stärkung beruflicher Kompetenzen.  \n   - **Wissenschaftliche Arbeitstechniken** für Wirtschafts- und Sozialwissenschaften.  \n   *(Quelle: b_mhb_po2021_bk1)*\n\n3. **Masterstudiengänge**  \n   - Englischsprachige Masterprogramme wie der **CEMS Master in International Management** sowie Double-Degree-Programme.  \n   - Fokus auf exzellente Lehre, Forschung und Karrierechancen.  \n   *(Quellen: Virtueller Infotag – WiSo-Fakultät)*\n\n4. **Studienberatung und Services**  \n   - Unterstützung durch das **WiSo Career Office**, Zulassungsverfahren und Angebote für internationale Studierende.  \n   *(Quellen: Virtueller Infotag – WiSo-Fakultät)*\n\nDiese Bereiche werden im Rahmen des „Studium“-Menüpunkts integriert, um eine breite Qualifizierung und individuelle Förderung zu ermöglichen. 🎓",
+    "Das Studium an der WiSo-Fakultät der Universität zu Köln zeichnet sich durch mehrere einzigartige Merkmale aus, die eine breite Qualifizierung und praktische Relevanz gewährleisten:\n\n1. **Interdisziplinäre Kompetenzen**  \n   - Das **Studium Integrale** fördert interdisziplinäre Fähigkeiten (z. B. gesellschaftliche Themen, wissenschaftliches Arbeiten) und verbindet Wirtschafts- und Sozialwissenschaften.  \n   - Angebote wie Ringvorlesungen, Workshops und Sprachkurse stärken die interkulturelle und methodische Grundlage.  \n   *(Quellen: b_mhb_po2021_mes, b_mhb_po2021_sowi)*\n\n2. **Internationale Ausrichtung**  \n   - Englischsprachige Masterstudiengänge wie der **CEMS Master in International Management** sowie Double-Degree-Programme (z. B. mit Partnerhochschulen in Europa und Asien) ermöglichen globale Karriereperspektiven.  \n   - Studienplätze im Ausland (z. B. via Erasmus+ oder Partnerprogrammen) sind oft direkt im Studienplan integriert.  \n   *(Quellen: Virtueller Infotag – WiSo-Fakultät)*\n\n3. **Praxisnahe Angebote**  \n   - **Praktika** und **qualifizierende Auslandsaufenthalte** (z. B. via „Studium Integrale“) sind oft angerechnet und fördern berufliche Kompetenzen.  \n   - Das **WiSo Career Office** bietet individuelle Beratung zu Bewerbungen, Praktika und Karrierechancen.  \n   *(Quellen: Virtueller Infotag – WiSo-Fakultät)*\n\n4. **Extracurriculare Stärken**  \n   - Kurse des **Professional Centers** und das **SchreibArt Programm** schulen wissenschaftliche Arbeitstechniken und berufliche Soft Skills.  \n   - Spezielle Angebote für internationale Studierende (z. B. Sprachkurse, Kulturworkshops) fördern Integration und Selbstständigkeit.  \n   *(Quelle: b_mhb_po2021_bk1)*\n\n5. **Forschungsnahe Lehre**  \n   - Die Verbindung von Lehre und Forschung wird durch aktuelle Themen aus den Fakultätsbereichen (z. B. Nachhaltigkeit, Digitalisierung, soziale Gerechtigkeit) gestärkt.  \n   - Studierende profitieren von Expertise renommierter Professuren und interdisziplinären Projekten.  \n\nDiese Kombination aus interdisziplinärer Ausrichtung, internationaler Perspektive und praxisorientierten Angeboten macht das Studium an der WiSo-Fakultät besonders attraktiv. 🌍📚",
+    "Die Kosten für reguläre Studienprogramme an der WiSo-Fakultät der Universität zu Köln sind in der Regel **kostenlos**, da die Universität zu Köln eine **öffentliche Hochschule** ist und keine Studiengebühren für reguläre Studiengänge erhebt. Allerdings können **semestertaktige Gebühren** (z. B. für die Nutzung von Bibliotheken, Veranstaltungsraum oder digitale Ressourcen) anfallen. \n\nFür detaillierte Informationen zu aktuellen Gebühren und Finanzierungsmöglichkeiten (z. B. BAföG, Stipendien) können Sie folgende Quellen nutzen:\n\n1. **Universitätskosten**  \n   - [https://www.uni-koeln.de/studium/kosten](https://www.uni-koeln.de/studium/kosten)  \n   *(Quelle: Universitätswebsite – Kosten für Studierende)*\n\n2. **Finanzierungsmöglichkeiten**  \n   - [https://www.uni-koeln.de/studium/finanzierung](https://www.uni-koeln.de/studium/finanzierung)  \n   *(Quelle: Universitätswebsite – BAföG, Stipendien, Förderprogramme)*\n\n3. **Studienordnungen**  \n   - Die Studienordnungen der einzelnen Studiengänge (z. B. Bachelor/Wirtschafts- und Sozialwissenschaften) enthalten oft Details zu Kosten und Beiträgen.  \n\nHinweis: Die genauen Gebühren können je nach Studiengang und Semester variieren. Für individuelle Beratung kontaktieren Sie das **Studierendenreferat** oder das **WiSo Career Office**.  \n\nFalls Sie spezifische Fragen zu Gebühren für Masterstudiengänge oder internationale Studierende haben, können Sie weitere Details angeben – ich helfe gern! 💡",
+    "Die Qualität der WiSo-Absolvent:innen der Universität zu Köln wird in Rankings und durch Arbeitgebereinschätzungen auf verschiedene Weise beschrieben:\n\n### 1. **Rankings und Reputation**  \n   - **Deutsche Rankings**: Die Universität zu Köln ist in nationalen Rankings wie dem **Excellence-Initiative-Check** oder dem **CHE Hochschulranking** als **kosteneffiziente Hochschule mit starken interdisziplinären Programmen** bewertet. Die WiSo-Fakultät wird insbesondere für ihre **praxisnahe Ausrichtung** und **internationale Verankerung** (z. B. durch Masterstudiengänge wie den **CEMS Master**) gelobt.  \n   - **Internationale Anerkennung**: Die Studiengänge der WiSo-Fakultät (z. B. Bachelor/Wirtschafts- und Sozialwissenschaften) sind in **internationale Rankings** wie dem **QS Top 50 Under 50** oder **Times Higher Education** oft als **kosteneffiziente Alternative zu prestigeträchtigen Universitäten** hervorgehoben.  \n\n### 2. **Arbeitgebereinschätzungen**  \n   - **Karrierechancen**: Die **WiSo Career Office**-Berichte und Studien (z. B. „Karriereberichte der WiSo-Fakultät“) zeigen, dass WiSo-Absolvent:innen **sehr gute Chancen auf dem Arbeitsmarkt** haben, insbesondere in Bereichen wie **Banken, Consulting, NGOs, Politik und Forschung**.  \n   - **Arbeitgebereinschätzungen**: Unternehmen und Institutionen bewerten WiSo-Absolvent:innen oft als **praxisorientiert, interkultural kompetent und analytisch stark**. Dies wird durch die **Kombination aus wirtschaftswissenschaftlichen und sozialwissenschaftlichen Kompetenzen** sowie **internationalen Praktika und Auslandsaufenthalten** gestärkt.  \n   - **Forschungsnahe Ausrichtung**: Die Verbindung von Lehre und Forschung (z. B. durch Teilnahme an interdisziplinären Projekten) wird von Arbeitgebern als **Vorteil für Innovation und Problemlösung** angesehen.  \n\n### 3. **Zusätzliche Faktoren**  \n   - **Internationalität**: Die Vielfalt der Studierenden und die internationale Ausrichtung der Studiengänge (z. B. durch Double-Degree-Programme) tragen zur **kulturellen und methodischen Vielfalt** der Absolvent:innen bei.  \n   - **Berufsbegleitung**: Die **Studienberatung und Karrierebegleitung** durch das WiSo Career Office sowie das **Professional Center** stärken die **berufliche Orientierung** und **Soft Skills** der Studierenden.  \n\n### 4. **Aktuelle Quellen**  \n   - **Karriereberichte**: [https://www.wiso.uni-koeln.de/karriere](https://www.wiso.uni-koeln.de/karriere)  \n   - **Arbeitgebereinschätzungen**: [https://www.wiso.uni-koeln.de/berufswahl](https://www.wiso.uni-koeln.de/berufswahl)  \n   - **Rankings**: [https://www.uni-koeln.de/ranking](https://www.uni-koeln.de/ranking)  \n\nDie Kombination aus **praxisorientierter Ausbildung, internationaler Perspektive und starken Netzwerken** macht WiSo-Absolvent:innen zu attraktiven Kandidat:innen im Arbeitsmarkt. Für detaillierte Daten zu aktuellen Bewertungen oder Einzelergebnissen kann ich jedoch nicht recherchieren – hier sind die genannten Webseiten die besten Quellen. 📈💼",
+    "Die internationale Ausrichtung der WiSo-Fakultät der Universität zu Köln wird durch eine **vielfältige und global verankerte Struktur** geprägt, die sowohl im Studienangebot als auch in der Forschung und der Karrierebegleitung sichtbar ist. Hier sind die zentralen Aspekte:\n\n### 1. **Internationale Studiengänge und Partnerprogramme**  \n   - **Englischsprachige Masterstudiengänge**: Die Fakultät bietet Programme wie den **CEMS Master in International Management** an, der mit Partnerhochschulen in Europa, Nordamerika und Asien zusammenarbeitet.  \n   - **Double-Degree-Programme**: Studierende können durch Partneruniversitäten (z. B. in Frankreich, Großbritannien, China) doppelte Abschlüsse erwerben.  \n   - **Erasmus+-Programm**: Die Fakultät ist stark in internationalen Austauschprogrammen engagiert, wobei Auslandsaufenthalte oft direkt im Studienplan integriert sind.  \n   *(Quellen: [https://www.wiso.uni-koeln.de/studium](https://www.wiso.uni-koeln.de/studium), [https://www.uni-koeln.de/international](https://www.uni-koeln.de/international))*\n\n### 2. **Sprach- und Kulturkompetenzen**  \n   - **Sprachkurse**: Die Fakultät bietet umfassende Sprachkurse (z. B. Englisch, Französisch, Spanisch) an, um internationale Kommunikationsfähigkeit zu stärken.  \n   - **Kulturworkshops**: Angebote zur interkulturellen Kommunikation und zur Integration internationaler Studierender fördern ein globales Denken.  \n\n### 3. **Globaler Forschungsbezug**  \n   - **Forschungsprojekte**: Die Fakultät engagiert sich in internationalen Forschungsprojekten, z. B. zu Themen wie Nachhaltigkeit, Digitalisierung oder globalen Ungleichheiten.  \n   - **Gastwissenschaftler und -wissenschaftlerinnen**: Expert:innen aus aller Welt arbeiten an der Fakultät, was die interdisziplinäre und internationale Ausrichtung unterstreicht.  \n\n### 4. **Karriere und Netzwerke**  \n   - **Internationale Karrierechancen**: Die Fakultät betont die Vorbereitung auf globale Arbeitsmärkte, z. B. durch Praktika im Ausland und Karriereberatung für internationale Absolvent:innen.  \n   - **Netzwerke**: Partnerhochschulen und Unternehmen aus verschiedenen Ländern unterstützen die Karriereperspektiven der Studierenden.  \n\n### 5. **Zusätzliche Angebote**  \n   - **International Office**: Das Office unterstützt Studierende bei der Bewerbung, Integration und Sprachförderung.  \n   - **Virtuelle Infotage**: Die Fakultät bietet Angebote wie den „Virtuellen Infotag“ an, um internationale Studierende zu erreichen und Informationen zu verbreiten.  \n\nDie internationale Ausrichtung der WiSo-Fakultät zielt darauf ab, Studierende auf globale Herausforderungen vorzubereiten und gleichzeitig die Vielfalt und Interkulturalität der Hochschule zu stärken. Für detaillierte Informationen zu aktuellen Partnerprogrammen oder Austauschmöglichkeiten können Sie die genannten Webseiten besuchen. 🌍✨"
+  ],
+  "detailed_results": [
+    {
+      "question": "Welche Studienbereiche deckt der Menüpunkt „Studium“ der WiSo-Fakultät ab?",
+      "response": "Der Menüpunkt „Studium“ der WiSo-Fakultät umfasst folgende Bereiche:\n\n1. **Studium Integrale**  \n   - Ein Modul mit 12 Leistungspunkten, das interdisziplinäre Kompetenzen fördert (z. B. gesellschaftliche Themen, wissenschaftliches Arbeiten, Literaturrecherche).  \n   - Angebote wie Ringvorlesungen, Workshops und Sprachkurse.  \n   - Praktika und qualifizierende Auslandsaufenthalte können angerechnet werden.  \n   *(Quellen: b_mhb_po2021_mes, b_mhb_po2021_sowi)*\n\n2. **Extracurriculare Angebote**  \n   - Kurse des **Professional Centers** und **SchreibArt Programms** zur Stärkung beruflicher Kompetenzen.  \n   - **Wissenschaftliche Arbeitstechniken** für Wirtschafts- und Sozialwissenschaften.  \n   *(Quelle: b_mhb_po2021_bk1)*\n\n3. **Masterstudiengänge**  \n   - Englischsprachige Masterprogramme wie der **CEMS Master in International Management** sowie Double-Degree-Programme.  \n   - Fokus auf exzellente Lehre, Forschung und Karrierechancen.  \n   *(Quellen: Virtueller Infotag – WiSo-Fakultät)*\n\n4. **Studienberatung und Services**  \n   - Unterstützung durch das **WiSo Career Office**, Zulassungsverfahren und Angebote für internationale Studierende.  \n   *(Quellen: Virtueller Infotag – WiSo-Fakultät)*\n\nDiese Bereiche werden im Rahmen des „Studium“-Menüpunkts integriert, um eine breite Qualifizierung und individuelle Förderung zu ermöglichen. 🎓",
+      "scores": {
+        "context_relevance": 0.0,
+        "answer_relevance": 1.0,
+        "answer_faithfulness": 1.0,
+        "overall_score": 0.6666666666666666
+      },
+      "metadata": {
+        "question_index": 0,
+        "evaluation_source": "ARES"
+      }
+    },
+    {
+      "question": "Wodurch zeichnet sich das Studium an der WiSo-Fakultät besonders aus?",
+      "response": "Das Studium an der WiSo-Fakultät der Universität zu Köln zeichnet sich durch mehrere einzigartige Merkmale aus, die eine breite Qualifizierung und praktische Relevanz gewährleisten:\n\n1. **Interdisziplinäre Kompetenzen**  \n   - Das **Studium Integrale** fördert interdisziplinäre Fähigkeiten (z. B. gesellschaftliche Themen, wissenschaftliches Arbeiten) und verbindet Wirtschafts- und Sozialwissenschaften.  \n   - Angebote wie Ringvorlesungen, Workshops und Sprachkurse stärken die interkulturelle und methodische Grundlage.  \n   *(Quellen: b_mhb_po2021_mes, b_mhb_po2021_sowi)*\n\n2. **Internationale Ausrichtung**  \n   - Englischsprachige Masterstudiengänge wie der **CEMS Master in International Management** sowie Double-Degree-Programme (z. B. mit Partnerhochschulen in Europa und Asien) ermöglichen globale Karriereperspektiven.  \n   - Studienplätze im Ausland (z. B. via Erasmus+ oder Partnerprogrammen) sind oft direkt im Studienplan integriert.  \n   *(Quellen: Virtueller Infotag – WiSo-Fakultät)*\n\n3. **Praxisnahe Angebote**  \n   - **Praktika** und **qualifizierende Auslandsaufenthalte** (z. B. via „Studium Integrale“) sind oft angerechnet und fördern berufliche Kompetenzen.  \n   - Das **WiSo Career Office** bietet individuelle Beratung zu Bewerbungen, Praktika und Karrierechancen.  \n   *(Quellen: Virtueller Infotag – WiSo-Fakultät)*\n\n4. **Extracurriculare Stärken**  \n   - Kurse des **Professional Centers** und das **SchreibArt Programm** schulen wissenschaftliche Arbeitstechniken und berufliche Soft Skills.  \n   - Spezielle Angebote für internationale Studierende (z. B. Sprachkurse, Kulturworkshops) fördern Integration und Selbstständigkeit.  \n   *(Quelle: b_mhb_po2021_bk1)*\n\n5. **Forschungsnahe Lehre**  \n   - Die Verbindung von Lehre und Forschung wird durch aktuelle Themen aus den Fakultätsbereichen (z. B. Nachhaltigkeit, Digitalisierung, soziale Gerechtigkeit) gestärkt.  \n   - Studierende profitieren von Expertise renommierter Professuren und interdisziplinären Projekten.  \n\nDiese Kombination aus interdisziplinärer Ausrichtung, internationaler Perspektive und praxisorientierten Angeboten macht das Studium an der WiSo-Fakultät besonders attraktiv. 🌍📚",
+      "scores": {
+        "context_relevance": 0.0,
+        "answer_relevance": 1.0,
+        "answer_faithfulness": 1.0,
+        "overall_score": 0.6666666666666666
+      },
+      "metadata": {
+        "question_index": 1,
+        "evaluation_source": "ARES"
+      }
+    },
+    {
+      "question": "Welche Kosten fallen für reguläre Studienprogramme der WiSo-Fakultät an?",
+      "response": "Die Kosten für reguläre Studienprogramme an der WiSo-Fakultät der Universität zu Köln sind in der Regel **kostenlos**, da die Universität zu Köln eine **öffentliche Hochschule** ist und keine Studiengebühren für reguläre Studiengänge erhebt. Allerdings können **semestertaktige Gebühren** (z. B. für die Nutzung von Bibliotheken, Veranstaltungsraum oder digitale Ressourcen) anfallen. \n\nFür detaillierte Informationen zu aktuellen Gebühren und Finanzierungsmöglichkeiten (z. B. BAföG, Stipendien) können Sie folgende Quellen nutzen:\n\n1. **Universitätskosten**  \n   - [https://www.uni-koeln.de/studium/kosten](https://www.uni-koeln.de/studium/kosten)  \n   *(Quelle: Universitätswebsite – Kosten für Studierende)*\n\n2. **Finanzierungsmöglichkeiten**  \n   - [https://www.uni-koeln.de/studium/finanzierung](https://www.uni-koeln.de/studium/finanzierung)  \n   *(Quelle: Universitätswebsite – BAföG, Stipendien, Förderprogramme)*\n\n3. **Studienordnungen**  \n   - Die Studienordnungen der einzelnen Studiengänge (z. B. Bachelor/Wirtschafts- und Sozialwissenschaften) enthalten oft Details zu Kosten und Beiträgen.  \n\nHinweis: Die genauen Gebühren können je nach Studiengang und Semester variieren. Für individuelle Beratung kontaktieren Sie das **Studierendenreferat** oder das **WiSo Career Office**.  \n\nFalls Sie spezifische Fragen zu Gebühren für Masterstudiengänge oder internationale Studierende haben, können Sie weitere Details angeben – ich helfe gern! 💡",
+      "scores": {
+        "context_relevance": 0.0,
+        "answer_relevance": 1.0,
+        "answer_faithfulness": 0.0,
+        "overall_score": 0.3333333333333333
+      },
+      "metadata": {
+        "question_index": 2,
+        "evaluation_source": "ARES"
+      }
+    },
+    {
+      "question": "Wie wird die Qualität der WiSo-Absolvent:innen in Rankings und durch Arbeitgebereinschätzungen beschrieben?",
+      "response": "Die Qualität der WiSo-Absolvent:innen der Universität zu Köln wird in Rankings und durch Arbeitgebereinschätzungen auf verschiedene Weise beschrieben:\n\n### 1. **Rankings und Reputation**  \n   - **Deutsche Rankings**: Die Universität zu Köln ist in nationalen Rankings wie dem **Excellence-Initiative-Check** oder dem **CHE Hochschulranking** als **kosteneffiziente Hochschule mit starken interdisziplinären Programmen** bewertet. Die WiSo-Fakultät wird insbesondere für ihre **praxisnahe Ausrichtung** und **internationale Verankerung** (z. B. durch Masterstudiengänge wie den **CEMS Master**) gelobt.  \n   - **Internationale Anerkennung**: Die Studiengänge der WiSo-Fakultät (z. B. Bachelor/Wirtschafts- und Sozialwissenschaften) sind in **internationale Rankings** wie dem **QS Top 50 Under 50** oder **Times Higher Education** oft als **kosteneffiziente Alternative zu prestigeträchtigen Universitäten** hervorgehoben.  \n\n### 2. **Arbeitgebereinschätzungen**  \n   - **Karrierechancen**: Die **WiSo Career Office**-Berichte und Studien (z. B. „Karriereberichte der WiSo-Fakultät“) zeigen, dass WiSo-Absolvent:innen **sehr gute Chancen auf dem Arbeitsmarkt** haben, insbesondere in Bereichen wie **Banken, Consulting, NGOs, Politik und Forschung**.  \n   - **Arbeitgebereinschätzungen**: Unternehmen und Institutionen bewerten WiSo-Absolvent:innen oft als **praxisorientiert, interkultural kompetent und analytisch stark**. Dies wird durch die **Kombination aus wirtschaftswissenschaftlichen und sozialwissenschaftlichen Kompetenzen** sowie **internationalen Praktika und Auslandsaufenthalten** gestärkt.  \n   - **Forschungsnahe Ausrichtung**: Die Verbindung von Lehre und Forschung (z. B. durch Teilnahme an interdisziplinären Projekten) wird von Arbeitgebern als **Vorteil für Innovation und Problemlösung** angesehen.  \n\n### 3. **Zusätzliche Faktoren**  \n   - **Internationalität**: Die Vielfalt der Studierenden und die internationale Ausrichtung der Studiengänge (z. B. durch Double-Degree-Programme) tragen zur **kulturellen und methodischen Vielfalt** der Absolvent:innen bei.  \n   - **Berufsbegleitung**: Die **Studienberatung und Karrierebegleitung** durch das WiSo Career Office sowie das **Professional Center** stärken die **berufliche Orientierung** und **Soft Skills** der Studierenden.  \n\n### 4. **Aktuelle Quellen**  \n   - **Karriereberichte**: [https://www.wiso.uni-koeln.de/karriere](https://www.wiso.uni-koeln.de/karriere)  \n   - **Arbeitgebereinschätzungen**: [https://www.wiso.uni-koeln.de/berufswahl](https://www.wiso.uni-koeln.de/berufswahl)  \n   - **Rankings**: [https://www.uni-koeln.de/ranking](https://www.uni-koeln.de/ranking)  \n\nDie Kombination aus **praxisorientierter Ausbildung, internationaler Perspektive und starken Netzwerken** macht WiSo-Absolvent:innen zu attraktiven Kandidat:innen im Arbeitsmarkt. Für detaillierte Daten zu aktuellen Bewertungen oder Einzelergebnissen kann ich jedoch nicht recherchieren – hier sind die genannten Webseiten die besten Quellen. 📈💼",
+      "scores": {
+        "context_relevance": 0.0,
+        "answer_relevance": 0.9,
+        "answer_faithfulness": 1.0,
+        "overall_score": 0.6333333333333333
+      },
+      "metadata": {
+        "question_index": 3,
+        "evaluation_source": "ARES"
+      }
+    },
+    {
+      "question": "Wie ist die internationale Ausrichtung der WiSo-Fakultät beschrieben?",
+      "response": "Die internationale Ausrichtung der WiSo-Fakultät der Universität zu Köln wird durch eine **vielfältige und global verankerte Struktur** geprägt, die sowohl im Studienangebot als auch in der Forschung und der Karrierebegleitung sichtbar ist. Hier sind die zentralen Aspekte:\n\n### 1. **Internationale Studiengänge und Partnerprogramme**  \n   - **Englischsprachige Masterstudiengänge**: Die Fakultät bietet Programme wie den **CEMS Master in International Management** an, der mit Partnerhochschulen in Europa, Nordamerika und Asien zusammenarbeitet.  \n   - **Double-Degree-Programme**: Studierende können durch Partneruniversitäten (z. B. in Frankreich, Großbritannien, China) doppelte Abschlüsse erwerben.  \n   - **Erasmus+-Programm**: Die Fakultät ist stark in internationalen Austauschprogrammen engagiert, wobei Auslandsaufenthalte oft direkt im Studienplan integriert sind.  \n   *(Quellen: [https://www.wiso.uni-koeln.de/studium](https://www.wiso.uni-koeln.de/studium), [https://www.uni-koeln.de/international](https://www.uni-koeln.de/international))*\n\n### 2. **Sprach- und Kulturkompetenzen**  \n   - **Sprachkurse**: Die Fakultät bietet umfassende Sprachkurse (z. B. Englisch, Französisch, Spanisch) an, um internationale Kommunikationsfähigkeit zu stärken.  \n   - **Kulturworkshops**: Angebote zur interkulturellen Kommunikation und zur Integration internationaler Studierender fördern ein globales Denken.  \n\n### 3. **Globaler Forschungsbezug**  \n   - **Forschungsprojekte**: Die Fakultät engagiert sich in internationalen Forschungsprojekten, z. B. zu Themen wie Nachhaltigkeit, Digitalisierung oder globalen Ungleichheiten.  \n   - **Gastwissenschaftler und -wissenschaftlerinnen**: Expert:innen aus aller Welt arbeiten an der Fakultät, was die interdisziplinäre und internationale Ausrichtung unterstreicht.  \n\n### 4. **Karriere und Netzwerke**  \n   - **Internationale Karrierechancen**: Die Fakultät betont die Vorbereitung auf globale Arbeitsmärkte, z. B. durch Praktika im Ausland und Karriereberatung für internationale Absolvent:innen.  \n   - **Netzwerke**: Partnerhochschulen und Unternehmen aus verschiedenen Ländern unterstützen die Karriereperspektiven der Studierenden.  \n\n### 5. **Zusätzliche Angebote**  \n   - **International Office**: Das Office unterstützt Studierende bei der Bewerbung, Integration und Sprachförderung.  \n   - **Virtuelle Infotage**: Die Fakultät bietet Angebote wie den „Virtuellen Infotag“ an, um internationale Studierende zu erreichen und Informationen zu verbreiten.  \n\nDie internationale Ausrichtung der WiSo-Fakultät zielt darauf ab, Studierende auf globale Herausforderungen vorzubereiten und gleichzeitig die Vielfalt und Interkulturalität der Hochschule zu stärken. Für detaillierte Informationen zu aktuellen Partnerprogrammen oder Austauschmöglichkeiten können Sie die genannten Webseiten besuchen. 🌍✨",
+      "scores": {
+        "context_relevance": 0.0,
+        "answer_relevance": 1.0,
+        "answer_faithfulness": 1.0,
+        "overall_score": 0.6666666666666666
+      },
+      "metadata": {
+        "question_index": 4,
+        "evaluation_source": "ARES"
+      }
+    }
+  ],
+  "summary": {
+    "average_scores": {
+      "context_relevance": 0.0,
+      "answer_relevance": 0.9800000000000001,
+      "answer_faithfulness": 0.8,
+      "overall_score": 0.5933333333333333
+    },
+    "total_questions": 5,
+    "evaluation_metadata": {
+      "timestamp": "2025-11-14T15:22:30.377275",
+      "evaluation_type": "csv_ollama_ares",
+      "model_name": "llama3.1:8b",
+      "test_source": "csv_5_questions",
+      "total_questions": 5,
+      "evaluation_duration_minutes": 3.3137794499999997,
+      "system_info": {
+        "python_version": "3.13",
+        "platform": "Windows"
+      }
+    }
+  },
+  "metadata": {
+    "timestamp": "2025-11-14T15:22:30.377275",
+    "evaluation_type": "csv_ollama_ares",
+    "model_name": "llama3.1:8b",
+    "test_source": "csv_5_questions",
+    "total_questions": 5,
+    "evaluation_duration_minutes": 3.3137794499999997,
+    "system_info": {
+      "python_version": "3.13",
+      "platform": "Windows"
+    }
+  }
+}

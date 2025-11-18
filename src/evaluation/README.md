@@ -1,209 +1,379 @@
-# RAG Evaluation Pipeline
+# ARES-basierte RAG-Evaluation
 
-Eine leichtgewichtige ARES (Automated Rating using Evaluation by Synthesis) basierte Pipeline zur Evaluation des RAG-Chatbots.
+Dieses Modul implementiert ein umfassendes Evaluations-System für RAG (Retrieval-Augmented Generation) Systeme basierend auf dem **Stanford ARES Framework**.
 
-## 🎯 Überblick
+## 📋 Überblick
 
-Die Pipeline evaluiert RAG-Systeme anhand von drei Hauptmetriken:
-- **Context Relevance**: Wie relevant ist der gefundene Kontext für die Frage?
-- **Answer Faithfulness**: Ist die Antwort konsistent mit dem Kontext?
-- **Answer Relevance**: Beantwortet die Response die ursprüngliche Frage?
+Das System ersetzt die vorherige ARES-ähnliche Implementierung durch eine echte Integration des Stanford ARES Frameworks und bietet:
 
-## 📁 Struktur
+- **Authentisches ARES Framework**: Verwendung der offiziellen `ares-ai` Bibliothek
+- **Umfassende Metriken**: Context Relevance, Answer Relevance, Answer Faithfulness
+- **Flexible Testfälle**: JSON-basierte Testfall-Verwaltung
+- **Batch-Processing**: Effiziente Evaluation mehrerer Testfälle
+- **Ergebnis-Tracking**: Automatische Speicherung und Analyse
+
+## 🏗️ Architektur
 
 ```
 src/evaluation/
-├── __init__.py           # Module exports
-├── ares_evaluator.py     # ARES-basierter Evaluator
-├── metrics.py           # Metriken und Reporting
-├── test_cases.py        # Testfälle-Management
-├── pipeline.py          # End-to-End Pipeline
-├── quick_eval.py        # Quick-Start Skript
-└── README.md           # Diese Datei
+├── __init__.py              # ARES-basierte Imports
+├── ares_evaluator.py        # Stanford ARES Framework Integration
+├── evaluation_runner.py     # Orchestrierung von Evaluationen
+├── test_cases.py           # Testfall-Datenstrukturen
+├── results_manager.py      # Ergebnis-Speicherung und -Verwaltung
+├── simple_rag_evaluation.py # Vereinfachte API für Nutzer
+├── test_direct_evaluation.py # Test-Scripts
+├── test_direct_storage.py  # Test-Scripts
+└── data/
+    └── wiso_test_cases.json # Standard WiSo-Testfälle
 ```
 
 ## 🚀 Quick Start
 
-### 1. Quick-Evaluation ausführen
+### 1. Installation
+
+Das ARES Framework ist bereits installiert:
+
 ```bash
-cd src/evaluation
-python quick_eval.py
+# Bereits installiert in der virtuellen Umgebung
+pip install ares-ai
 ```
 
-Dies führt eine Evaluation mit 5 Sample-Testfällen durch und erstellt:
-- Evaluation-Ergebnisse (JSON)
-- Metriken-Export (JSON)
-- Text-Bericht (TXT)
+### 2. Basic Usage
 
-### 2. Programmatische Nutzung
 ```python
-from src.evaluation import EvaluationPipeline, load_test_cases
+from src.evaluation import quick_evaluation, evaluate_rag_question, ares_score
+from src.evaluation.test_cases import create_default_test_cases
 
-# Pipeline initialisieren
-pipeline = EvaluationPipeline()
+# Agent bereitstellen (muss LangChain-Interface unterstützen)
+agent = YourRAGAgent()
 
-# Testfälle laden (oder Sample-Testfälle verwenden)
-test_cases = load_test_cases()
+# Runner erstellen
+runner = EvaluationRunner(agent=agent)
 
 # Evaluation durchführen
-results = pipeline.run_batch_evaluation(test_cases)
+test_cases = create_default_test_cases()
+results = runner.run_complete_evaluation(test_cases)
+
+print(f"Erfolgsrate: {results['statistics']['success_rate']:.2%}")
 ```
 
-## 📊 Sample-Testfälle
+### 3. Single Evaluation
 
-Die Pipeline enthält 5 vorgefertigte Testfälle:
-
-1. **TC_001**: VWL Master Bewerbung (easy, studium)
-2. **TC_002**: Wirtschaftsinformatik Forschung (medium, forschung) 
-3. **TC_003**: Studienberatung Sprechstunden (easy, services)
-4. **TC_004**: Interdisziplinäre Programme (hard, studium)
-5. **TC_005**: Internationale Netzwerke (medium, international)
-
-## 🔧 Konfiguration
-
-### ARES Evaluator anpassen
 ```python
-from src.evaluation import ARESEvaluator
+from src.evaluation.ares_evaluator import ARESEvaluator
 
-evaluator = ARESEvaluator(
-    model_name="gpt-4o-mini",  # LLM für Evaluation
-    temperature=0.1            # Temperature für konsistente Bewertungen
+evaluator = ARESEvaluator()
+
+evaluation = evaluator.evaluate_single(
+    query="Welche Master-Programme bietet die WiSo-Fakultät?",
+    response="Die WiSo-Fakultät bietet Master in Economics und Business Administration.",
+    contexts=["Context from knowledge base..."]
+)
+
+print(evaluation)  # {"context_relevance": 0.85, "answer_relevance": 0.78, ...}
+```
+
+### 4. Quick Evaluation
+
+```python
+from src.evaluation.evaluation_runner import quick_evaluation
+
+questions = [
+    "Was sind die Zulassungsvoraussetzungen?",
+    "Gibt es internationale Programme?"
+]
+
+results = quick_evaluation(agent, questions)
+```
+
+## 📊 ARES Metriken
+
+Das System evaluiert drei Hauptmetriken des Stanford ARES Frameworks:
+
+### Context Relevance
+- **Beschreibung**: Wie relevant sind die abgerufenen Kontexte für die Anfrage?
+- **Bereich**: 0.0 - 1.0
+- **Interpretation**: Höhere Werte = bessere Kontext-Auswahl
+
+### Answer Relevance  
+- **Beschreibung**: Wie relevant ist die Antwort für die gestellte Frage?
+- **Bereich**: 0.0 - 1.0
+- **Interpretation**: Höhere Werte = passendere Antworten
+
+### Answer Faithfulness
+- **Beschreibung**: Wie treu bleibt die Antwort dem bereitgestellten Kontext?
+- **Bereich**: 0.0 - 1.0
+- **Interpretation**: Höhere Werte = weniger Halluzinationen
+
+## 🧪 Testfälle
+
+### Standard-Testfälle
+
+Das System enthält 8 vordefinierte Testfälle für WiSo-Domäne:
+
+- **Studienprogramme**: Master-Programme Information
+- **Zulassung**: Voraussetzungen und Bewerbung  
+- **Forschung**: Forschungsschwerpunkte
+- **Services**: Karriere-Services und Support
+- **International**: Austauschprogramme
+- **Praxis**: Praktika und Partnerschaften
+- **Resources**: Technische Ausstattung
+- **Komplexe Fragen**: Interdisziplinäre Themen
+
+### Eigene Testfälle
+
+```python
+from src.evaluation.test_cases import TestCase
+
+custom_test = TestCase(
+    id="custom_test_1",
+    question="Ihre Frage hier",
+    category="custom",
+    expected_answer="Erwartete Antwort (optional)",
+    expected_keywords=["Keyword1", "Keyword2"],
+    difficulty="medium"
 )
 ```
-
-### Pipeline konfigurieren
-```python
-from src.evaluation import EvaluationPipeline
-from pathlib import Path
-
-pipeline = EvaluationPipeline(
-    output_dir=Path("custom_results"),  # Custom Output-Verzeichnis
-    rag_tool=my_rag_tool                # Custom RAG-Tool
-)
-```
-
-## 📈 Metriken
-
-### ARES Metriken
-- `context_relevance`: 0.0 - 1.0
-- `answer_faithfulness`: 0.0 - 1.0  
-- `answer_relevance`: 0.0 - 1.0
-- `overall_ares_score`: Gewichteter Durchschnitt (30% + 40% + 30%)
-
-### Performance Metriken
-- `retrieval_time_ms`: Zeit für Kontext-Retrieval
-- `generation_time_ms`: Zeit für Antwort-Generierung
-- `total_time_ms`: Gesamtzeit
-
-### Response Metriken
-- `response_length`: Länge der generierten Antwort
-- `response_completeness`: Heuristik für Vollständigkeit (0.0 - 1.0)
-
-## 📝 Testfälle hinzufügen
 
 ### JSON-Format
+
 ```json
 {
-  "metadata": {
-    "total_test_cases": 1
-  },
   "test_cases": [
     {
-      "id": "tc_custom_001",
-      "question": "Ihre Frage hier?",
-      "expected_context": "Was der ideale Kontext enthalten sollte...",
-      "expected_answer": "Beispiel einer guten Antwort...",
-      "category": "studium",
-      "difficulty": "medium",
-      "tags": ["tag1", "tag2"]
+      "id": "unique_id",
+      "question": "Test question",
+      "category": "category_name",
+      "expected_answer": "Expected response",
+      "expected_keywords": ["keyword1", "keyword2"],
+      "context_hint": "Context guidance",
+      "difficulty": "easy|medium|hard",
+      "metadata": {}
     }
   ]
 }
 ```
 
-### Programmatisch
-```python
-from src.evaluation import TestCase
+## 🔧 Konfiguration
 
-new_test_case = TestCase(
-    id="tc_006",
-    question="Ihre neue Frage?",
-    expected_context="Erwarteter Kontext...",
-    expected_answer="Erwartete Antwort...",
-    category="services",
-    difficulty="easy",
-    tags=["custom", "test"]
+### ARES Evaluator Konfiguration
+
+```python
+evaluator = ARESEvaluator(
+    # ARES Framework Einstellungen werden automatisch geladen
 )
 ```
 
-## 📊 Evaluation-Berichte
+### Evaluation Runner Konfiguration
 
-### JSON-Export
-Vollständige Ergebnisse mit allen Metriken und Einzelbewertungen.
-
-### Metriken-Export  
-Aggregierte Statistiken und Performance-Daten.
-
-### Text-Bericht
-```
-RAG Evaluation Bericht
-=====================
-
-Anzahl Evaluationen: 5
-
-ARES Metriken:
---------------
-Context Relevance:      0.850
-Answer Faithfulness:    0.900
-Answer Relevance:       0.800
-Overall ARES Score:     0.850
-
-Performance Metriken:
---------------------
-Ø Retrieval Zeit:       45.2ms
-Ø Generation Zeit:      120.8ms
-Ø Gesamt Zeit:          166.0ms
-
-Bewertung:
-----------
-🟢 Excellent - RAG-System zeigt sehr gute Performance
-```
-
-## 🔄 Integration mit echtem RAG-Tool
-
-Für die Integration mit dem produktiven RAG-Tool:
-
-1. **RAG-Tool übergeben**:
 ```python
-from src.tools.rag_tool import RAGTool
-
-rag_tool = RAGTool()  # Ihr echtes RAG-Tool
-pipeline = EvaluationPipeline(rag_tool=rag_tool)
+runner = EvaluationRunner(
+    agent=your_agent,
+    results_dir=Path("custom_results_dir")  # Optional
+)
 ```
 
-2. **LLM-Integration** (in `ares_evaluator.py`):
+## 📈 Ergebnisse
+
+### Ergebnis-Struktur
+
+```json
+{
+  "metadata": {
+    "timestamp": "2024-12-28T...",
+    "evaluator": "Stanford_ARES_Framework",
+    "version": "1.0.0"
+  },
+  "statistics": {
+    "total_test_cases": 8,
+    "successful_responses": 7,
+    "failed_responses": 1,
+    "success_rate": 0.875,
+    "duration_seconds": 45.2,
+    "ares_metrics": {
+      "context_relevance": 0.82,
+      "answer_relevance": 0.78,
+      "answer_faithfulness": 0.85
+    }
+  },
+  "test_cases": [...],
+  "responses": [...],
+  "ares_evaluation": {...}
+}
+```
+
+### Ergebnis-Speicherung
+
+Ergebnisse werden automatisch gespeichert:
+
+- `evaluation_results_{timestamp}.json`: Vollständige Ergebnisse
+- `evaluation_results_latest.json`: Neueste Ergebnisse (Shortcut)
+
+## 🤖 Agent-Integration
+
+### LangChain Agents
+
 ```python
-def _query_llm(self, prompt: str) -> str:
-    # Ersetze Mock-Implementation durch echte LLM-Calls
-    # z.B. OpenAI API oder Ollama
-    pass
+# Ihr Agent muss das LangChain Interface unterstützen
+class YourRAGAgent:
+    def invoke(self, inputs):
+        return {
+            "output": "Agent response",
+            "source_documents": ["context1", "context2"],
+            "metadata": {}
+        }
 ```
 
-## 🛠️ Erweiterungen
+### Custom Agent Interface
 
-### Custom Metriken hinzufügen
-Erweitere `RAGMetrics` in `metrics.py` um zusätzliche Metriken.
+```python
+class YourCustomAgent:
+    def query(self, question):
+        return {
+            "answer": "Agent response", 
+            "contexts": ["context1", "context2"],
+            "metadata": {}
+        }
+```
 
-### Neue Evaluation-Methoden
-Implementiere zusätzliche Evaluator-Klassen neben ARES.
+## 📋 Verfügbare Scripts
 
-### Advanced Filtering
-Nutze die Filter-Funktionen in `test_cases.py` für spezifische Evaluationen.
+### Demo Script
 
-## 📋 Nächste Schritte
+```bash
+# Führe Demo-Evaluationen aus
+python scripts/demo_ares_evaluation.py
+```
 
-1. **LLM-Integration**: Echte LLM-Calls für ARES-Evaluation
-2. **RAG-Tool Integration**: Verbindung mit produktivem RAG-System
-3. **Mehr Testfälle**: Erweitere die Testfall-Sammlung
-4. **Advanced Metriken**: Implementiere zusätzliche Evaluation-Metriken
-5. **Benchmarking**: Vergleiche mit anderen RAG-Systemen
+Das Demo-Script zeigt:
+- Einzelne Frage Evaluation
+- Batch-Evaluation
+- Quick-Evaluation
+- Testfall-Verwaltung
+
+## 🔍 Debugging
+
+### Logging aktivieren
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO)
+```
+
+### Häufige Probleme
+
+**Problem**: ARES Framework nicht verfügbar
+```python
+# Fallback auf Mock-Evaluation
+evaluation = {
+    "context_relevance": 0.0,
+    "answer_relevance": 0.0, 
+    "answer_faithfulness": 0.0
+}
+```
+
+**Problem**: Agent Interface nicht kompatibel
+```python
+# Prüfe verfügbare Methoden
+print(dir(your_agent))
+# Implementiere entsprechende Wrapper
+```
+
+## 🚧 Entwicklung
+
+### Tests ausführen
+
+```bash
+python -m pytest tests/test_evaluation.py -v
+```
+
+### Neue Metriken hinzufügen
+
+1. Erweitere `ARESEvaluator.evaluate_single()`
+2. Update Ergebnis-Struktur in `evaluation_runner.py`
+3. Füge Tests hinzu
+
+## 📚 Referenzen
+
+- [Stanford ARES Framework](https://github.com/stanford-futuredata/ARES)
+- [ARES Paper](https://arxiv.org/abs/2311.09476)
+- [RAG Evaluation Best Practices](https://docs.langchain.com/docs/guides/evaluation)
+
+## 🤝 Migration von alter Evaluation
+
+Die alte ARES-ähnliche Implementierung wurde vollständig durch das echte Stanford ARES Framework ersetzt:
+
+- ✅ `ares-ai` Paket installiert
+- ✅ Authentische ARES Metriken
+- ✅ Verbesserte Genauigkeit
+- ✅ Standardisierte Evaluation
+- ✅ Bessere Reproduzierbarkeit
+
+Alle Evaluations-Workflows bleiben kompatibel, nutzen jetzt aber das echte ARES Framework.
+
+---
+
+## Offizielle ARES-API (UES/IDP & PPI) – Nutzung in diesem Projekt
+
+- UES/IDP (LLM-Judge):
+  - Aufruf: `ARES(ues_idp=...).ues_idp()`
+  - Benötigt: `in_domain_prompts_dataset` (Few-Shot TSV), `unlabeled_evaluation_set` (TSV), `model_choice` (z. B. GPT-3.5)
+  - Optional: vLLM (`vllm=True`, `host_url`)
+
+- PPI (LLM-Judge oder Checkpoints):
+  - Aufruf: `ARES(ppi=...).evaluate_RAG()`
+  - Benötigt: `evaluation_datasets` (TSV). Entweder:
+   - LLM-Judge: `few_shot_examples_filepath` + `llm_judge`
+   - oder Checkpoints: `checkpoints=[...]` (+ optional `gold_label_path`)
+
+In `ares_evaluator.py` werden automatisch TSVs aus Q/A/Context erzeugt und die Ergebnisse zu `average_scores` und `individual_results` zusammengefasst.
+
+### Beispiel: Single-Evaluation (PPI, LLM-Judge)
+
+```python
+from pathlib import Path
+from src.evaluation.ares_evaluator import ARESEvaluator
+
+evaluator = ARESEvaluator(
+   mode="ppi",
+   few_shot_path=Path("src/evaluation/data/ares_few_shot_prompt_for_judge_scoring.tsv"),
+   llm_judge_ppi="gpt-3.5-turbo-1106"
+)
+
+res = evaluator.evaluate_single_sync(
+   query="Welche Master-Programme bietet die WiSo-Fakultät?",
+   response="Die WiSo-Fakultät bietet Master in Economics und Business Administration.",
+   contexts=["Kontextpassage 1", "Kontextpassage 2"]
+)
+print(res)
+```
+
+### Beispiel: Runner im UES/IDP-Modus
+
+```python
+from src.evaluation.evaluation_runner import EvaluationRunner
+
+runner = EvaluationRunner(agent=your_agent, evaluation_mode="ues_idp")
+```
+
+### Beispiel-Few-Shot (bereitgestellt)
+
+Eine minimale Few-Shot-Datei liegt unter:
+`src/evaluation/data/ares_few_shot_prompt_for_judge_scoring.tsv`
+
+### 2–3 Beispiel-Fragen für deinen Datensatz
+
+1) Frage: "Welche Master-Programme bietet die WiSo-Fakultät an?"
+  - Antwort: "Die WiSo-Fakultät bietet Master in Economics, Business Administration und weitere Programme an."
+  - Kontext: "Die WiSo-Fakultät bietet verschiedene Master-Programme an ..."
+
+2) Frage: "Wie bewerbe ich mich für ein Masterstudium an der WiSo?"
+  - Antwort: "Die Bewerbung erfolgt online über das Bewerbungsportal; Fristen und Anforderungen stehen auf der WiSo-Webseite."
+  - Kontext: "Die Bewerbung erfolgt über das Online-Portal der Universität zu Köln ..."
+
+3) (Negativbeispiel) Frage: "Welche Forschungsschwerpunkte hat die WiSo-Fakultät?"
+  - Antwort: "Die Mensa öffnet um 11:30 Uhr."  (absichtlich irrelevant)
+  - Kontext: "Forschungsschwerpunkte: empirische Wirtschaftsforschung, Verhaltensökonomie, ..."
+
+Hinweis: ARES vergibt Scores pro Beispiel (Kontextrelevanz, Antworttreue, Antwortrelevanz) und bildet daraus aggregierte Kennzahlen.

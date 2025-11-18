@@ -208,17 +208,48 @@ async def run_crawler_scraper_pipeline(
     crawler = WisoCrawler(crawler_config, html_cache=html_cache)
     discovered_urls = await crawler.crawl()
     
+    # 🔥 SICHERHEITS-CHECK: PDF-URLs aus discovered_urls entfernen (falls trotzdem welche durchkommen)
+    html_only_urls = [url for url in discovered_urls if not url.lower().endswith('.pdf')]
+    pdf_count = len(discovered_urls) - len(html_only_urls)
+    
+    if pdf_count > 0:
+        logger.warning(f"🚨 GEFILTERT: {pdf_count} PDF-URLs aus discovered_urls entfernt")
+        discovered_urls = html_only_urls
+
+    # 🔥 WICHTIG: PDF-URLs aus HTML-Cache extrahieren (für URLs aus vorherigen Crawls)
+    cached_pdf_urls = set()
+    if html_cache:
+        try:
+            import sqlite3
+            with sqlite3.connect(html_cache.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT url FROM html_cache WHERE url LIKE '%.pdf'")
+                cached_pdfs = cursor.fetchall()
+                cached_pdf_urls = {url for (url,) in cached_pdfs}
+                
+                if cached_pdf_urls:
+                    logger.info(f"🔄 CACHE-RECOVERY: {len(cached_pdf_urls)} PDF-URLs aus HTML-Cache extrahiert")
+                    # Füge cached PDFs zu crawler.pdf_urls hinzu
+                    original_pdf_count = len(crawler.pdf_urls)
+                    crawler.pdf_urls.update(cached_pdf_urls)
+                    new_pdfs = len(crawler.pdf_urls) - original_pdf_count
+                    if new_pdfs > 0:
+                        logger.info(f"   📄 {new_pdfs} neue PDFs aus Cache hinzugefügt")
+        except Exception as e:
+            logger.warning(f"Fehler beim Extrahieren von PDF-URLs aus Cache: {e}")
+
     # Save discovered URLs
     urls_file = Path(__file__).parent / "data_analysis" / "discovered_urls.json"
     with urls_file.open('w', encoding='utf-8') as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),
             "total_urls": len(discovered_urls),
-            "urls": discovered_urls
+            "urls": discovered_urls,
+            "cached_pdf_urls": list(cached_pdf_urls)
         }, f, indent=2, ensure_ascii=False)
         
     logger.info(f"✓ Discovered {len(discovered_urls)} URLs")
-    logger.info(f"✓ Found {len(crawler.pdf_urls)} PDF documents")
+    logger.info(f"✓ Found {len(crawler.pdf_urls)} PDF documents (inkl. {len(cached_pdf_urls)} aus Cache)")
     
     # Stage 2: Scraping HTML Content
     logger.info(f"\n[Stage 2/5] Scraping HTML Content from {len(discovered_urls)} URLs...")

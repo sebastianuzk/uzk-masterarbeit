@@ -27,6 +27,7 @@ import random
 import robotexclusionrulesparser
 from dataclasses import dataclass
 from datetime import datetime
+from src.scraper.utils.error_cache import ErrorCache
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class CrawlerConfig:
     randomize_delays: bool = True         # Zufällige Delays zwischen Requests
     vary_user_agents: bool = True         # Wechselnde User Agents
     session_rotation: bool = True         # Session-Rotation alle X Requests
-    session_rotation_interval: int = 100  # Alle 100 Requests neue Session
+    session_rotation_interval: int = 20   # Alle 20 Requests neue Session (sehr häufig)
     
     # Request-Verhalten
     min_delay: float = 10.0              # Minimum delay zwischen Requests
@@ -78,6 +79,10 @@ class WisoCrawler:
         self.queue: Set[str] = {config.seed_url}
         self.found_urls: Set[str] = set()
         self.pdf_urls: Set[str] = set()  # Separate collection for PDFs
+        
+        # Caches
+        self.html_cache = html_cache
+        self.error_cache = ErrorCache()  # Separate cache for failed URLs (404, 403, etc.)
         self.robots_parser = robotexclusionrulesparser.RobotFileParserLookalike()
         self.session: Optional[aiohttp.ClientSession] = None
         
@@ -234,16 +239,30 @@ class WisoCrawler:
         else:
             return "other"
 
-    def add_to_retry_queue(self, url: str, error: Exception, attempt_count: int):
-        """Füge URL zur Retry-Queue hinzu."""
+    def add_to_retry_queue(self, url: str, error: Exception, attempt_count: int, status_code: int = None):
+        """Füge URL zur Retry-Queue hinzu oder cache permanente Fehler."""
+        if status_code is None:
+            status_code = getattr(error, 'status', None)
+            
+        # Prüfe auf permanente Fehler und cache diese separat
+        if status_code and self.error_cache.is_permanent_error(status_code):
+            self.error_cache.add(
+                url=url,
+                status_code=status_code,
+                error_type="http_error",
+                error_message=str(error),
+                attempt_count=attempt_count
+            )
+            logger.warning(f"🚫 Permanent error cached: {status_code} {self.format_url_for_log(url)}")
+            return
+            
         retry_delay = self.calculate_retry_delay(attempt_count)
-        error_type = self.classify_error(error, getattr(error, 'status', None))
-        status_code = getattr(error, 'status', None)
+        error_type = self.classify_error(error, status_code)
         
-        # Begrenzte Retries für 404-Fehler (max 2 Versuche)
-        if status_code == 404 and attempt_count >= 2:
-            logger.warning(f"🚫 404-Fehler für {url} nach {attempt_count} Versuchen - keine weiteren Retries")
-            self.failed_urls.append((url, "HTTP_404", f"404 nach {attempt_count} Versuchen"))
+        # Begrenzte Retries für temporäre Fehler
+        if attempt_count >= self.config.max_retries_per_attempt:
+            logger.warning(f"🚫 Max retries reached for {self.format_url_for_log(url)} nach {attempt_count} Versuchen")
+            self.failed_urls.append((url, error_type, f"Max retries nach {attempt_count} Versuchen"))
             return
         
         # Check if URL already in retry_queue
@@ -295,7 +314,7 @@ class WisoCrawler:
             
             if url in self.found_urls:
                 successful_count += 1
-                # Add new links to main queue
+                # Add new links to main queue (PDFs now included!)
                 for link in new_links:
                     if link not in self.visited_urls:
                         self.queue.add(link)
@@ -348,12 +367,16 @@ class WisoCrawler:
                 if parsed.query:
                     normalized_url += f"?{parsed.query}"
                 
+                # 🔧 WICHTIG: Trim whitespace from URL (häufiges Problem bei HTML-Links)
+                normalized_url = normalized_url.strip()
+                
                 # Check if it's a PDF
                 if normalized_url.lower().endswith('.pdf'):
-                    # Add to PDF collection
+                    # Add to PDF collection AND to links for crawling!
                     if parsed.netloc in self.config.allowed_domains:
                         self.pdf_urls.add(normalized_url)
-                        logger.debug(f"Found PDF: {normalized_url}")
+                        logger.info(f"📄 Found PDF: {normalized_url}")  # 🔧 INFO statt DEBUG!
+                        links.add(normalized_url)  # 🔥 WICHTIG: PDFs werden auch zu links hinzugefügt für Queue-Verarbeitung!
                 elif self.is_allowed_url(normalized_url):
                     links.add(normalized_url)
                     
@@ -368,20 +391,134 @@ class WisoCrawler:
                 
         return links
 
+    async def _handle_pdf_url(self, url: str) -> Set[str]:
+        """
+        Handle PDF URLs with caching and download functionality.
+        Similar to HTML processing but for PDFs.
+        """
+        import os
+        from pathlib import Path
+        import hashlib
+        
+        logger.info(f"🔍 Crawling PDF: {self.format_url_for_log(url)}")
+        
+        # PDF-Cache Pfad erstellen
+        pdf_cache_dir = Path("data/pdf_cache")
+        pdf_cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # URL als Dateiname verwenden (für eindeutige Zuordnung)
+        import re
+        # URL bereinigen: illegale Zeichen für Dateinamen entfernen/ersetzen
+        safe_url = re.sub(r'[<>:"|?*\\\/]', '_', url)  # Windows/Linux-illegale Zeichen ersetzen
+        safe_url = re.sub(r'https?_', '', safe_url)  # http/https Prefix entfernen
+        
+        # PDF-Extension nur hinzufügen falls noch nicht vorhanden
+        if not safe_url.endswith('.pdf'):
+            safe_filename = f"{safe_url}.pdf"
+        else:
+            safe_filename = safe_url
+        
+        # Falls der Name zu lang wird, kürzen (Windows Limit: 260 Zeichen)
+        if len(safe_filename) > 200:  # Puffer für Pfad
+            safe_filename = safe_filename[:200] + "....pdf"
+            
+        pdf_file_path = pdf_cache_dir / safe_filename
+        
+        # PDF Cache Check
+        if pdf_file_path.exists():
+            logger.info(f"📄 PDF Cache HIT: {self.format_url_for_log(url)}")
+            file_size = pdf_file_path.stat().st_size
+            logger.info(f"📁 Cached PDF: {safe_filename} ({file_size:,} bytes)")
+            
+            # Zu PDF-Collection hinzufügen
+            if url not in self.pdf_urls:
+                self.pdf_urls.add(url)
+                logger.info(f"📄 Found PDF: {url}")
+            
+            # Auch zu found_urls hinzufügen (für einheitliches Success-Tracking)
+            self.found_urls.add(url)
+            
+            self.retry_stats['successful_first_try'] += 1
+            return set()  # PDFs return no links
+        
+        # PDF Cache MISS - Download erforderlich
+        logger.info(f"📄 PDF Cache MISS: {self.format_url_for_log(url)}")
+        
+        try:
+            logger.info(f"🌐 HTTP Request (PDF): {self.format_url_for_log(url)}")
+            
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    pdf_content = await response.read()
+                    file_size = len(pdf_content)
+                    
+                    logger.info(f"📡 Response: HTTP {response.status} | PDF Size: {file_size:,} bytes")
+                    
+                    # PDF speichern
+                    with open(pdf_file_path, 'wb') as f:
+                        f.write(pdf_content)
+                    
+                    logger.info(f"💾 PDF saved: {safe_filename} ({file_size:,} bytes)")
+                    
+                    # Zu PDF-Collection hinzufügen
+                    if url not in self.pdf_urls:
+                        self.pdf_urls.add(url)
+                        logger.info(f"📄 Found PDF: {url}")
+                    
+                    # Auch zu found_urls hinzufügen (für einheitliches Success-Tracking)
+                    self.found_urls.add(url)
+                    
+                    self.retry_stats['successful_first_try'] += 1
+                    return set()  # PDFs return no links
+                    
+                else:
+                    # Permanente Fehler in Error-Cache speichern
+                    if self.error_cache.is_permanent_error(response.status):
+                        self.error_cache.add(
+                            url=url,
+                            status_code=response.status,
+                            error_type="http_error",
+                            error_message=f"PDF Download failed: HTTP {response.status}"
+                        )
+                        logger.warning(f"🚫 PDF permanent error cached: {response.status} {self.format_url_for_log(url)}")
+                    else:
+                        logger.warning(f"❌ PDF Download failed: HTTP {response.status} for {self.format_url_for_log(url)}")
+                    return set()
+                    
+        except Exception as e:
+            # Prüfe ob es ein permanenter HTTP-Fehler ist
+            status_code = getattr(e, 'status', None)
+            if status_code and self.error_cache.is_permanent_error(status_code):
+                self.error_cache.add(
+                    url=url,
+                    status_code=status_code,
+                    error_type="http_error",
+                    error_message=f"PDF Error: {str(e)}"
+                )
+                logger.warning(f"🚫 PDF permanent error cached: {status_code} {self.format_url_for_log(url)}")
+            else:
+                logger.error(f"❌ Error downloading PDF {self.format_url_for_log(url)}: {e}")
+            return set()
+
     async def crawl_page(self, url: str) -> Set[str]:
         """Crawl a single page and extract links."""
         if not self.session:
             await self.init_session()
 
-        # 📄 PDF-DETECTION VOR HTTP-REQUEST!
+        # Prüfe Error-Cache für permanente Fehler
+        if self.error_cache.contains(url):
+            error_entry = self.error_cache.get(url)
+            logger.debug(f"Skipping permanently failed URL: {self.format_url_for_log(url)} (Error: {error_entry.status_code})")
+            return set()
+
+        # 📄 PDF-DETECTION UND VERARBEITUNG
         if url.lower().endswith('.pdf'):
-            logger.info(f"📄 PDF detected (pre-request): {self.format_url_for_log(url)}")
-            if url not in self.pdf_urls:
-                self.pdf_urls.add(url)
-                logger.debug(f"Added PDF to collection: {url}")
-            self.found_urls.add(url)
-            self.retry_stats['successful_first_try'] += 1
-            return set()  # PDFs return no links
+            # Prüfe Error-Cache auch für PDFs
+            if self.error_cache.contains(url):
+                error_entry = self.error_cache.get(url)
+                logger.debug(f"Skipping permanently failed PDF: {self.format_url_for_log(url)} (Error: {error_entry.status_code})")
+                return set()
+            return await self._handle_pdf_url(url)
 
         # Prüfe HTML-Cache zuerst
         if self.html_cache and self.html_cache.contains(url):
@@ -445,8 +582,9 @@ class WisoCrawler:
                             logger.info(f"📡 Response: HTTP {response.status} | PDF detected: {url}")
                             if url not in self.pdf_urls:
                                 self.pdf_urls.add(url)
-                                logger.debug(f"Found PDF during crawling: {url}")
-                            self.found_urls.add(url)
+                                logger.info(f"📄 Found PDF during crawling: {url}")  # 🔧 INFO statt DEBUG!
+                            # ❌ NICHT zu found_urls hinzufügen - PDFs sind separate!
+                            # self.found_urls.add(url)  # ← ENTFERNT: PDFs gehören NICHT in found_urls!
                             
                             # Erfolgs-Statistik
                             if attempt == 0:
@@ -494,7 +632,29 @@ class WisoCrawler:
                     else:
                         last_status = response.status
                         
-                        # Spezielle Behandlung für verschiedene Status Codes
+                        # 🔧 OPTIMIZATION: Check for permanent errors immediately
+                        if self.error_cache and self.error_cache.is_permanent_error(response.status):
+                            # Cache permanent errors immediately without retrying
+                            error_msg = f"HTTP {response.status}"
+                            error_type = self.classify_error(None, response.status)
+                            logger.warning(f"🚫 Permanent error detected for {self.format_url_for_log(url)}: {error_msg}")
+                            
+                            # Add to error cache with correct parameters
+                            self.error_cache.add(
+                                url=url,
+                                status_code=response.status,
+                                error_type=error_type,
+                                error_message=error_msg,
+                                attempt_count=attempt + 1
+                            )
+                            
+                            # Track statistics
+                            self.retry_stats[f"{error_type}_errors"] += 1
+                            self.failed_urls.append((url, f"HTTP_{response.status}", error_msg))
+                            
+                            return set()  # Exit immediately for permanent errors
+                        
+                        # Spezielle Behandlung für verschiedene Status Codes (nur temporary)
                         if response.status == 429:
                             # Rate Limit - intelligente Pipeline-Pause
                             rate_limit_delay = random.uniform(60, 180)  # 1-3 Minuten
@@ -549,19 +709,13 @@ class WisoCrawler:
             self.add_to_retry_queue(url, last_error, self.config.max_retries_per_attempt - 1)
             logger.warning(f"🔄 {url} zur Retry-Queue hinzugefügt. Queue-Größe: {len(self.retry_queue)}")
         else:
-            # Unterscheidung: Temporäre vs permanente Fehler
-            if last_status == 404:
-                # 404: Könnte temporär sein - nicht als "endgültig fehlgeschlagen" markieren
-                # Beim nächsten Crawl wird es erneut versucht - SHOW FULL URL FOR DEBUGGING
-                logger.warning(f"⚠️ URL temporär nicht verfügbar (404): {self.format_url_for_log(url, force_full=True)} - wird beim nächsten Crawl erneut versucht")
-            elif last_status in [401, 403]:
-                # Echte Zugriffsfehler - diese sind meist permanent - SHOW FULL URL FOR DEBUGGING
-                logger.error(f"🚫 URL dauerhaft nicht zugänglich: {self.format_url_for_log(url, force_full=True)} - {last_status} (Zugriff verweigert)")
-                self.failed_urls.append((url, f"HTTP_{last_status}", "Zugriff verweigert"))
-            else:
-                # Andere Fehler - SHOW FULL URL FOR DEBUGGING
-                logger.error(f"❌ URL fehlgeschlagen: {self.format_url_for_log(url, force_full=True)} - {last_status}")
+            # 🔧 NOTE: Permanent errors are now handled immediately in the response section above
+            # This section only handles temporary errors that exhausted retries
+            if last_status and last_status not in {400, 401, 403, 404, 405, 410, 418, 451}:
+                # Non-permanent errors that exhausted retries
+                logger.error(f"❌ URL fehlgeschlagen nach allen Versuchen: {self.format_url_for_log(url, force_full=True)} - {last_status}")
                 self.failed_urls.append((url, f"HTTP_{last_status}", f"HTTP-Fehler {last_status}"))
+            # Permanent errors are already handled above and cached immediately
             
         return set()
 
@@ -598,19 +752,10 @@ class WisoCrawler:
                 else:
                     logger.warning(f"❌ Fehlgeschlagen, aber in Retry-Queue | Queue: {len(self.queue)} | Retry: {len(self.retry_queue)}")
                 
-                # Add new links to queue (Filter PDFs OUT!)
+                # Add new links to queue (PDFs now included for crawling!)
                 for link in new_links:
                     if link not in self.visited_urls:
-                        # 📄 SKIP PDFs - sie sind bereits in pdf_urls!
-                        if not link.lower().endswith('.pdf'):
-                            self.queue.add(link)
-                        else:
-                            # PDF wurde schon zu pdf_urls hinzugefügt, nicht zur Queue!
-                            logger.debug(f"🚫 PDF skipped from queue: {link}")
-                            # Stelle sicher, dass PDF in pdf_urls ist
-                            if link not in self.pdf_urls:
-                                self.pdf_urls.add(link)
-                                logger.debug(f"📄 Added orphaned PDF to collection: {link}")
+                        self.queue.add(link)  # 🔥 PDFs werden jetzt auch zur Queue hinzugefügt!
                 
                 # Detaillierte Progress-Logs alle 10 URLs
                 if len(self.found_urls) % 10 == 0 and len(self.found_urls) > 0:
@@ -666,7 +811,13 @@ class WisoCrawler:
             if self.retry_queue:
                 logger.warning(f"⚠️ {len(self.retry_queue)} URLs konnten trotz Retries nicht verarbeitet werden")
                 
-            return list(self.found_urls)
+            # 🔥 KRITISCH: Nur HTML-URLs zurückgeben, PDFs sind in separater pdf_urls Collection!
+            html_urls = [url for url in self.found_urls if not url.lower().endswith('.pdf')]
+            logger.info(f"📊 FINALE TRENNUNG:")
+            logger.info(f"   • HTML-URLs: {len(html_urls)} (werden für Scraping zurückgegeben)")
+            logger.info(f"   • PDF-URLs: {len(self.pdf_urls)} (separate Collection)")
+            
+            return html_urls  # ← Nur HTML-URLs für Scraping!
             
         finally:
             await self.close()

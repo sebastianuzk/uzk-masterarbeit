@@ -1,0 +1,48 @@
+{
+  "metadata": {
+    "timestamp": "2025-11-14T14:54:32.954688",
+    "evaluator": "Stanford_ARES_Framework",
+    "version": "1.0.0"
+  },
+  "statistics": {
+    "total_test_cases": 3,
+    "successful_responses": 0,
+    "failed_responses": 3,
+    "success_rate": 0.0,
+    "duration_seconds": 1.502035140991211
+  },
+  "test_cases": [
+    {
+      "id": "custom_1",
+      "question": "Welche Studienbereiche deckt der Menüpunkt „Studium“ der WiSo-Fakultät ab?",
+      "category": "custom",
+      "expected_answer": null,
+      "expected_keywords": null,
+      "context_hint": null,
+      "difficulty": "medium",
+      "metadata": {}
+    },
+    {
+      "id": "custom_2",
+      "question": "Wodurch zeichnet sich das Studium an der WiSo-Fakultät besonders aus?",
+      "category": "custom",
+      "expected_answer": null,
+      "expected_keywords": null,
+      "context_hint": null,
+      "difficulty": "medium",
+      "metadata": {}
+    },
+    {
+      "id": "custom_3",
+      "question": "Welche Kosten fallen für reguläre Studienprogramme der WiSo-Fakultät an?",
+      "category": "custom",
+      "expected_answer": null,
+      "expected_keywords": null,
+      "context_hint": null,
+      "difficulty": "medium",
+      "metadata": {}
+    }
+  ],
+  "responses": [
+    {
+      "test_case": 

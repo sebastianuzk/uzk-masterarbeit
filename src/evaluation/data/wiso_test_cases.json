@@ -1,0 +1,111 @@
+{
+  "metadata": {
+    "total_cases": 8,
+    "categories": ["studienprogramme", "zulassung", "forschung", "services", "international", "praxis", "resources"],
+    "created_by": "ARES_RAG_Evaluation_System",
+    "description": "Standard-Testfälle für WiSo-Chatbot Evaluation",
+    "version": "1.0",
+    "created_at": "2024-12-28"
+  },
+  "test_cases": [
+    {
+      "id": "wiso_master_programs",
+      "question": "Welche Master-Programme bietet die WiSo-Fakultät an?",
+      "category": "studienprogramme",
+      "expected_answer": "Die WiSo-Fakultät bietet verschiedene Master-Programme an, darunter Master in Economics, Business Administration, und weitere.",
+      "expected_keywords": ["Master", "Economics", "Business Administration", "WiSo"],
+      "context_hint": "Informationen über Studienprogramme der WiSo-Fakultät",
+      "difficulty": "easy",
+      "metadata": {
+        "priority": "high",
+        "domain": "academic_programs"
+      }
+    },
+    {
+      "id": "admission_requirements",
+      "question": "Was sind die Zulassungsvoraussetzungen für den Master in VWL?",
+      "category": "zulassung",
+      "expected_answer": "Für den Master in VWL werden ein Bachelor-Abschluss in relevanten Bereichen und weitere spezifische Voraussetzungen benötigt.",
+      "expected_keywords": ["Zulassung", "Bachelor", "VWL", "Voraussetzungen"],
+      "context_hint": "Zulassungsvoraussetzungen für Master-Programme",
+      "difficulty": "medium",
+      "metadata": {
+        "priority": "high",
+        "domain": "admissions"
+      }
+    },
+    {
+      "id": "faculty_research",
+      "question": "Welche Forschungsschwerpunkte hat die WiSo-Fakultät?",
+      "category": "forschung",
+      "expected_keywords": ["Forschung", "Schwerpunkte", "WiSo"],
+      "context_hint": "Forschungsaktivitäten der WiSo-Fakultät",
+      "difficulty": "medium",
+      "metadata": {
+        "priority": "medium",
+        "domain": "research"
+      }
+    },
+    {
+      "id": "career_services",
+      "question": "Welche Karriere-Services bietet die WiSo-Fakultät für Studierende?",
+      "category": "services",
+      "expected_keywords": ["Karriere", "Services", "Studierende"],
+      "context_hint": "Serviceangebote für Studierende",
+      "difficulty": "easy",
+      "metadata": {
+        "priority": "medium",
+        "domain": "student_services"
+      }
+    },
+    {
+      "id": "international_programs",
+      "question": "Gibt es internationale Austauschprogramme an der WiSo-Fakultät?",
+      "category": "international",
+      "expected_keywords": ["international", "Austausch", "Programme"],
+      "context_hint": "Internationale Kooperationen und Austauschprogramme",
+      "difficulty": "medium",
+      "metadata": {
+        "priority": "medium",
+        "domain": "international"
+      }
+    },
+    {
+      "id": "complex_policy_question",
+      "question": "Wie wirken sich makroökonomische Politikmaßnahmen auf die mikroökonomischen Entscheidungen von Unternehmen aus, und welche empirischen Methoden werden an der WiSo-Fakultät zur Analyse dieser Zusammenhänge verwendet?",
+      "category": "forschung",
+      "expected_keywords": ["makroökonomisch", "mikroökonomisch", "empirisch", "Analyse"],
+      "context_hint": "Wirtschaftswissenschaftliche Forschungsmethoden",
+      "difficulty": "hard",
+      "metadata": {
+        "priority": "low",
+        "domain": "research",
+        "complexity": "high"
+      }
+    },
+    {
+      "id": "practical_application",
+      "question": "Wie kann ich mich für ein Praktikum bei Partnerunternehmen der WiSo-Fakultät bewerben?",
+      "category": "praxis",
+      "expected_keywords": ["Praktikum", "Bewerbung", "Partner"],
+      "context_hint": "Praktische Erfahrungen und Unternehmenskooperationen",
+      "difficulty": "easy",
+      "metadata": {
+        "priority": "high",
+        "domain": "practical_experience"
+      }
+    },
+    {
+      "id": "technical_resources",
+      "question": "Welche technischen Ressourcen und Software stehen Studierenden für quantitative Analysen zur Verfügung?",
+      "category": "resources",
+      "expected_keywords": ["technisch", "Software", "quantitativ", "Analyse"],
+      "context_hint": "IT-Services und technische Ausstattung",
+      "difficulty": "medium",
+      "metadata": {
+        "priority": "medium",
+        "domain": "technical_resources"
+      }
+    }
+  ]
+}
