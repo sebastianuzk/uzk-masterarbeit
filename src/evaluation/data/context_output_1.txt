@@ -6,29 +6,23 @@ VOLLSTÄNDIGER KONTEXT - RAGAS EVALUATION
 Frage 1: Wodurch zeichnet sich das Studium an der WiSo-Fakultät besonders aus?
 ================================================================================
 
-Antwort: Das Studium an der WiSo-Fakultät der Universität zu Köln zeichnet sich durch eine Vielzahl von Besonderheiten aus:
+Antwort: Das Studium an der WiSo-Fakultät der Universität zu Köln zeichnet sich durch folgende Vorteile aus:
 
-*   Die Fakultät bietet ein breites Spektrum an englischsprachigen Masterstudiengängen mit exzellenter Lehre und Forschung, starken Unternehmenskontakten und hervorragenden Karrierechancen.
-*   Die WiSo-Fakultät hat eine lange Geschichte in der Ausbildung zukünftiger Führungskräfte (125 Jahre Erfahrung) und ist daher ein etablierter und renommierter Akteur im Bereich des Wissenschafts- und Studienbetriebs.
-*   Die Fakultät bietet außerdem verschiedene Kurzprogramme, wie beispielsweise das SchreibArt Programm oder die wissenschaftlichen Arbeitstechniken für Wirtschafts- und Sozialwissenschaften, an. Diese können als Extracurriculares Angebot belegt werden.
-*   Es gibt auch Möglichkeiten für ein Auslandsstudium, sowohl durch Fakultätsübergreifende Kooperationen wie das D9 (Internationales) oder durch strukturierte Austauschprogramme.
+1. **Persönlicher Studienplan**: Die Fakultät bietet die Möglichkeit, einen individuellen Studienplan zu erstellen, der auf die Bedürfnisse des Studenten abgestimmt ist.
+2. **Fakultätsübergreifende Kooperationen**: Die WiSo-Fakultät kooperiert mit anderen Fakultäten und bietet Möglichkeiten für ein Auslandsstudium an.
+3. **Extracurriculares Angebot**: Die Fakultät bietet ein breites Spektrum an extracurricular Angeboten, wie z.B. den Professional Center und das SchreibArt Programm.
+4. **Karrierechancen**: Die WiSo-Fakultät bietet hervorragende Karrierechancen, insbesondere durch die starken Unternehmenskontakte.
 
-Diese Besonderheiten machen das Studium an der WiSo-Fakultät sehr attraktiv und bieten den Studenten eine umfassende und vielfältige Ausbildung mit verschiedenen Möglichkeiten zur Persönlichkeits- und Kompetenzentwicklung.
+Darüber hinaus bietet die Fakultät ein breites Spektrum an englischsprachigen Masterstudiengängen mit exzellenter Lehre und Forschung. Die WiSo-Fakultät ist eine Top-Fakultät mit 125 Jahren Erfahrung in der Ausbildung zukünftiger Führungskräfte.
+
+Die Fakultät bietet auch ein breites Spektrum an Services, wie z.B. den WiSo Career Office und das International Office, um die Studierenden zu unterstützen.
+
+Es ist auch möglich, an einem virtuellen Infotag teilzunehmen, um mehr über die WiSo-Fakultät zu erfahren und wertvolle Einblicke von Professor:innen, aktuellen Studierenden und Alumni zu gewinnen.
 
 Erwartete Antwort: Die WiSo-Studiengänge sind theorie- und methodenorientiert, verbinden Forschung und Lehre eng mit der Praxis und profitieren von langjähriger Zusammenarbeit mit Unternehmen sowie Lehrbeauftragten aus verschiedenen Berufsfeldern.
 
 
---- KONTEXT-CHUNK 1 (390 Zeichen) ---
-Die Kurse des Professional Centers sowie des SchreibArt Programms können als Extracurri-
-culares Angebot unter „Kompetenzen für das Studium“ belegt werden. Zudem gibt es weite-
-res Kursangebot der WiSo-Fakultät: Wissenschaftliche Arbeitstechniken für Wirtschafts- und
-Sozialwissenschaft, die ebenfalls im Extracurriculares Angebot unter „Kompetenzen für das
-Studium“ belegt werden können. 8
-
---- ENDE CHUNK 1 ---
-
-
---- KONTEXT-CHUNK 2 (453 Zeichen) ---
+--- KONTEXT-CHUNK 1 (453 Zeichen) ---
 in einen persönlichen Studienplan integriert werden. Achten Sie bei der
 individuellen Planung auf mögliche Überschneidungen von Lehrveranstaltungen. Bei weiteren
 Fragen hilft der WiSo Student Service Point gerne weiter. Der nachfolgende
@@ -40,10 +34,10 @@ MANAGEMENT, ECONOMICS AND SOCIAL SCIENCES. – BACHELOR OF SCIENCE
 Gültig für Studierende der PO 2021 (Einschreibung ab WiSe 2021/22)
 B.Sc
 
---- ENDE CHUNK 2 ---
+--- ENDE CHUNK 1 ---
 
 
---- KONTEXT-CHUNK 3 (560 Zeichen) ---
+--- KONTEXT-CHUNK 2 (560 Zeichen) ---
 ischen Kurzprogrammen im Ausland
 teilzunehmen und so während der Semesterferien weitere Credits zu erwerben.
 3. Fakultätsübergreifende Kooperationen:
@@ -57,6 +51,16 @@ Gültig für Studierende der PO 2021 (Einschreibung ab WiSe 2021/22)
 angeboten werden. Auch das D9 hat strukturierte Austauschprogramme, die
 individuell interessant sein könnten.
 5
+
+--- ENDE CHUNK 2 ---
+
+
+--- KONTEXT-CHUNK 3 (390 Zeichen) ---
+Die Kurse des Professional Centers sowie des SchreibArt Programms können als Extracurri-
+culares Angebot unter „Kompetenzen für das Studium“ belegt werden. Zudem gibt es weite-
+res Kursangebot der WiSo-Fakultät: Wissenschaftliche Arbeitstechniken für Wirtschafts- und
+Sozialwissenschaft, die ebenfalls im Extracurriculares Angebot unter „Kompetenzen für das
+Studium“ belegt werden können. 8
 
 --- ENDE CHUNK 3 ---
 

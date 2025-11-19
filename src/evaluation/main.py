@@ -17,6 +17,7 @@ from langsmith import Client
 from config.settings import (
     OLLAMA_MODEL, 
     OLLAMA_BASE_URL,
+    OLLAMA_EVALUATION_TIMEOUT,
     LANGSMITH_API_KEY,
     LANGSMITH_PROJECT
 )
@@ -107,6 +108,8 @@ for idx, row in test_df.iterrows():
         retrieved_contexts=contexts,  # Liste von Chunks!
         reference=expected_answer
     )
+    # Session-ID für Tracking speichern
+    sample._session_id = session_id
     samples.append(sample)
 
 print(f"\n{'=' * 80}")
@@ -119,7 +122,8 @@ dataset = EvaluationDataset(samples=samples)
 llm = ChatOllama(
     model=OLLAMA_MODEL,
     base_url=OLLAMA_BASE_URL,
-    temperature=0.0
+    temperature=0.0,
+    timeout=OLLAMA_EVALUATION_TIMEOUT
 )
 
 print(f"🤖 LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL}\n")
@@ -137,50 +141,50 @@ for i, sample in enumerate(dataset.samples):
     for j, ctx in enumerate(sample.retrieved_contexts):
         print(f"    Chunk {j+1} ({len(ctx)} chars): {ctx[:150]}...")
 
-# Test 1: Faithfulness
-print("\n" + "=" * 80)
-print("TEST 1: Faithfulness")
-print("=" * 80)
-print(f"📄 Context ({len(dataset.samples[0].retrieved_contexts)} chunks):")
-for i, ctx in enumerate(dataset.samples[0].retrieved_contexts[:2]):  # Zeige erste 2 Chunks
-    print(f"  Chunk {i+1}: {ctx[:200]}...")
-print()
-try:
-    print("⏳ Evaluiere...")
-    result = evaluate(dataset=dataset, metrics=[faithfulness], llm=llm)
-    print(f"✅ Faithfulness: {result['faithfulness']}")
-except Exception as e:
-    print(f"❌ Fehler: {str(e)}")
+# Test 1: Faithfulness (deaktiviert für schnelleren Test)
+# print("\n" + "=" * 80)
+# print("TEST 1: Faithfulness")
+# print("=" * 80)
+# print(f"📄 Context ({len(dataset.samples[0].retrieved_contexts)} chunks):")
+# for i, ctx in enumerate(dataset.samples[0].retrieved_contexts[:2]):  # Zeige erste 2 Chunks
+#     print(f"  Chunk {i+1}: {ctx[:200]}...")
+# print()
+# try:
+#     print("⏳ Evaluiere...")
+#     result = evaluate(dataset=dataset, metrics=[faithfulness], llm=llm)
+#     print(f"✅ Faithfulness: {result['faithfulness']}")
+# except Exception as e:
+#     print(f"❌ Fehler: {str(e)}")
 
-# Test 2: Context Recall
-print("\n" + "=" * 80)
-print("TEST 2: Context Recall")
-print("=" * 80)
-print(f"📄 Context ({len(dataset.samples[0].retrieved_contexts)} chunks):")
-for i, ctx in enumerate(dataset.samples[0].retrieved_contexts[:2]):  # Zeige erste 2 Chunks
-    print(f"  Chunk {i+1}: {ctx[:200]}...")
-print()
-try:
-    print("⏳ Evaluiere...")
-    result = evaluate(dataset=dataset, metrics=[context_recall], llm=llm)
-    print(f"✅ Context Recall: {result['context_recall']}")
-except Exception as e:
-    print(f"❌ Fehler: {str(e)}")
+# Test 2: Context Recall (deaktiviert für schnelleren Test)
+# print("\n" + "=" * 80)
+# print("TEST 2: Context Recall")
+# print("=" * 80)
+# print(f"📄 Context ({len(dataset.samples[0].retrieved_contexts)} chunks):")
+# for i, ctx in enumerate(dataset.samples[0].retrieved_contexts[:2]):  # Zeige erste 2 Chunks
+#     print(f"  Chunk {i+1}: {ctx[:200]}...")
+# print()
+# try:
+#     print("⏳ Evaluiere...")
+#     result = evaluate(dataset=dataset, metrics=[context_recall], llm=llm)
+#     print(f"✅ Context Recall: {result['context_recall']}")
+# except Exception as e:
+#     print(f"❌ Fehler: {str(e)}")
 
-# Test 3: Context Precision  
-print("\n" + "=" * 80)
-print("TEST 3: Context Precision")
-print("=" * 80)
-print(f"📄 Context ({len(dataset.samples[0].retrieved_contexts)} chunks):")
-for i, ctx in enumerate(dataset.samples[0].retrieved_contexts[:2]):  # Zeige erste 2 Chunks
-    print(f"  Chunk {i+1}: {ctx[:200]}...")
-print()
-try:
-    print("⏳ Evaluiere...")
-    result = evaluate(dataset=dataset, metrics=[context_precision], llm=llm)
-    print(f"✅ Context Precision: {result['context_precision']}")
-except Exception as e:
-    print(f"❌ Fehler: {str(e)}")
+# Test 3: Context Precision (deaktiviert für schnelleren Test)
+# print("\n" + "=" * 80)
+# print("TEST 3: Context Precision")
+# print("=" * 80)
+# print(f"📄 Context ({len(dataset.samples[0].retrieved_contexts)} chunks):")
+# for i, ctx in enumerate(dataset.samples[0].retrieved_contexts[:2]):  # Zeige erste 2 Chunks
+#     print(f"  Chunk {i+1}: {ctx[:200]}...")
+# print()
+# try:
+#     print("⏳ Evaluiere...")
+#     result = evaluate(dataset=dataset, metrics=[context_precision], llm=llm)
+#     print(f"✅ Context Precision: {result['context_precision']}")
+# except Exception as e:
+#     print(f"❌ Fehler: {str(e)}")
 
 # Test 4: Alle zusammen
 print("\n" + "=" * 80)
@@ -200,6 +204,42 @@ try:
     print(f"✅ Faithfulness: {result['faithfulness']}")
     print(f"✅ Context Recall: {result['context_recall']}")
     print(f"✅ Context Precision: {result['context_precision']}")
+    
+    # CSV Export vorbereiten
+    import pandas as pd
+    
+    results_data = []
+    for i, sample in enumerate(dataset.samples):
+        results_data.append({
+            'question_id': START_INDEX + i,
+            'question': sample.user_input,
+            'expected_answer': sample.reference,
+            'generated_answer': sample.response,
+            'retrieved_contexts': sample.retrieved_contexts,
+            'faithfulness': result['faithfulness'],
+            'context_recall': result['context_recall'],
+            'context_precision': result['context_precision'],
+            'session_id': getattr(sample, '_session_id', None)
+        })
+    
+    results_df = pd.DataFrame(results_data)
+    
+    # Excel Export (behält Listen und JSON-Strukturen bei)
+    output_dir = Path(__file__).parent / "data"
+    output_dir.mkdir(exist_ok=True)
+    excel_output_file = output_dir / f"main_results_{START_INDEX}.xlsx"
+    
+    # Konvertiere retrieved_contexts zu JSON-String für Excel (Original-Format aus LangSmith)
+    results_df_export = results_df.copy()
+    if 'retrieved_contexts' in results_df_export.columns:
+        import json
+        results_df_export['retrieved_contexts'] = results_df_export['retrieved_contexts'].apply(
+            lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, list) else str(x)
+        )
+    
+    results_df_export.to_excel(excel_output_file, index=False, engine='openpyxl')
+    print(f"\n✅ Ergebnisse gespeichert in Excel: {excel_output_file}")
+    
 except Exception as e:
     print(f"❌ Fehler: {str(e)}")
 
