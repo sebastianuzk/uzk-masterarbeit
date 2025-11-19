@@ -13,6 +13,7 @@ class Settings:
     # Ollama Konfiguration
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")  # Kleineres Modell für begrenzte RAM-Systeme
+    OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:8b")
     
     # LLM Konfiguration
     TEMPERATURE = 0.7
@@ -70,6 +71,7 @@ settings = Settings()
 # Module-Level Exports für einfachen Import
 OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
 OLLAMA_MODEL = settings.OLLAMA_MODEL
+OLLAMA_EMBEDDING_MODEL = settings.OLLAMA_EMBEDDING_MODEL
 TEMPERATURE = settings.TEMPERATURE
 MAX_ITERATIONS = settings.MAX_ITERATIONS
 MEMORY_SIZE = settings.MEMORY_SIZE

@@ -1,379 +1,174 @@
-# ARES-basierte RAG-Evaluation
+# RAGAS Evaluation für WiSo RAG System
 
-Dieses Modul implementiert ein umfassendes Evaluations-System für RAG (Retrieval-Augmented Generation) Systeme basierend auf dem **Stanford ARES Framework**.
+Dieses Verzeichnis enthält die RAGAS-basierte Evaluation des WiSo RAG-Systems.
 
-## 📋 Überblick
-
-Das System ersetzt die vorherige ARES-ähnliche Implementierung durch eine echte Integration des Stanford ARES Frameworks und bietet:
-
-- **Authentisches ARES Framework**: Verwendung der offiziellen `ares-ai` Bibliothek
-- **Umfassende Metriken**: Context Relevance, Answer Relevance, Answer Faithfulness
-- **Flexible Testfälle**: JSON-basierte Testfall-Verwaltung
-- **Batch-Processing**: Effiziente Evaluation mehrerer Testfälle
-- **Ergebnis-Tracking**: Automatische Speicherung und Analyse
-
-## 🏗️ Architektur
+## 📁 Struktur
 
 ```
 src/evaluation/
-├── __init__.py              # ARES-basierte Imports
-├── ares_evaluator.py        # Stanford ARES Framework Integration
-├── evaluation_runner.py     # Orchestrierung von Evaluationen
-├── test_cases.py           # Testfall-Datenstrukturen
-├── results_manager.py      # Ergebnis-Speicherung und -Verwaltung
-├── simple_rag_evaluation.py # Vereinfachte API für Nutzer
-├── test_direct_evaluation.py # Test-Scripts
-├── test_direct_storage.py  # Test-Scripts
-└── data/
-    └── wiso_test_cases.json # Standard WiSo-Testfälle
+├── ragas_evaluation.py          # Hauptskript für RAGAS-Evaluation
+├── data/                         # Test-Datensätze
+│   ├── ares_unlabeled_evaluation.tsv    # 10 Q/A/Kontext-Triplets
+│   ├── ares_few_shot_examples.csv       # Annotierte Beispiele
+│   └── ragas_results.csv               # Evaluation-Ergebnisse (generiert)
+└── README.md                     # Diese Datei
 ```
 
-## 🚀 Quick Start
+## 🚀 Schnellstart
 
-### 1. Installation
-
-Das ARES Framework ist bereits installiert:
+### 1. RAGAS installieren
 
 ```bash
-# Bereits installiert in der virtuellen Umgebung
-pip install ares-ai
+pip install ragas langchain-ollama
 ```
 
-### 2. Basic Usage
+### 2. Ollama starten
 
-```python
-from src.evaluation import quick_evaluation, evaluate_rag_question, ares_score
-from src.evaluation.test_cases import create_default_test_cases
+Stelle sicher, dass Ollama läuft:
 
-# Agent bereitstellen (muss LangChain-Interface unterstützen)
-agent = YourRAGAgent()
-
-# Runner erstellen
-runner = EvaluationRunner(agent=agent)
-
-# Evaluation durchführen
-test_cases = create_default_test_cases()
-results = runner.run_complete_evaluation(test_cases)
-
-print(f"Erfolgsrate: {results['statistics']['success_rate']:.2%}")
+```bash
+ollama serve
 ```
 
-### 3. Single Evaluation
+### 3. Evaluation durchführen
 
-```python
-from src.evaluation.ares_evaluator import ARESEvaluator
-
-evaluator = ARESEvaluator()
-
-evaluation = evaluator.evaluate_single(
-    query="Welche Master-Programme bietet die WiSo-Fakultät?",
-    response="Die WiSo-Fakultät bietet Master in Economics und Business Administration.",
-    contexts=["Context from knowledge base..."]
-)
-
-print(evaluation)  # {"context_relevance": 0.85, "answer_relevance": 0.78, ...}
+```bash
+python src/evaluation/ragas_evaluation.py
 ```
 
-### 4. Quick Evaluation
+## 📊 RAGAS Metriken
 
-```python
-from src.evaluation.evaluation_runner import quick_evaluation
+Das Skript evaluiert 3 Kernmetriken:
 
-questions = [
-    "Was sind die Zulassungsvoraussetzungen?",
-    "Gibt es internationale Programme?"
-]
+### 1. **Faithfulness** (Treue)
+- **Frage**: Ist die Antwort treu zum abgerufenen Kontext?
+- **Berechnung**: Überprüft, ob alle Aussagen in der Antwort durch den Kontext gestützt werden
+- **Score**: 0.0 (untreu) bis 1.0 (völlig treu)
 
-results = quick_evaluation(agent, questions)
+### 2. **Answer Relevancy** (Antwort-Relevanz)
+- **Frage**: Ist die Antwort relevant zur gestellten Frage?
+- **Berechnung**: Misst semantische Ähnlichkeit zwischen Frage und Antwort
+- **Score**: 0.0 (irrelevant) bis 1.0 (sehr relevant)
+
+### 3. **Context Precision** (Kontext-Präzision)
+- **Frage**: Sind die abgerufenen Kontexte präzise für die Frage?
+- **Berechnung**: Überprüft, ob relevante Kontexte höher gerankt sind als irrelevante
+- **Score**: 0.0 (unpräzise) bis 1.0 (sehr präzise)
+
+## 📈 Ergebnisse interpretieren
+
+Nach der Evaluation werden folgende Ergebnisse angezeigt:
+
+```
+📊 RAGAS EVALUATION ERGEBNISSE
+================================================================
+
+📈 Durchschnittliche Scores:
+----------------------------------------------------------------
+faithfulness             : 0.856
+answer_relevancy         : 0.723
+context_precision        : 0.612
+
+================================================================
 ```
 
-## 📊 ARES Metriken
-
-Das System evaluiert drei Hauptmetriken des Stanford ARES Frameworks:
-
-### Context Relevance
-- **Beschreibung**: Wie relevant sind die abgerufenen Kontexte für die Anfrage?
-- **Bereich**: 0.0 - 1.0
-- **Interpretation**: Höhere Werte = bessere Kontext-Auswahl
-
-### Answer Relevance  
-- **Beschreibung**: Wie relevant ist die Antwort für die gestellte Frage?
-- **Bereich**: 0.0 - 1.0
-- **Interpretation**: Höhere Werte = passendere Antworten
-
-### Answer Faithfulness
-- **Beschreibung**: Wie treu bleibt die Antwort dem bereitgestellten Kontext?
-- **Bereich**: 0.0 - 1.0
-- **Interpretation**: Höhere Werte = weniger Halluzinationen
-
-## 🧪 Testfälle
-
-### Standard-Testfälle
-
-Das System enthält 8 vordefinierte Testfälle für WiSo-Domäne:
-
-- **Studienprogramme**: Master-Programme Information
-- **Zulassung**: Voraussetzungen und Bewerbung  
-- **Forschung**: Forschungsschwerpunkte
-- **Services**: Karriere-Services und Support
-- **International**: Austauschprogramme
-- **Praxis**: Praktika und Partnerschaften
-- **Resources**: Technische Ausstattung
-- **Komplexe Fragen**: Interdisziplinäre Themen
-
-### Eigene Testfälle
-
-```python
-from src.evaluation.test_cases import TestCase
-
-custom_test = TestCase(
-    id="custom_test_1",
-    question="Ihre Frage hier",
-    category="custom",
-    expected_answer="Erwartete Antwort (optional)",
-    expected_keywords=["Keyword1", "Keyword2"],
-    difficulty="medium"
-)
-```
-
-### JSON-Format
-
-```json
-{
-  "test_cases": [
-    {
-      "id": "unique_id",
-      "question": "Test question",
-      "category": "category_name",
-      "expected_answer": "Expected response",
-      "expected_keywords": ["keyword1", "keyword2"],
-      "context_hint": "Context guidance",
-      "difficulty": "easy|medium|hard",
-      "metadata": {}
-    }
-  ]
-}
-```
+**Interpretation:**
+- **> 0.8**: Exzellent
+- **0.6 - 0.8**: Gut
+- **0.4 - 0.6**: Verbesserungsbedürftig
+- **< 0.4**: Schlecht
 
 ## 🔧 Konfiguration
 
-### ARES Evaluator Konfiguration
+### Ollama-Modell ändern
+
+Bearbeite `config/settings.py`:
 
 ```python
-evaluator = ARESEvaluator(
-    # ARES Framework Einstellungen werden automatisch geladen
-)
+OLLAMA_MODEL = "qwen3:8b"  # Oder ein anderes Modell
 ```
 
-### Evaluation Runner Konfiguration
+### Test-Daten anpassen
 
-```python
-runner = EvaluationRunner(
-    agent=your_agent,
-    results_dir=Path("custom_results_dir")  # Optional
-)
+Die Test-Daten liegen in `data/ares_unlabeled_evaluation.tsv`:
+
+```tsv
+Question	Answer	Document	ID
+Welche Studienbereiche...	Der Menüpunkt...	Den Studierenden...	eval_1
 ```
 
-## 📈 Ergebnisse
+Format:
+- **Question**: Die Frage an das RAG-System
+- **Answer**: Die generierte Antwort
+- **Document**: Der abgerufene Kontext
+- **ID**: Eindeutige ID
 
-### Ergebnis-Struktur
+## 📚 RAGAS Dokumentation
 
-```json
-{
-  "metadata": {
-    "timestamp": "2024-12-28T...",
-    "evaluator": "Stanford_ARES_Framework",
-    "version": "1.0.0"
-  },
-  "statistics": {
-    "total_test_cases": 8,
-    "successful_responses": 7,
-    "failed_responses": 1,
-    "success_rate": 0.875,
-    "duration_seconds": 45.2,
-    "ares_metrics": {
-      "context_relevance": 0.82,
-      "answer_relevance": 0.78,
-      "answer_faithfulness": 0.85
-    }
-  },
-  "test_cases": [...],
-  "responses": [...],
-  "ares_evaluation": {...}
+- **Offizielle Docs**: https://docs.ragas.io/
+- **Quickstart**: https://docs.ragas.io/en/latest/getstarted/quickstart/
+- **Metriken**: https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/
+- **Ollama Integration**: https://docs.ragas.io/en/latest/howtos/customizations/customize_models/
+
+## 🆚 RAGAS vs. ARES
+
+| Aspekt | RAGAS | ARES |
+|--------|-------|------|
+| **Installation** | `pip install ragas` | Komplex (vLLM/GPU benötigt) |
+| **Ollama Support** | ✅ Nativ | ❌ Nur mit vLLM |
+| **Python 3.13** | ✅ Kompatibel | ⚠️ NumPy-Konflikt |
+| **Metriken** | 7+ Metriken | 3 Metriken |
+| **Entwicklung** | Aktiv (Nov 2024) | Stagniert (Mar 2024) |
+| **GPU Bedarf** | ❌ Nicht benötigt | ✅ Für vLLM erforderlich |
+| **Wissenschaftlich** | ✅ Etabliert | ✅ Etabliert |
+
+**Fazit**: RAGAS ist besser geeignet für ressourcenbeschränkte Setups und bietet mehr Funktionalität.
+
+## 🐛 Troubleshooting
+
+### Fehler: "Connection refused"
+
+**Problem**: Ollama läuft nicht.
+
+**Lösung**:
+```bash
+ollama serve
+```
+
+### Fehler: "Module not found: ragas"
+
+**Problem**: RAGAS nicht installiert.
+
+**Lösung**:
+```bash
+pip install ragas langchain-ollama
+```
+
+### Fehler: "Model not found"
+
+**Problem**: Das Ollama-Modell ist nicht heruntergeladen.
+
+**Lösung**:
+```bash
+ollama pull qwen3:8b  # Oder dein konfiguriertes Modell
+```
+
+## 📝 Zitierung
+
+Wenn du RAGAS in deiner Masterarbeit verwendest:
+
+```bibtex
+@software{ragas2024,
+  title = {RAGAS: Evaluation framework for Retrieval Augmented Generation},
+  author = {Exploding Gradients},
+  year = {2024},
+  url = {https://github.com/explodinggradients/ragas},
+  note = {Version 0.2.x}
 }
 ```
 
-### Ergebnis-Speicherung
+## 🤝 Support
 
-Ergebnisse werden automatisch gespeichert:
-
-- `evaluation_results_{timestamp}.json`: Vollständige Ergebnisse
-- `evaluation_results_latest.json`: Neueste Ergebnisse (Shortcut)
-
-## 🤖 Agent-Integration
-
-### LangChain Agents
-
-```python
-# Ihr Agent muss das LangChain Interface unterstützen
-class YourRAGAgent:
-    def invoke(self, inputs):
-        return {
-            "output": "Agent response",
-            "source_documents": ["context1", "context2"],
-            "metadata": {}
-        }
-```
-
-### Custom Agent Interface
-
-```python
-class YourCustomAgent:
-    def query(self, question):
-        return {
-            "answer": "Agent response", 
-            "contexts": ["context1", "context2"],
-            "metadata": {}
-        }
-```
-
-## 📋 Verfügbare Scripts
-
-### Demo Script
-
-```bash
-# Führe Demo-Evaluationen aus
-python scripts/demo_ares_evaluation.py
-```
-
-Das Demo-Script zeigt:
-- Einzelne Frage Evaluation
-- Batch-Evaluation
-- Quick-Evaluation
-- Testfall-Verwaltung
-
-## 🔍 Debugging
-
-### Logging aktivieren
-
-```python
-import logging
-logging.basicConfig(level=logging.INFO)
-```
-
-### Häufige Probleme
-
-**Problem**: ARES Framework nicht verfügbar
-```python
-# Fallback auf Mock-Evaluation
-evaluation = {
-    "context_relevance": 0.0,
-    "answer_relevance": 0.0, 
-    "answer_faithfulness": 0.0
-}
-```
-
-**Problem**: Agent Interface nicht kompatibel
-```python
-# Prüfe verfügbare Methoden
-print(dir(your_agent))
-# Implementiere entsprechende Wrapper
-```
-
-## 🚧 Entwicklung
-
-### Tests ausführen
-
-```bash
-python -m pytest tests/test_evaluation.py -v
-```
-
-### Neue Metriken hinzufügen
-
-1. Erweitere `ARESEvaluator.evaluate_single()`
-2. Update Ergebnis-Struktur in `evaluation_runner.py`
-3. Füge Tests hinzu
-
-## 📚 Referenzen
-
-- [Stanford ARES Framework](https://github.com/stanford-futuredata/ARES)
-- [ARES Paper](https://arxiv.org/abs/2311.09476)
-- [RAG Evaluation Best Practices](https://docs.langchain.com/docs/guides/evaluation)
-
-## 🤝 Migration von alter Evaluation
-
-Die alte ARES-ähnliche Implementierung wurde vollständig durch das echte Stanford ARES Framework ersetzt:
-
-- ✅ `ares-ai` Paket installiert
-- ✅ Authentische ARES Metriken
-- ✅ Verbesserte Genauigkeit
-- ✅ Standardisierte Evaluation
-- ✅ Bessere Reproduzierbarkeit
-
-Alle Evaluations-Workflows bleiben kompatibel, nutzen jetzt aber das echte ARES Framework.
-
----
-
-## Offizielle ARES-API (UES/IDP & PPI) – Nutzung in diesem Projekt
-
-- UES/IDP (LLM-Judge):
-  - Aufruf: `ARES(ues_idp=...).ues_idp()`
-  - Benötigt: `in_domain_prompts_dataset` (Few-Shot TSV), `unlabeled_evaluation_set` (TSV), `model_choice` (z. B. GPT-3.5)
-  - Optional: vLLM (`vllm=True`, `host_url`)
-
-- PPI (LLM-Judge oder Checkpoints):
-  - Aufruf: `ARES(ppi=...).evaluate_RAG()`
-  - Benötigt: `evaluation_datasets` (TSV). Entweder:
-   - LLM-Judge: `few_shot_examples_filepath` + `llm_judge`
-   - oder Checkpoints: `checkpoints=[...]` (+ optional `gold_label_path`)
-
-In `ares_evaluator.py` werden automatisch TSVs aus Q/A/Context erzeugt und die Ergebnisse zu `average_scores` und `individual_results` zusammengefasst.
-
-### Beispiel: Single-Evaluation (PPI, LLM-Judge)
-
-```python
-from pathlib import Path
-from src.evaluation.ares_evaluator import ARESEvaluator
-
-evaluator = ARESEvaluator(
-   mode="ppi",
-   few_shot_path=Path("src/evaluation/data/ares_few_shot_prompt_for_judge_scoring.tsv"),
-   llm_judge_ppi="gpt-3.5-turbo-1106"
-)
-
-res = evaluator.evaluate_single_sync(
-   query="Welche Master-Programme bietet die WiSo-Fakultät?",
-   response="Die WiSo-Fakultät bietet Master in Economics und Business Administration.",
-   contexts=["Kontextpassage 1", "Kontextpassage 2"]
-)
-print(res)
-```
-
-### Beispiel: Runner im UES/IDP-Modus
-
-```python
-from src.evaluation.evaluation_runner import EvaluationRunner
-
-runner = EvaluationRunner(agent=your_agent, evaluation_mode="ues_idp")
-```
-
-### Beispiel-Few-Shot (bereitgestellt)
-
-Eine minimale Few-Shot-Datei liegt unter:
-`src/evaluation/data/ares_few_shot_prompt_for_judge_scoring.tsv`
-
-### 2–3 Beispiel-Fragen für deinen Datensatz
-
-1) Frage: "Welche Master-Programme bietet die WiSo-Fakultät an?"
-  - Antwort: "Die WiSo-Fakultät bietet Master in Economics, Business Administration und weitere Programme an."
-  - Kontext: "Die WiSo-Fakultät bietet verschiedene Master-Programme an ..."
-
-2) Frage: "Wie bewerbe ich mich für ein Masterstudium an der WiSo?"
-  - Antwort: "Die Bewerbung erfolgt online über das Bewerbungsportal; Fristen und Anforderungen stehen auf der WiSo-Webseite."
-  - Kontext: "Die Bewerbung erfolgt über das Online-Portal der Universität zu Köln ..."
-
-3) (Negativbeispiel) Frage: "Welche Forschungsschwerpunkte hat die WiSo-Fakultät?"
-  - Antwort: "Die Mensa öffnet um 11:30 Uhr."  (absichtlich irrelevant)
-  - Kontext: "Forschungsschwerpunkte: empirische Wirtschaftsforschung, Verhaltensökonomie, ..."
-
-Hinweis: ARES vergibt Scores pro Beispiel (Kontextrelevanz, Antworttreue, Antwortrelevanz) und bildet daraus aggregierte Kennzahlen.
+- **RAGAS Discord**: https://discord.gg/5djav8GGNZ
+- **GitHub Issues**: https://github.com/explodinggradients/ragas/issues
+- **Office Hours**: https://cal.com/team/vibrantlabs/office-hours

@@ -1,0 +1,60 @@
+user_input,retrieved_contexts,response,reference,faithfulness,answer_relevancy,context_recall,category,difficulty
+Welche Studienbereiche deckt der Menüpunkt „Studium“ der WiSo-Fakultät ab?,['Kein Kontext in LangSmith gefunden'],"Die Informationen aus der Universitäts-Wissensdatenbank zeigen, dass der Menüpunkt „Studium“ der WiSo-Fakultät folgende Bereiche umfasst:
+
+1. **Studium Integrale**  
+   Ein flexibles Modul mit 12 Leistungspunkten, das Studierenden ermöglicht:  
+   - Interdisziplinäre Veranstaltungen (z. B. Ringvorlesungen) zu gesellschaftlichen Themen  
+   - Berufsrelevante Kompetenzen und Sprachkurse  
+   - Lernhilfen zu wissenschaftlichem Arbeiten und Literaturrecherche  
+   - Anrechnung von Praktika und qualifizierenden Auslandsaufenthalten  
+
+2. **Extracurriculare Angebote**  
+   - Kurse des Professional Centers und SchreibArt-Programms  
+   - Wissenschaftliche Arbeitstechniken für Wirtschafts- und Sozialwissenschaften  
+
+3. **Masterstudiengänge**  
+   Die WiSo-Fakultät bietet englischsprachige Masterstudiengänge an, z. B.:  
+   - CEMS Master in International Management (exklusiv in Deutschland)  
+   - Five Double-Degree-Programme  
+   (Weitere Details sind im virtuellen Infotag beschrieben: [Anmeldung hier](https://example.com/infotag))  
+
+4. **Karriere- und Beratungsangebote**  
+   - Services des WiSo Career Office  
+   - Angebote für internationale Studierende  
+
+**Hinweis:** Die genauen Studienbereiche (z. B. Wirtschaftswissenschaft, Sozialwissenschaften) sind in den Studiengangsbeschreibungen detailliert. Für weitere Informationen empfehle ich, direkt auf der [WiSo-Fakultätswebsite](https://www.wiwi.uni-koeln.de) nachzuschauen oder den virtuellen Infotag zu besuchen.  
+
+🔍 **Quellen:**  
+- [Studium Integrale](https://www.wiwi.uni-koeln.de/studium/integrale)  
+- [Masterstudiengänge](https://www.wiwi.uni-koeln.de/studium/master)  
+- [Virtueller Infotag](https://www.wiwi.uni-koeln.de/infotag)  
+
+Falls du spezifische Studienrichtungen suchst, kann ich dir gern weitere Details helfen! 😊","Unter „Studium“ findest du Informationen zu Bachelor- und Masterstudiengängen, Promotion (CGS), dem Executive MBA (UCBS), internationalen Angeboten sowie zu Studienorganisation, Bewerbung und zu Modulhandbüchern und Prüfungsordnungen.",,,0.0,Studium-Übersicht,easy
+Wodurch zeichnet sich das Studium an der WiSo-Fakultät besonders aus?,['Kein Kontext in LangSmith gefunden'],"Das Studium an der WiSo-Fakultät der Universität zu Köln zeichnet sich durch mehrere einzigartige Merkmale aus, die sowohl akademische als auch praktische Kompetenzen fördern:
+
+1. **Interdisziplinäre Ausrichtung**:  
+   Studierende können sich nicht nur auf wirtschafts- oder sozialwissenschaftliche Schwerpunkte spezialisieren, sondern auch fächerübergreifende Bereiche wie sozialpsychologische oder volkswirtschaftliche Themen erkunden. Dies ermöglicht eine breite Karriereperspektive in Bereichen wie Politik, Wirtschaft, Forschung und internationalen Organisationen.  
+   *(Quellen: b_mhb_po2021_sowi (Teil 10/308), b_mhb_po2021_sowi (Teil 56/308))*
+
+2. **Studium Integrale**:  
+   Ein modulares Angebot mit 12 Leistungspunkten, das interdisziplinäre Veranstaltungen, Workshops zu gesellschaftlichen Themen und Praktika umfasst. Es fördert Soft Skills wie wissenschaftliches Arbeiten, Literaturrecherche sowie sprachliche Kompetenzen und ist formal als Modul anerkannt.  
+   *(Quelle: b_mhb_po2021_sowi (Teil 56/308))*
+
+3. **Extracurriculare Angebote**:  
+   Kurse wie das *Professional Center*, das *SchreibArt Programm* oder Workshops zur wissenschaftlichen Arbeitstechniken ergänzen das Studium und stärken praxisnahe Fähigkeiten.  
+   *(Quelle: b_mhb_po2021_bk1 (Teil 25/93))*
+
+4. **Internationale Karrierechancen**:  
+   Die Fakultät bietet englischsprachige Masterstudiengänge (z. B. CEMS Master in International Management) sowie Double-Degree-Programme an, die internationale Karriereperspektiven und Netzwerke fördern.  
+   *(Quellen: Virtueller Infotag - WiSo-Fakultät (Teil 2/5), (Teil 4/5))*
+
+5. **Starke Praxisverbindung**:  
+   Durch Praktika, Auslandsaufenthalte und Kontakte zu Unternehmen wird die Brücke zwischen Theorie und Praxis gestärkt. Das *WiSo Career Office* unterstützt bei der Karriereplanung.  
+   *(Quellen: Virtueller Infotag - WiSo-Fakultät (Teil 2/5), b_mhb_po2021_sowi (Teil 10/308))*
+
+Diese Kombination aus Flexibilität, interdisziplinärer Ausrichtung und praxisnahen Angeboten macht das Studium an der WiSo-Fakultät besonders. 🌍📚","Die WiSo-Studiengänge sind theorie- und methodenorientiert, verbinden Forschung und Lehre eng mit der Praxis und profitieren von langjähriger Zusammenarbeit mit Unternehmen sowie Lehrbeauftragten aus verschiedenen Berufsfeldern.",,,0.0,Allgemein WiSo,medium
+Welche Kosten fallen für reguläre Studienprogramme der WiSo-Fakultät an?,['Kein Kontext in LangSmith gefunden'],"Die Universitäts-Wissensdatenbank enthält keine expliziten Angaben zu Kosten für reguläre Studienprogramme der WiSo-Fakultät. Die bereitgestellten Informationen beziehen sich auf Studienstruktur, Module, Bewerbungsprozesse und Services (z. B. Austauschprogramme oder Beratung). 
+
+Für detaillierte Informationen zu Studiengebühren oder finanziellen Aspekken empfehle ich, direkt auf der [Offiziellen Website der WiSo-Fakultät](https://www.wiwi.uni-koeln.de) nachzuschauen oder das [WiSo Student Service Point](https://www.wiwi.uni-koeln.de/studienberatung) zu kontaktieren. Dort finden Sie auch Informationen zu Förderungen, BAföG oder anderen finanziellen Unterstützungsprogrammen. 
+
+Sollte die Antwort noch unklar sein, können wir gern weitere Fragen klären! 😊","Für die regulären Studienprogramme fällt nur der halbjährliche Semesterbeitrag an, der bereits das Semesterticket für den öffentlichen Nahverkehr in ganz Nordrhein-Westfalen umfasst.",0.0,,0.0,Allgemein WiSo,easy
