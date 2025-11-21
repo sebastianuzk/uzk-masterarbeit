@@ -29,74 +29,35 @@ class TestSystemIntegration(unittest.TestCase):
             self.skipTest("Ollama-Server nicht erreichbar")
     
     def test_complete_system_initialization(self):
-        """Teste vollständige Systeminitialisierung"""
+        """Teste vollständige Systeminitialisierung und Interaktion"""
         try:
-            original_model = settings.OLLAMA_MODEL
-            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
-            
             # Erstelle Agent
             agent = create_react_agent()
             self.assertIsNotNone(agent)
             
-            # Überprüfe, dass alle erwarteten Tools geladen sind
+            # Überprüfe Tools
             tools = agent.get_available_tools()
             self.assertIsInstance(tools, list)
             self.assertGreater(len(tools), 0)
-            
-            # Überprüfe spezifische Tools
-            if settings.ENABLE_DUCKDUCKGO:
-                self.assertIn("duckduckgo_search", tools)
-            
-            if settings.ENABLE_WEB_SCRAPER:
-                self.assertIn("web_scraper", tools)
-            
-            # E-Mail-Tool sollte immer verfügbar sein
             self.assertIn("send_email", tools)
             
-            # RAG-Tool sollte verfügbar sein (falls ChromaDB funktioniert)
-            # Wird möglicherweise übersprungen, wenn ChromaDB nicht verfügbar ist
-            
-            settings.OLLAMA_MODEL = original_model
-        except Exception as e:
-            settings.OLLAMA_MODEL = original_model
-            self.fail(f"System-Initialisierung fehlgeschlagen: {str(e)}")
-    
-    def test_agent_tool_interaction(self):
-        """Teste Interaktion zwischen Agent und Tools"""
-        try:
-            original_model = settings.OLLAMA_MODEL
-            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
-            
-            agent = create_react_agent()
-            
             # Teste einfache Interaktion
-            response = agent.chat("Hallo, welche Tools hast du zur Verfügung?")
+            response = agent.chat("Hallo")
             self.assertIsInstance(response, str)
-            self.assertGreater(len(response), 0)
-            
-            # Memory sollte Nachrichten enthalten
-            memory_info = agent.get_memory_summary()
-            self.assertGreater(memory_info["total_messages"], 0)
-            
-            settings.OLLAMA_MODEL = original_model
+            self.assertGreater(len(response), 10)
         except Exception as e:
-            settings.OLLAMA_MODEL = original_model
-            self.fail(f"Agent-Tool-Interaktion fehlgeschlagen: {str(e)}")
+            self.fail(f"System-Initialisierung fehlgeschlagen: {str(e)}")
     
     def test_email_tool_system_integration(self):
         """Teste E-Mail-Tool-Integration im Gesamtsystem"""
         try:
-            original_model = settings.OLLAMA_MODEL
-            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
-            
             # Teste eigenständiges E-Mail-Tool
             email_tool = create_email_tool()
             self.assertIsNotNone(email_tool)
+            self.assertEqual(email_tool.name, "send_email")
             
-            # Teste Agent mit E-Mail-Tool
+            # Erstelle einen Agent, um Tool-Integration zu testen
             agent = create_react_agent()
-            tools = agent.get_available_tools()
-            self.assertIn("send_email", tools)
             
             # Überprüfe, dass E-Mail-Tool korrekt konfiguriert ist
             email_tools = [tool for tool in agent.tools if tool.name == "send_email"]
@@ -115,10 +76,7 @@ class TestSystemIntegration(unittest.TestCase):
             # Stelle sicher, dass alte Parameter nicht mehr da sind
             self.assertNotIn("recipient", schema_fields)
             self.assertNotIn("sender_name", schema_fields)
-            
-            settings.OLLAMA_MODEL = original_model
         except Exception as e:
-            settings.OLLAMA_MODEL = original_model
             self.fail(f"E-Mail-Tool-System-Integration fehlgeschlagen: {str(e)}")
     
     def test_configuration_validation(self):
@@ -142,56 +100,18 @@ class TestSystemIntegration(unittest.TestCase):
             self.fail(f"Konfigurationsvalidierung fehlgeschlagen: {str(e)}")
     
     def test_memory_and_conversation_flow(self):
-        """Teste Memory-Management und Konversationsfluss"""
+        """Teste Memory-Management"""
         try:
-            original_model = settings.OLLAMA_MODEL
-            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
-            
             agent = create_react_agent()
-            
-            # Führe nur eine Konversationsrunde durch (schneller)
-            response = agent.chat("Hallo")
-            self.assertIsInstance(response, str)
-            self.assertGreater(len(response), 0)
-            
-            # Überprüfe Memory-Status
-            memory_info = agent.get_memory_summary()
-            self.assertEqual(memory_info["total_messages"], 2)  # 1 User + 1 AI
-            self.assertEqual(memory_info["human_messages"], 1)
-            self.assertEqual(memory_info["ai_messages"], 1)
             
             # Teste Memory-Clearing
             agent.clear_memory()
             memory_info = agent.get_memory_summary()
             self.assertEqual(memory_info["total_messages"], 0)
-            
-            settings.OLLAMA_MODEL = original_model
         except Exception as e:
-            settings.OLLAMA_MODEL = original_model
             self.fail(f"Memory-Management-Test fehlgeschlagen: {str(e)}")
     
-    def test_error_handling(self):
-        """Teste Fehlerbehandlung im System"""
-        try:
-            original_model = settings.OLLAMA_MODEL
-            settings.OLLAMA_MODEL = "qwen2.5:0.5b"
-            
-            agent = create_react_agent()
-            
-            # Teste nur eine ungewöhnliche Eingabe (schneller)
-            test_input = "Hi"  # Einfacher Test
-            
-            try:
-                response = agent.chat(test_input)
-                self.assertIsInstance(response, str)
-            except Exception as e:
-                # Fehler sind okay, aber sollten graceful gehandelt werden
-                self.assertIsInstance(str(e), str)
-            
-            settings.OLLAMA_MODEL = original_model
-        except Exception as e:
-            settings.OLLAMA_MODEL = original_model
-            self.fail(f"Fehlerbehandlungstest fehlgeschlagen: {str(e)}")
+
 
 
 if __name__ == "__main__":

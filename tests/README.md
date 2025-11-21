@@ -4,11 +4,11 @@
 
 ### Ollama Modelle
 
-Die Tests verwenden das extrem schnelle `qwen2.5:0.5b` Modell (nur 397MB!) für schnellste Testausführung.
+Die Tests verwenden `llama3.2:3b` für Balance zwischen Geschwindigkeit und Qualität.
 
 ```bash
 # Lade das Test-Modell herunter
-ollama pull qwen2.5:0.5b
+ollama pull llama3.2:3b
 ```
 
 ### Ollama Server
@@ -25,30 +25,34 @@ ollama serve
 
 ## Tests ausführen
 
+### ⚡ Schnelle Tests (Empfohlen)
 ```bash
-# Alle Tests
-pytest tests/
+# Alle Tests OHNE langsame LLM-Tests (~30-40 Sekunden)
+pytest tests/ -v -m "not slow"
+```
 
+### 🐌 Alle Tests (inkl. langsame LLM-Tests)
+```bash
+# Alle Tests inkl. langsame Tests (2-5 Minuten)
+pytest tests/ -v
+```
+
+### 🎯 Spezifische Test-Kategorien
+```bash
 # Nur Unit-Tests
-pytest tests/unit/
+pytest tests/unit/ -v
 
 # Nur Integration-Tests
-pytest tests/integration/
+pytest tests/integration/ -v
 
-# Nur LLM-Tests
-pytest tests/llm/
+# Nur LLM-Tests (schnelle)
+pytest tests/llm/ -v -m "not slow"
+
+# Nur langsame Tests
+pytest tests/ -v -m "slow"
 
 # Spezifischer Test
-pytest tests/integration/test_agent.py::TestReactAgent::test_simple_chat
-
-# Ohne langsame LLM-Tests (schnellste Option!)
-pytest tests/ -m "not llm" -v
-
-# Mit Ausgabe
-pytest tests/ -v
-
-# Mit Fehlerdetails
-pytest tests/ -v --tb=short
+pytest tests/integration/test_agent.py::TestReactAgent::test_simple_chat -v
 ```
 
 ## Test-Kategorien
@@ -66,8 +70,18 @@ pytest tests/ -v --tb=short
 ### LLM Tests (`tests/llm/`)
 - RAG-Qualität
 - Response-Qualität
-- Verwendet kleines `llama3.2:1b` Modell
+- Markiert mit `@pytest.mark.slow` für langsame Tests
 
-## Hinweis
+## Test-Marker
 
-Alle LLM-basierten Tests verwenden automatisch das winzige `qwen2.5:0.5b` Modell (397MB) für extrem schnelle Ausführung statt des Standard `llama3.1:8b` Modells (4.7GB). Das ist **12x kleiner** und **deutlich schneller**!
+- `@pytest.mark.slow`: Langsame Tests (LLM-Interaktionen), standardmäßig übersprungen
+- `@pytest.mark.integration`: Integration-Tests
+- `@pytest.mark.unit`: Unit-Tests
+- `@pytest.mark.llm`: LLM-Qualitäts-Tests
+
+## Performance-Hinweise
+
+- **Schnelle Tests**: ~30-40 Sekunden (35 Tests)
+- **Alle Tests**: ~2-5 Minuten (44 Tests)
+- **Test-Modell**: `llama3.2:3b` (guter Kompromiss zwischen Geschwindigkeit und Qualität)
+- **Context-Size**: Automatisch angepasst (2048 für 3b-Modell)

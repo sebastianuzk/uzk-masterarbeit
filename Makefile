@@ -32,6 +32,21 @@ test:
 	@echo "🧪 Running tests..."
 	@source .venv/bin/activate && python -m pytest tests/ -v
 
+# Run only fast unit tests
+test-fast:
+	@echo "⚡ Running fast unit tests..."
+	@source .venv/bin/activate && python -m pytest tests/unit/ -v
+
+# Run integration tests
+test-integration:
+	@echo "🔗 Running integration tests..."
+	@source .venv/bin/activate && python -m pytest tests/integration/ -v -m "not slow"
+
+# Run LLM quality tests
+test-llm:
+	@echo "🤖 Running LLM quality tests..."
+	@source .venv/bin/activate && python -m pytest tests/llm/ -v
+
 # Verify build
 build:
 	@echo "🔨 Verifying build..."

@@ -34,11 +34,19 @@ class ReactAgent:
             print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
         
         # Initialisiere Ollama LLM (optimiert für Performance)
+        # Kleinere Context-Size für kleine Modelle
+        if "0.5b" in settings.OLLAMA_MODEL:
+            ctx_size = 1024
+        elif "3b" in settings.OLLAMA_MODEL:
+            ctx_size = 2048
+        else:
+            ctx_size = 4096
+        
         self.llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
             temperature=settings.TEMPERATURE,
-            num_ctx=2048,  # Kleinerer Context für schnellere Antworten
+            num_ctx=ctx_size,  # Adaptiver Context für schnellere Antworten
             timeout=settings.REQUEST_TIMEOUT,
             keep_alive="5m",  # Modell im RAM halten für schnellere Antworten
         )
@@ -46,20 +54,26 @@ class ReactAgent:
         # Initialisiere Tools (einschließlich E-Mail-Tool)
         self.tools = self._create_tools()
         
-        # Kompakter System-Prompt für schnellere Antworten
-        system_prompt = """Du bist ein hilfsreicher Uni-Assistent.
+        # Optimierter System-Prompt für bessere Tool-Nutzung
+        system_prompt = """Du bist ein Uni-Assistent. Nutze Tools effektiv:
 
-REGELN:
-1. Bei Smalltalk/Begrüßungen: Antworte direkt, nutze KEINE Tools
-2. Bei Uni-Fragen: Nutze university_knowledge_search Tool
-3. Bei aktuellen Infos: Nutze Web-Tools
-4. Bei komplexen Problemen: Nutze E-Mail-Tool für Support
+KLIPS2-Registrierung:
+- Wenn User "registrieren" oder "KLIPS2 Account" sagt: Nutze klips2_register Tool
+- Benötigte Daten: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit
+- Wenn Daten im Prompt sind: Direkt Tool aufrufen
+- Wenn Daten fehlen: User fragen
+- WICHTIG: Gib die komplette Tool-Ausgabe an den User weiter, ohne sie zu verändern oder zusammenzufassen!
 
-Tools:
-- university_knowledge_search: Uni-Wissensdatenbank (Bewerbung, Prüfungen, etc.)
-- web_scraper/duckduckgo: Aktuelle Web-Infos
+Uni-Fragen:
+- university_knowledge_search für Bewerbung, Prüfungen, Module, Fristen
+
+Andere Tools:
+- web_scraper/duckduckgo: Web-Suche
 - email_tool: Support-Eskalation
-- klips2_register: KLIPS2-Account-Erstellung"""
+
+Bei Smalltalk: Direkt antworten ohne Tools
+
+WICHTIG: Gib Tool-Ergebnisse IMMER vollständig und unverändert an den User weiter!"""
 
         # Erstelle React Agent mit kompaktem System-Prompt
         self.agent = create_langgraph_agent(
@@ -148,9 +162,17 @@ Tools:
             else:
                 response = self.agent.invoke(agent_input)
             
-            # Extrahiere Antwort
+            # Extrahiere Antwort - prüfe verschiedene Message-Typen
             ai_message = response["messages"][-1]
+            
+            # Debug: Wenn content leer ist, prüfe andere Message-Typen
             response_text = ai_message.content
+            if not response_text:
+                # Suche nach einer AIMessage mit Inhalt
+                for msg in reversed(response["messages"]):
+                    if hasattr(msg, 'content') and msg.content:
+                        response_text = msg.content
+                        break
             
             # Füge Antwort zum Memory hinzu
             ai_response = AIMessage(content=response_text)
