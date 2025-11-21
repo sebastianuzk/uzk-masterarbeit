@@ -21,11 +21,11 @@ docker-compose down
 ## Production Deployment
 
 ```bash
-# Production Compose
-docker-compose -f docker-compose.prod.yml up -d
+# Production Deployment mit Standard Compose
+docker-compose up -d
 
-# Mit Script
-./scripts/deployment/deploy-prod.sh
+# Optional: Set environment variables for production
+# e.g. export ENV=production
 ```
 
 ### Production Features
