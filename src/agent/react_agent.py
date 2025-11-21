@@ -35,12 +35,18 @@ class ReactAgent:
         
         # Initialisiere Ollama LLM (optimiert für Performance)
         # Kleinere Context-Size für kleine Modelle
-        if "0.5b" in settings.OLLAMA_MODEL:
-            ctx_size = 1024
-        elif "3b" in settings.OLLAMA_MODEL:
-            ctx_size = 2048
-        else:
-            ctx_size = 4096
+        MODEL_CTX_SIZES = {
+            "0.5b": 1024,
+            "3b": 2048,
+        }
+        
+        # Extract size from model name
+        model_lower = settings.OLLAMA_MODEL.lower()
+        ctx_size = 4096  # default
+        for size_key, ctx_value in MODEL_CTX_SIZES.items():
+            if size_key in model_lower:
+                ctx_size = ctx_value
+                break
         
         self.llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
@@ -173,6 +179,10 @@ WICHTIG: Gib Tool-Ergebnisse IMMER vollständig und unverändert an den User wei
                     if hasattr(msg, 'content') and msg.content:
                         response_text = msg.content
                         break
+                
+                # Final fallback if still empty
+                if not response_text:
+                    response_text = "Ich konnte keine Antwort generieren. Bitte versuchen Sie es erneut."
             
             # Füge Antwort zum Memory hinzu
             ai_response = AIMessage(content=response_text)

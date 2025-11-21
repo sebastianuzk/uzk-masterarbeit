@@ -115,10 +115,8 @@ uzk-masterarbeit/
 ├── .github/
 │   └── copilot-instructions.md
 ├── Dockerfile                          # Docker-Image
-├── docker-compose.yml                  # Lokale Entwicklung
-├── docker-compose.prod.yml             # Production
+├── docker-compose.yml                  # Docker Compose
 ├── .env                                # Umgebungsvariablen (lokal)
-├── .env.production.example             # Production Config Template
 ├── requirements.txt
 ├── Makefile
 └── README.md
@@ -371,11 +369,11 @@ docker-compose down
 
 ### Production Deployment
 ```bash
-# Production Compose verwenden
-docker-compose -f docker-compose.prod.yml up -d
+# Production Deployment mit Docker Compose
+docker-compose up -d
 
-# Mit Deployment-Script
-./scripts/deployment/deploy-prod.sh
+# Optional: Set environment variables for production
+# e.g. export ENV=production
 ```
 
 ### Environment-Variablen

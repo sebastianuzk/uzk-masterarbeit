@@ -6,7 +6,7 @@ Greift auf die vom Web-Scraper erstellte ChromaDB-Vectordatenbank zu.
 """
 
 import os
-from typing import Optional
+from typing import Optional, Any
 from langchain.tools import BaseTool
 from pydantic import Field
 
@@ -34,7 +34,7 @@ class UniversityRAGTool(BaseTool):
     )
     
     # Cache für ChromaDB Client und Collections
-    _client: Optional[any] = None
+    _client: Optional[Any] = None
     _collections_cache: Optional[dict] = None
     
     def _get_client(self):
