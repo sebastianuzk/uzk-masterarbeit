@@ -24,6 +24,7 @@ httpx>=0.25.0               # Async HTTP-Client
 # Testing
 pytest>=7.0.0
 pytest-asyncio>=0.21.0      # Async-Tests
+pytest-timeout>=2.1.0       # Test timeouts
 
 # ============================================================================
 # WEB SCRAPER DEPENDENCIES

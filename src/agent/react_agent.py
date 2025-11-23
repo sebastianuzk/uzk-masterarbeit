@@ -33,56 +33,62 @@ class ReactAgent:
             os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
             print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
         
-        # Initialisiere Ollama LLM
+        # Initialisiere Ollama LLM (optimiert für Performance)
+        # Kleinere Context-Size für kleine Modelle
+        MODEL_CTX_SIZES = {
+            "0.5b": 1024,
+            "3b": 2048,
+        }
+        
+        # Extract size from model name
+        model_lower = settings.OLLAMA_MODEL.lower()
+        ctx_size = 4096  # default
+        for size_key, ctx_value in MODEL_CTX_SIZES.items():
+            if size_key in model_lower:
+                ctx_size = ctx_value
+                break
+        
         self.llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
             temperature=settings.TEMPERATURE,
+            num_ctx=ctx_size,  # Adaptiver Context für schnellere Antworten
+            timeout=settings.REQUEST_TIMEOUT,
+            keep_alive="5m",  # Modell im RAM halten für schnellere Antworten
         )
         
         # Initialisiere Tools (einschließlich E-Mail-Tool)
         self.tools = self._create_tools()
         
-        # System-Prompt für bessere Konversation UND Qualitätsbewertung
-        system_prompt = """Du bist ein hilfsreicher und freundlicher Chatbot-Assistent mit der Fähigkeit zur Selbstreflexion.
+        # Optimierter System-Prompt für bessere Tool-Nutzung
+        system_prompt = """Du bist ein Uni-Assistent. Nutze Tools effektiv:
 
-WICHTIGE REGELN:
-1. Führe NORMALE UNTERHALTUNGEN, ohne automatisch nach Informationen zu suchen
-2. Verwende Tools NUR wenn explizit nach aktuellen Informationen, Fakten oder Recherche gefragt wird
-3. Bei Begrüßungen, Smalltalk oder persönlichen Fragen antworte direkt freundlich
-4. Wenn jemand seinen Namen sagt, begrüße ihn höflich - suche NICHT nach dem Namen!
-5. Bei Antworten immer die vom genutzten Tool mitgelieferten vollständigen URLs angeben
+KLIPS2-Registrierung:
+- Wenn User "registrieren" oder "KLIPS2 Account" sagt: Nutze klips2_register Tool
+- Benötigte Daten: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit
+- Wenn Daten im Prompt sind: Direkt Tool aufrufen
+- Wenn Daten fehlen: User fragen
+- WICHTIG: Gib die komplette Tool-Ausgabe an den User weiter, ohne sie zu verändern oder zusammenzufassen!
 
-QUALITÄTSBEWERTUNG:
-Nach jeder Antwort bewerte selbstkritisch OHNE dies im Chat zu erwähnen:
-- Konnte ich die Frage vollständig beantworten?
-- War meine Antwort präzise und hilfreich?
-- Hat der Benutzer möglicherweise eine unzufriedene Reaktion?
-- Sollte diese Anfrage eskaliert werden?
+Uni-Fragen:
+- university_knowledge_search für Bewerbung, Prüfungen, Module, Fristen
 
-ESKALATION:
-Bei komplexen Anfragen, die du nicht beantworten kannst, oder wenn ein Benutzer explizit nach Support fragt,
-verwende das E-Mail-Tool für professionelle Support-Eskalation. Du benötigst nur:
-- subject: Kurze Zusammenfassung des Problems
-- body: Detaillierte Beschreibung mit Chat-Historie
+Andere Tools:
+- web_scraper/duckduckgo: Web-Suche
+- email_tool: Support-Eskalation
 
-Empfänger und Absender werden automatisch aus der Konfiguration verwendet.
+Bei Smalltalk: Direkt antworten ohne Tools
 
-Verfügbare Tools:
-- Web-Scraping: Für Inhalte von spezifischen Webseiten  
-- DuckDuckGo: Für Websuche, falls du keine relevanten Informationen innerhalb der Universitäts-Wissensdatenbank zur Beantwortung der Frage findest
-- Universitäts-Wissensdatenbank: Für Fragen zur Universität zu Köln / WiSo-Fakultät
-- E-Mail: Für Support-Eskalation bei ungelösten Anfragen
-- KLIPS2-Registrierung: Hilft Benutzern bei der Erstellung eines neuen Basis-Accounts auf KLIPS2
+WICHTIG: Gib Tool-Ergebnisse IMMER vollständig und unverändert an den User weiter!"""
 
-Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
-
-        # Erstelle React Agent mit erweitertem System-Prompt
+        # Erstelle React Agent mit kompaktem System-Prompt
         self.agent = create_langgraph_agent(
             self.llm,
-            self.tools,
-            prompt=system_prompt
+            self.tools
         )
+        
+        # Füge System-Prompt manuell zum Memory hinzu
+        self.system_message = SystemMessage(content=system_prompt)
         
         # Memory für Konversationshistorie
         self.memory = []
@@ -141,9 +147,9 @@ Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
             if len(self.memory) > settings.MEMORY_SIZE:
                 self.memory = self.memory[-settings.MEMORY_SIZE:]
             
-            # Führe Agent aus (mit automatischem LangSmith-Tracing)
+            # Führe Agent aus (mit System-Message und automatischem LangSmith-Tracing)
             agent_input = {
-                "messages": self.memory
+                "messages": [self.system_message] + self.memory
             }
 
             # Erstelle Config mit Metadaten für LangSmith-Tracing (falls aktiv)
@@ -162,9 +168,21 @@ Verwende Tools nur bei entsprechenden Anfragen, nicht bei Smalltalk."""
             else:
                 response = self.agent.invoke(agent_input)
             
-            # Extrahiere Antwort
+            # Extrahiere Antwort - prüfe verschiedene Message-Typen
             ai_message = response["messages"][-1]
+            
+            # Debug: Wenn content leer ist, prüfe andere Message-Typen
             response_text = ai_message.content
+            if not response_text:
+                # Suche nach einer AIMessage mit Inhalt
+                for msg in reversed(response["messages"]):
+                    if hasattr(msg, 'content') and msg.content:
+                        response_text = msg.content
+                        break
+                
+                # Final fallback if still empty
+                if not response_text:
+                    response_text = "Ich konnte keine Antwort generieren. Bitte versuchen Sie es erneut."
             
             # Füge Antwort zum Memory hinzu
             ai_response = AIMessage(content=response_text)

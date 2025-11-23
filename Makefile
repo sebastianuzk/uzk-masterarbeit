@@ -30,21 +30,35 @@ help:
 # Run tests
 test:
 	@echo "🧪 Running tests..."
-	@source venv/bin/activate && python test_scraper_components.py
-	@source venv/bin/activate && python -m pytest tests/ -v
+	@source .venv/bin/activate && python -m pytest tests/ -v
+
+# Run only fast unit tests
+test-fast:
+	@echo "⚡ Running fast unit tests..."
+	@source .venv/bin/activate && python -m pytest tests/unit/ -v
+
+# Run integration tests
+test-integration:
+	@echo "🔗 Running integration tests..."
+	@source .venv/bin/activate && python -m pytest tests/integration/ -v -m "not slow"
+
+# Run LLM quality tests
+test-llm:
+	@echo "🤖 Running LLM quality tests..."
+	@source .venv/bin/activate && python -m pytest tests/llm/ -v
 
 # Verify build
 build:
 	@echo "🔨 Verifying build..."
-	@source venv/bin/activate && python -c "import sys; sys.path.insert(0, '.'); from src.scraper.crawler_scraper_pipeline import *; print('✅ Build OK!')"
+	@source .venv/bin/activate && python -c "import sys; sys.path.insert(0, '.'); from src.scraper.pipelines.crawler_scraper_pipeline import *; print('✅ Build OK!')"
 
 # Local deployment without Docker
 deploy-local:
-	@./deploy-local.sh
+	@./scripts/deployment/deploy-local.sh
 
 # Full local CI/CD pipeline
 pipeline:
-	@./run-ci-local.sh
+	@./scripts/ci/run-ci-local.sh
 
 # Deploy via GitHub Actions
 deploy-remote:
@@ -82,11 +96,11 @@ docker-run:
 
 # List deployments
 list:
-	@./list-local.sh
+	@./scripts/deployment/list-local.sh
 
 # Stop deployment
 stop:
-	@./stop-local.sh
+	@./scripts/deployment/stop-local.sh
 
 # Show logs
 logs:
@@ -109,8 +123,8 @@ clean:
 # Install dependencies
 install:
 	@echo "📦 Installing dependencies..."
-	@python3 -m venv venv || true
-	@source venv/bin/activate && pip install -r requirements.txt
+	@python3 -m venv .venv || true
+	@source .venv/bin/activate && pip install -r requirements.txt
 	@echo "✅ Dependencies installed"
 
 # Setup project
@@ -131,4 +145,4 @@ status:
 	@echo "Python: $$(python3 --version)"
 	@echo "Virtual Env: $${VIRTUAL_ENV:-Not activated}"
 	@echo ""
-	@./list-local.sh || true
+	@./scripts/deployment/list-local.sh || true

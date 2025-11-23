@@ -6,7 +6,7 @@ Greift auf die vom Web-Scraper erstellte ChromaDB-Vectordatenbank zu.
 """
 
 import os
-from typing import Optional
+from typing import Optional, Any
 from langchain.tools import BaseTool
 from pydantic import Field
 
@@ -33,23 +33,17 @@ class UniversityRAGTool(BaseTool):
         "Nutze dieses Tool für spezifische Uni-Fragen."
     )
     
-    def _run(self, query: str) -> str:
-        """
-        Führt eine Suche in der Universitäts-Vectordatenbank durch.
-        
-        Args:
-            query: Die Suchanfrage des Benutzers
-            
-        Returns:
-            Relevante Informationen aus der Wissensdatenbank
-        """
-        try:
-            # ChromaDB direkt importieren und verwenden
+    # Cache für ChromaDB Client und Collections
+    _client: Optional[Any] = None
+    _collections_cache: Optional[dict] = None
+    
+    def _get_client(self):
+        """Hole oder erstelle ChromaDB Client (cached)"""
+        if self._client is None:
             import chromadb
             from pathlib import Path
             
             # Verbindung zur ChromaDB mit absolutem Pfad
-            # Try both possible locations
             vector_db_paths = [
                 Path("data/vector_db").resolve(),
                 Path("src/scraper/vector_db").resolve()
@@ -62,18 +56,41 @@ class UniversityRAGTool(BaseTool):
                     break
             
             if vector_db_path is None:
-                return (
-                    f"❌ Universitäts-Wissensdatenbank nicht gefunden. "
+                raise FileNotFoundError(
+                    f"Universitäts-Wissensdatenbank nicht gefunden. "
                     f"Gesucht in: {', '.join(str(p) for p in vector_db_paths)}. "
+                )
+            
+            self._client = chromadb.PersistentClient(path=str(vector_db_path))
+            
+            # Collections cachen
+            collections = self._client.list_collections()
+            self._collections_cache = {c.name: self._client.get_collection(c.name) for c in collections}
+            
+        return self._client, self._collections_cache
+    
+    def _run(self, query: str) -> str:
+        """
+        Führt eine Suche in der Universitäts-Vectordatenbank durch.
+        
+        Args:
+            query: Die Suchanfrage des Benutzers
+            
+        Returns:
+            Relevante Informationen aus der Wissensdatenbank
+        """
+        try:
+            # Hole gecachte Client und Collections
+            client, collections_cache = self._get_client()
+            
+            if not collections_cache:
+                return (
+                    f"❌ Keine Universitäts-Wissensdatenbank gefunden. "
                     f"Bitte stellen Sie sicher, dass die Daten vorher mit dem "
                     f"Web-Scraper erfasst wurden."
                 )
             
-            client = chromadb.PersistentClient(path=str(vector_db_path))
-            
-            # Alle verfügbaren Collections abrufen
-            collections = client.list_collections()
-            available_collections = [c.name for c in collections]
+            available_collections = list(collections_cache.keys())
             
             if not available_collections:
                 return (
@@ -88,7 +105,7 @@ class UniversityRAGTool(BaseTool):
             
             for collection_name in available_collections:
                 try:
-                    collection = client.get_collection(name=collection_name)
+                    collection = collections_cache[collection_name]
                     
                     # Suche in dieser Collection durchführen
                     results = collection.query(

@@ -55,7 +55,6 @@ class TestReactAgent(unittest.TestCase):
             
             # E-Mail-Tool sollte immer verfügbar sein
             self.assertIn("send_email", tools)
-                
         except Exception as e:
             self.fail(f"Tool-Test fehlgeschlagen: {str(e)}")
     
@@ -72,12 +71,11 @@ class TestReactAgent(unittest.TestCase):
             agent.clear_memory()
             memory_info = agent.get_memory_summary()
             self.assertEqual(memory_info["total_messages"], 0)
-            
         except Exception as e:
             self.fail(f"Memory-Test fehlgeschlagen: {str(e)}")
     
     def test_simple_chat(self):
-        """Teste einfache Chat-Funktionalität"""
+        """Teste einfache Chat-Funktionalität mit kleinem, schnellem Modell"""
         try:
             agent = ReactAgent()
             
@@ -90,7 +88,6 @@ class TestReactAgent(unittest.TestCase):
             # Memory sollte jetzt Nachrichten enthalten
             memory_info = agent.get_memory_summary()
             self.assertGreater(memory_info["total_messages"], 0)
-            
         except Exception as e:
             self.fail(f"Chat-Test fehlgeschlagen: {str(e)}")
     
@@ -111,7 +108,6 @@ class TestReactAgent(unittest.TestCase):
             email_tool = email_tools[0]
             self.assertIsNotNone(email_tool.description)
             self.assertIn("E-Mail", email_tool.description)
-            
         except Exception as e:
             self.fail(f"E-Mail-Tool-Integration-Test fehlgeschlagen: {str(e)}")
     
@@ -128,7 +124,6 @@ class TestReactAgent(unittest.TestCase):
             # Überprüfe, dass Agent E-Mail-Tool korrekt initialisiert hat
             email_tools = [tool for tool in agent.tools if tool.name == "send_email"]
             self.assertGreater(len(email_tools), 0)
-            
         except Exception as e:
             self.fail(f"System-Prompt-Test fehlgeschlagen: {str(e)}")
 

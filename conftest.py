@@ -15,6 +15,31 @@ sys.path.insert(0, str(project_root))
 # GLOBAL FIXTURES
 # ============================================================================
 
+@pytest.fixture(scope="session", autouse=True)
+def configure_fast_model():
+    """Konfiguriere schnelles Modell für alle Tests"""
+    from config.settings import settings
+    
+    # Speichere Original-Werte
+    original_model = settings.OLLAMA_MODEL
+    original_timeout = settings.REQUEST_TIMEOUT
+    original_temp = settings.TEMPERATURE
+    
+    # Verwende llama3.2:3b - guter Kompromiss zwischen Geschwindigkeit und Qualität
+    settings.OLLAMA_MODEL = "llama3.2:3b"
+    settings.REQUEST_TIMEOUT = 60  # Längerer Timeout für Tests
+    settings.TEMPERATURE = 0.7  # Moderate Temperatur für ausgewogene Antworten
+    
+    print(f"\n🚀 Test-Konfiguration: Modell='{settings.OLLAMA_MODEL}', Temp={settings.TEMPERATURE}, Timeout={settings.REQUEST_TIMEOUT}s")
+    
+    yield
+    
+    # Stelle Original-Werte wieder her
+    settings.OLLAMA_MODEL = original_model
+    settings.REQUEST_TIMEOUT = original_timeout
+    settings.TEMPERATURE = original_temp
+
+
 @pytest.fixture(scope="session")
 def project_root_path():
     """Gibt den Projekt-Root-Pfad zurück"""

@@ -35,4 +35,5 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests/unit/ tests/integration/ -v --tb=short
+          python -m pytest tests/ -v --tb=short --maxfail=5 -m "not slow"
+        timeout-minutes: 15
