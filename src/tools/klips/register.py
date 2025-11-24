@@ -1,16 +1,14 @@
 """
-KLIPS2 Registrierungs-Tool für den Autonomen Chatbot-Agenten
-Führt die vollständige 3-Schritt-Registrierung eines Basis-Accounts auf KLIPS2 durch
+KLIPS2 Registrierungs-Tool
 """
 import requests
 from bs4 import BeautifulSoup
-from langchain_core.tools import BaseTool
 from typing import Type, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
 from urllib.parse import urljoin
 import re
-
+from langchain_core.tools import BaseTool
 
 class KLIPS2RegisterInput(BaseModel):
     """Input für KLIPS2 Registrierung"""

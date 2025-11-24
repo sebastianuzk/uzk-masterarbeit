@@ -15,7 +15,14 @@ from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
 from src.tools.email_tool import create_email_tool
-from src.tools.klips2_register_tool import create_klips2_register_tool
+from src.tools.klips import (
+    create_klips2_register_tool,
+    create_klips2_apply_tool,
+    create_klips2_change_password_tool,
+    create_klips2_get_course_details_tool,
+    create_klips2_activate_account_tool,
+    create_klips2_change_address_tool
+)
 
 
 class ReactAgent:
@@ -69,6 +76,13 @@ KLIPS2-Registrierung:
 - Wenn Daten im Prompt sind: Direkt Tool aufrufen
 - Wenn Daten fehlen: User fragen
 - WICHTIG: Gib die komplette Tool-Ausgabe an den User weiter, ohne sie zu verändern oder zusammenzufassen!
+
+KLIPS2-Verwaltung:
+- Bewerbung: klips2_apply_study (benötigt Login)
+- Passwort ändern: klips2_change_password (benötigt Login)
+- Adresse ändern: klips2_change_address (benötigt Login)
+- Kursdetails: klips2_get_course_details (öffentlich)
+- Account aktivieren: klips2_activate_account (benötigt Code/Link)
 
 Uni-Fragen:
 - university_knowledge_search für Bewerbung, Prüfungen, Module, Fristen
@@ -129,6 +143,17 @@ WICHTIG: Gib Tool-Ergebnisse IMMER vollständig und unverändert an den User wei
         except Exception as e:
             print(f"⚠️  KLIPS2-Registrierungs-Tool konnte nicht geladen werden: {e}")
             print("   → KLIPS2-Account-Erstellung nicht verfügbar")
+            
+        # KLIPS2-Erweiterte Tools hinzufügen
+        try:
+            tools.append(create_klips2_apply_tool())
+            tools.append(create_klips2_change_password_tool())
+            tools.append(create_klips2_get_course_details_tool())
+            tools.append(create_klips2_activate_account_tool())
+            tools.append(create_klips2_change_address_tool())
+            print("✅ KLIPS2-Erweiterte Tools erfolgreich geladen")
+        except Exception as e:
+            print(f"⚠️  KLIPS2-Erweiterte Tools konnten nicht geladen werden: {e}")
         
         return tools
     

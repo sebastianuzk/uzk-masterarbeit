@@ -49,6 +49,8 @@ robotexclusionrulesparser>=1.7.0  # robots.txt Parser für ethisches Scraping
 
 # Utilities
 tqdm>=4.64.0                # Progress Bars für lange Scraping-Operationen
+playwright>=1.40.0
+pytest-playwright>=0.4.0
 
 # ============================================================================
 # NOTIZEN
