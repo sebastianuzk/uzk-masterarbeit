@@ -30,9 +30,7 @@ from src.scraper.utils.pdf_extractor import PDFExtractor, PDFContent
 # Enhancement-Module
 from src.scraper.utils.url_cache import URLCache
 from src.scraper.utils.html_cache import HTMLContentCache
-from src.scraper.utils.content_deduplicator import ContentDeduplicator
-from src.scraper.utils.content_cleaner import ContentCleaner
-from src.scraper.utils.semantic_chunker import SemanticChunker
+from src.advanced_rag.pre_retrieval import ContentDeduplicator, ContentCleaner, SemanticChunker
 from src.scraper.analysis.scraper_metrics import ScraperMetrics
 from src.scraper.core.resilient_scraper import ResilientScraper, RetryConfig
 from src.scraper.core.incremental_scraper import IncrementalScraper

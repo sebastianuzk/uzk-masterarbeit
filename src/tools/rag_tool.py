@@ -1,30 +1,30 @@
 """
 RAG Tool für den Chatbot-Agent
 
-Modulares Tool für Retrieval-Augmented Generation mit konfigurierbaren Techniken.
+Naives RAG-Tool für Retrieval-Augmented Generation.
 Greift auf die vom Web-Scraper erstellte ChromaDB-Vectordatenbank zu.
+
+Modular erweiterbar mit Advanced RAG Techniken aus src.advanced_rag.
+Die Techniken werden optional geladen, basierend auf RAGConfig.
 """
 
 import os
+import logging
 from typing import Optional, List, Dict, Any
 from langchain.tools import BaseTool
 from pydantic import Field
 from langsmith import traceable
 
-# Import modular RAG techniques
-from src.rag.config import RAGConfig
-from src.rag.retrieval import (
-    MultiCollectionSearch,
-    ResultAggregation,
-    DistanceToRelevanceConverter,
-    GlobalReranker
-)
-from src.rag.post_retrieval import (
-    RelevanceFilter,
-    ResultFormatter,
-    ContextHintGenerator,
-    EmptyResultHandler
-)
+logger = logging.getLogger(__name__)
+
+# Import RAG Configuration
+try:
+    from src.advanced_rag.config import RAGConfig
+    CONFIG_AVAILABLE = True
+except ImportError:
+    logger.warning("RAGConfig nicht gefunden - verwende naive RAG")
+    CONFIG_AVAILABLE = False
+    RAGConfig = None
 
 # Import hyperparameters
 try:
@@ -40,7 +40,7 @@ class UniversityRAGTool(BaseTool):
     Durchsucht die lokale ChromaDB nach relevanten Informationen
     zu Fragen rund um die Universität zu Köln.
     
-    Verwendet modulare RAG-Techniken basierend auf RAGConfig.
+    Naives RAG standardmäßig, optional erweiterbar mit Advanced-Techniken.
     """
     
     name: str = "university_knowledge_search"
@@ -51,61 +51,58 @@ class UniversityRAGTool(BaseTool):
         "Nutze dieses Tool für spezifische Uni-Fragen."
     )
     
-    # RAG configuration and techniques
-    config: RAGConfig = Field(default_factory=RAGConfig.load_from_env)
-    _multi_collection_search: Optional[MultiCollectionSearch] = None
-    _result_aggregation: Optional[ResultAggregation] = None
-    _distance_converter: Optional[DistanceToRelevanceConverter] = None
-    _global_reranker: Optional[GlobalReranker] = None
-    _relevance_filter: Optional[RelevanceFilter] = None
-    _result_formatter: Optional[ResultFormatter] = None
-    _context_hints: Optional[ContextHintGenerator] = None
-    _empty_handler: Optional[EmptyResultHandler] = None
+    # Configuration (optional)
+    config: Optional[Any] = None
+    
+    # Advanced technique flags
+    _use_advanced: bool = False
+    _advanced_available: bool = False
     
     def __init__(self, **data):
-        """Initialize RAG tool with modular techniques."""
+        """Initialize RAG tool with optional advanced techniques."""
         super().__init__(**data)
         
-        # Initialize retrieval techniques
-        self._multi_collection_search = MultiCollectionSearch(
-            enabled=self.config.use_multi_collection_search
-        )
-        self._result_aggregation = ResultAggregation(
-            enabled=self.config.use_result_aggregation
-        )
-        self._distance_converter = DistanceToRelevanceConverter(
-            enabled=self.config.use_distance_conversion
-        )
-        self._global_reranker = GlobalReranker(
-            enabled=self.config.use_global_reranking
-        )
+        # Load configuration if available
+        if CONFIG_AVAILABLE and RAGConfig is not None:
+            try:
+                self.config = RAGConfig.load_from_env()
+                self._use_advanced = self._should_use_advanced()
+                logger.info(f"RAG-Tool initialisiert (Advanced: {self._use_advanced})")
+            except Exception as e:
+                logger.warning(f"Fehler beim Laden der RAG-Config: {e}")
+                self.config = None
+                self._use_advanced = False
+        else:
+            logger.info("RAG-Tool initialisiert (Naive RAG)")
+    
+    def _should_use_advanced(self) -> bool:
+        """Prüfe ob Advanced-Techniken aktiviert sind."""
+        if not self.config:
+            return False
         
-        # Initialize post-retrieval techniques
-        self._relevance_filter = RelevanceFilter(
-            enabled=self.config.use_relevance_filtering,
-            threshold=self.config.relevance_threshold
-        )
-        self._result_formatter = ResultFormatter(
-            enabled=self.config.use_result_formatting
-        )
-        self._context_hints = ContextHintGenerator(
-            enabled=self.config.use_context_hints
-        )
-        self._empty_handler = EmptyResultHandler(
-            enabled=self.config.use_empty_result_handling
+        # Prüfe ob irgendeine Advanced-Technik aktiviert ist
+        return (
+            self.config.use_multi_collection_search or
+            self.config.use_result_aggregation or
+            self.config.use_distance_conversion or
+            self.config.use_global_reranking or
+            self.config.use_relevance_filtering or
+            self.config.use_result_formatting or
+            self.config.use_context_hints or
+            self.config.use_empty_result_handling
         )
     
     @traceable(run_type="retriever")
-    def _retrieve_documents(self, query: str) -> List[Dict[str, Any]]:
+    def _naive_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """
-        Führt eine Suche in der Universitäts-Vectordatenbank durch.
-        Verwendet modulare Retrieval-Techniken basierend auf RAGConfig.
+        Naives RAG: Einfache Vektorsuche in ChromaDB.
         
         Args:
-            query: Die Suchanfrage des Benutzers
+            query: Die Suchanfrage
+            k: Anzahl der Ergebnisse
             
         Returns:
-            Relevante Informationen aus der Wissensdatenbank
+            Liste von Dokumenten mit Metadaten
         """
         import chromadb
         from pathlib import Path
@@ -131,43 +128,40 @@ class UniversityRAGTool(BaseTool):
         if not collections:
             return []
         
-        # Retrieval Technique 1: Multi-Collection Search
-        all_results = self._multi_collection_search.search(
-            client=client,
-            query=query,
-            k_per_collection=self.config.k_per_collection
+        # Verwende die erste Collection (naive Variante)
+        collection = collections[0]
+        
+        # Einfache Vektorsuche
+        results = collection.query(
+            query_texts=[query],
+            n_results=k
         )
         
-        if not all_results:
-            return []
+        # Konvertiere zu einheitlichem Format
+        documents = []
+        if results and results['documents'] and results['documents'][0]:
+            for i, doc in enumerate(results['documents'][0]):
+                doc_dict = {
+                    'page_content': doc,
+                    'type': 'Document',
+                    'metadata': {}
+                }
+                
+                # Füge Metadaten hinzu wenn vorhanden
+                if results.get('metadatas') and results['metadatas'][0]:
+                    doc_dict['metadata'] = results['metadatas'][0][i] or {}
+                
+                # Füge Distance hinzu wenn vorhanden
+                if results.get('distances') and results['distances'][0]:
+                    doc_dict['metadata']['distance'] = results['distances'][0][i]
+                
+                documents.append(doc_dict)
         
-        # Retrieval Technique 2: Distance to Relevance Conversion
-        all_results = self._distance_converter.convert(all_results)
-        
-        # Retrieval Technique 3: Global Re-ranking
-        all_results = self._global_reranker.rerank(all_results)
-        
-        # Retrieval Technique 4: Result Aggregation (Top-K Selection)
-        top_results = self._result_aggregation.aggregate(
-            results=all_results,
-            top_k=self.config.top_k
-        )
-        
-        # Konvertiere zu LangSmith-Format (WICHTIG für korrektes Tracing!)
-        langsmith_docs = []
-        for result in top_results:
-            langsmith_docs.append({
-                "page_content": result['document'],
-                "type": "Document",
-                "metadata": result['metadata']
-            })
-        
-        return langsmith_docs
+        return documents
     
     def _run(self, query: str) -> str:
         """
         Führt eine Suche in der Universitäts-Vectordatenbank durch.
-        Verwendet modulare Post-Retrieval-Techniken basierend auf RAGConfig.
         
         Args:
             query: Die Suchanfrage des Benutzers
@@ -176,33 +170,24 @@ class UniversityRAGTool(BaseTool):
             Relevante Informationen aus der Wissensdatenbank
         """
         try:
-            # Dokumente abrufen (mit LangSmith Tracing via @traceable Decorator)
-            retrieved_docs = self._retrieve_documents(query)
+            # Bestimme k basierend auf Config oder Default
+            k = self.config.top_k if self.config else RAG_SEARCH_RESULTS
             
-            # Konvertiere zurück zu internem Format für Post-Processing
-            results = []
-            for doc_dict in retrieved_docs:
-                results.append({
-                    'document': doc_dict.get('page_content', ''),
-                    'metadata': doc_dict.get('metadata', {}),
-                    'distance': doc_dict.get('metadata', {}).get('distance', 0)
-                })
+            # Naive Retrieval (immer)
+            documents = self._naive_retrieve(query, k=k)
             
-            # Post-Retrieval Technique 1: Relevance Filtering
-            filtered_results = self._relevance_filter.filter(results)
+            if not documents:
+                return (
+                    "ℹ️ Keine relevanten Informationen in der Universitäts-Wissensdatenbank gefunden. "
+                    "Möglicherweise ist die Datenbank leer oder Ihre Anfrage konnte nicht zugeordnet werden."
+                )
             
-            # Prüfe ob Ergebnisse vorhanden
-            if not filtered_results:
-                no_data = not results  # True wenn gar keine Daten, False wenn nur nicht relevant
-                return self._empty_handler.handle_empty(query, no_data=no_data)
+            # Wenn Advanced-Techniken verfügbar und aktiviert sind
+            if self._use_advanced and self.config:
+                return self._advanced_process(query, documents)
             
-            # Post-Retrieval Technique 2: Result Formatting
-            formatted_response, searched_collections = self._result_formatter.format(filtered_results)
-            
-            # Post-Retrieval Technique 3: Context Hints
-            response_with_hints = self._context_hints.generate_hint(query, formatted_response)
-            
-            return response_with_hints
+            # Naive Ausgabe: Einfache Formatierung
+            return self._format_naive_results(documents)
             
         except ImportError:
             return (
@@ -210,9 +195,53 @@ class UniversityRAGTool(BaseTool):
                 "pip install chromadb"
             )
         except Exception as e:
+            logger.error(f"Fehler beim RAG-Tool: {e}", exc_info=True)
             return (
                 f"❌ Fehler beim Zugriff auf die Universitäts-Wissensdatenbank: {e}"
             )
+    
+    def _format_naive_results(self, documents: List[Dict[str, Any]]) -> str:
+        """
+        Naive Formatierung der Ergebnisse.
+        
+        Args:
+            documents: Liste von Dokumenten
+            
+        Returns:
+            Formatierter String
+        """
+        if not documents:
+            return "Keine Ergebnisse gefunden."
+        
+        response_parts = ["📚 Informationen aus der Universitäts-Wissensdatenbank:\n"]
+        
+        for i, doc in enumerate(documents, 1):
+            content = doc.get('page_content', '')
+            metadata = doc.get('metadata', {})
+            
+            response_parts.append(f"\n{i}. {content[:500]}...")
+            
+            # Füge Quelle hinzu wenn vorhanden
+            if 'source' in metadata:
+                response_parts.append(f"   (Quelle: {metadata['source']})")
+        
+        return "\n".join(response_parts)
+    
+    def _advanced_process(self, query: str, documents: List[Dict[str, Any]]) -> str:
+        """
+        Verarbeite Ergebnisse mit Advanced-Techniken (falls verfügbar).
+        
+        Args:
+            query: Die ursprüngliche Anfrage
+            documents: Liste von Dokumenten
+            
+        Returns:
+            Verarbeiteter Response-String
+        """
+        # TODO: Implementierung der Advanced-Techniken
+        # Für jetzt: Fallback zu naiver Formatierung
+        logger.info("Advanced RAG-Techniken angefordert, aber noch nicht implementiert")
+        return self._format_naive_results(documents)
     
     async def _arun(self, query: str) -> str:
         """Asynchrone Version - ruft die synchrone Version auf."""

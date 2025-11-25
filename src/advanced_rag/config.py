@@ -23,24 +23,32 @@ class RAGConfig:
     
     # === RETRIEVAL TECHNIKEN ===
     # Multi-Collection Search: Durchsucht alle Collections statt nur einer
-    use_multi_collection_search: bool = True
+    use_multi_collection_search: bool = False
     # Result Aggregation: Kombiniert Results aus mehreren Quellen
-    use_result_aggregation: bool = True
+    use_result_aggregation: bool = False
     # Distance to Relevance: Konvertiert Distanz zu intuitiven Scores
-    use_distance_conversion: bool = True
+    use_distance_conversion: bool = False
     # Global Re-Ranking: Sortiert aggregierte Results global
-    use_global_reranking: bool = True
+    use_global_reranking: bool = False
     
     # === POST-RETRIEVAL TECHNIKEN ===
     # Relevance Filtering: Filtert irrelevante Results
-    use_relevance_filtering: bool = True
+    use_relevance_filtering: bool = False
     relevance_threshold: float = 0.1
     # Result Formatting: Strukturierte Ausgabe mit Metadaten
-    use_result_formatting: bool = True
+    use_result_formatting: bool = False
     # Context Hints: Query-abhängige Hinweise
-    use_context_hints: bool = True
+    use_context_hints: bool = False
     # Empty Result Handling: Intelligente Fehlermeldungen
-    use_empty_result_handling: bool = True
+    use_empty_result_handling: bool = False
+    
+    # === PRE-RETRIEVAL TECHNIKEN (Implementiert) ===
+    # Semantic Chunking: Intelligente Text-Segmentierung
+    use_semantic_chunking: bool = False
+    # Content Cleaning: Entfernung von Boilerplate-Content
+    use_content_cleaning: bool = False
+    # Deduplication: Erkennung von Duplikaten
+    use_deduplication: bool = False
     
     # === FUTURE TECHNIKEN (noch nicht implementiert) ===
     # PRE-RETRIEVAL
@@ -113,17 +121,22 @@ class RAGConfig:
             baseline_enabled=_get_bool_env("RAG_BASELINE_ENABLED", True),
             
             # Retrieval (implementiert)
-            use_multi_collection_search=_get_bool_env("RAG_MULTI_COLLECTION_SEARCH", True),
-            use_result_aggregation=_get_bool_env("RAG_RESULT_AGGREGATION", True),
-            use_distance_conversion=_get_bool_env("RAG_DISTANCE_CONVERSION", True),
-            use_global_reranking=_get_bool_env("RAG_GLOBAL_RERANKING", True),
+            use_multi_collection_search=_get_bool_env("RAG_MULTI_COLLECTION_SEARCH", False),
+            use_result_aggregation=_get_bool_env("RAG_RESULT_AGGREGATION", False),
+            use_distance_conversion=_get_bool_env("RAG_DISTANCE_CONVERSION", False),
+            use_global_reranking=_get_bool_env("RAG_GLOBAL_RERANKING", False),
             
             # Post-Retrieval (implementiert)
-            use_relevance_filtering=_get_bool_env("RAG_RELEVANCE_FILTERING", True),
+            use_relevance_filtering=_get_bool_env("RAG_RELEVANCE_FILTERING", False),
             relevance_threshold=_get_float_env("RAG_RELEVANCE_THRESHOLD", 0.1),
-            use_result_formatting=_get_bool_env("RAG_RESULT_FORMATTING", True),
-            use_context_hints=_get_bool_env("RAG_CONTEXT_HINTS", True),
-            use_empty_result_handling=_get_bool_env("RAG_EMPTY_RESULT_HANDLING", True),
+            use_result_formatting=_get_bool_env("RAG_RESULT_FORMATTING", False),
+            use_context_hints=_get_bool_env("RAG_CONTEXT_HINTS", False),
+            use_empty_result_handling=_get_bool_env("RAG_EMPTY_RESULT_HANDLING", False),
+            
+            # Pre-Retrieval (implementiert)
+            use_semantic_chunking=_get_bool_env("RAG_SEMANTIC_CHUNKING", True),
+            use_content_cleaning=_get_bool_env("RAG_CONTENT_CLEANING", True),
+            use_deduplication=_get_bool_env("RAG_DEDUPLICATION", True),
             
             # Pre-Retrieval (future)
             query_expansion_enabled=_get_bool_env("RAG_QUERY_EXPANSION_ENABLED", False),
@@ -151,6 +164,10 @@ class RAGConfig:
         """Gib alle aktivierten Techniken zurück."""
         return {
             "baseline": self.baseline_enabled,
+            # Pre-Retrieval
+            "semantic_chunking": self.use_semantic_chunking,
+            "content_cleaning": self.use_content_cleaning,
+            "deduplication": self.use_deduplication,
             "query_expansion": self.query_expansion_enabled,
             "query_rewriting": self.query_rewriting_enabled,
             "hyde": self.hyde_enabled,

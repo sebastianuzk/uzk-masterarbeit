@@ -7,7 +7,7 @@ Vordefinierte Konfigurationen für verschiedene RAG-Szenarien:
 - Custom: Benutzerdefinierte Konfigurationen
 """
 
-from src.rag.config import RAGConfig
+from src.advanced_rag.config import RAGConfig
 
 
 def naive_rag_config() -> RAGConfig:
