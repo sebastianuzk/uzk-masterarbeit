@@ -49,7 +49,7 @@ def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.Da
     return df
 
 
-def get_rag_context_from_langsmith(client: Client, trace_id: str) -> str:
+def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
     """
     Holt RAG-Kontext aus LangSmith für eine spezifische Trace-ID.
     
@@ -61,7 +61,7 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> str:
         trace_id: Die Trace-ID der Session
         
     Returns:
-        RAG-Kontext aus den Retriever-Documents
+        Liste von RAG-Context-Chunks aus den Retriever-Documents
     """
     try:
         # Hole alle Child-Runs für diese Trace
@@ -83,13 +83,13 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> str:
                             contexts.append(doc['page_content'])
         
         if contexts:
-            return "\n\n".join(contexts)
+            return contexts  # Liste von Chunks zurückgeben
         
-        return "Kein RAG-Kontext gefunden"
+        return ["Kein RAG-Kontext gefunden"]  # Als Liste
     
     except Exception as e:
         print(f"      ⚠️ LangSmith-Fehler: {str(e)[:100]}")
-        return "LangSmith-Fehler"
+        return ["LangSmith-Fehler"]  # Als Liste
 
 
 def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> EvaluationDataset:
@@ -131,7 +131,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
             is_root=True
         ))
         
-        context = "Kein RAG-Kontext gefunden"
+        contexts = ["Kein RAG-Kontext gefunden"]  # Default als Liste
         matching_run = None
         
         # Finde Run mit unserer session_id
@@ -142,18 +142,19 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         
         if matching_run:
             trace_id = matching_run.trace_id
-            context = get_rag_context_from_langsmith(langsmith_client, trace_id)
+            contexts = get_rag_context_from_langsmith(langsmith_client, trace_id)
             print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
         else:
             print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
         
-        print(f"   📄 Kontext: {len(context)} Zeichen")
+        total_chars = sum(len(c) for c in contexts)
+        print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
         
         # RAGAS-Sample erstellen
         sample = SingleTurnSample(
             user_input=question,
             response=answer,
-            retrieved_contexts=[context],  # RAGAS erwartet Liste
+            retrieved_contexts=contexts,  # Jetzt bereits eine Liste von Chunks
             reference=expected_answer
         )
         samples.append(sample)
@@ -213,7 +214,8 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
 def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
     """Zeigt Ergebnisse an und speichert sie."""
     
-    # Kategorien und Schwierigkeiten hinzufügen
+    # IDs, Kategorien und Schwierigkeiten hinzufügen
+    results_df['id'] = test_df['id'].values[:len(results_df)]
     results_df['category'] = test_df['category'].values[:len(results_df)]
     results_df['difficulty'] = test_df['difficulty'].values[:len(results_df)]
     
@@ -224,7 +226,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
     # Gesamtscores
     print("\n📈 Durchschnittliche Scores:")
     print("-" * 80)
-    for metric in ['faithfulness', 'context_recall']:
+    for metric in ['faithfulness', 'context_recall', 'context_precision']:
         if metric in results_df.columns:
             avg = results_df[metric].mean()
             print(f"   {metric:20s}: {avg:.3f}")
@@ -235,7 +237,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
     for category in results_df['category'].unique():
         cat_df = results_df[results_df['category'] == category]
         print(f"\n   {category}:")
-        for metric in ['faithfulness', 'context_recall']:
+        for metric in ['faithfulness', 'context_recall', 'context_precision']:
             if metric in cat_df.columns:
                 avg = cat_df[metric].mean()
                 print(f"      {metric:20s}: {avg:.3f}")
@@ -247,17 +249,39 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
         diff_df = results_df[results_df['difficulty'] == difficulty]
         if len(diff_df) > 0:
             print(f"\n   {difficulty.upper()}:")
-            for metric in ['faithfulness', 'context_recall']:
+            for metric in ['faithfulness', 'context_recall', 'context_precision']:
                 if metric in diff_df.columns:
                     avg = diff_df[metric].mean()
                     print(f"      {metric:20s}: {avg:.3f}")
     
-    # Speichern
-    output_path = Path(__file__).parent / "data" / "ragas_results.csv"
-    results_df.to_csv(output_path, index=False, encoding='utf-8')
+    # Speichern in CSV (alle Spalten)
+    output_path_csv = Path(__file__).parent / "data" / "ragas_results.csv"
+    
+    # Berechne Anzahl der Context-Chunks
+    results_df['context_count'] = results_df['retrieved_contexts'].apply(lambda x: len(x) if isinstance(x, list) else 0)
+    
+    # Entferne Zeilenumbrüche aus Textfeldern für saubere CSV
+    text_columns = ['user_input', 'response', 'reference']
+    for col in text_columns:
+        if col in results_df.columns:
+            results_df[col] = results_df[col].apply(lambda x: x.replace('\n', ' ').replace('\r', ' ') if isinstance(x, str) else x)
+    
+    # Konvertiere retrieved_contexts zu String ohne Zeilenumbrüche
+    results_df['retrieved_contexts'] = results_df['retrieved_contexts'].apply(
+        lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if isinstance(x, list) else str(x)
+    )
+    
+    # CSV mit allen wichtigen Spalten
+    csv_df = results_df[['id', 'category', 'difficulty', 'user_input', 'response', 
+                          'reference', 'retrieved_contexts', 'faithfulness', 
+                          'context_recall', 'context_precision', 'context_count']].copy()
+    
+    # Speichere mit UTF-8-BOM für korrekte Umlaut-Darstellung
+    csv_df.to_csv(output_path_csv, index=False, encoding='utf-8-sig', sep=',', quoting=1)
     
     print("\n" + "=" * 80)
-    print(f"💾 Ergebnisse gespeichert: {output_path}")
+    print(f"💾 Ergebnisse gespeichert:")
+    print(f"   CSV: {output_path_csv}")
     print("=" * 80 + "\n")
 
 
