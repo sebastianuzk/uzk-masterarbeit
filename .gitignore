@@ -204,6 +204,7 @@ data/cache/
 
 # Database files
 *.db
+!data/content_database.db
 *.sqlite
 *.sqlite3
 url_cache.db

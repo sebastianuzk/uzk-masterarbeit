@@ -25,6 +25,29 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def sanitize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Sanitize metadata to ensure JSON serialization compatibility.
+    Converts PyPDF2 IndirectObject and other non-serializable types to strings.
+    
+    Args:
+        metadata: Raw metadata dictionary
+        
+    Returns:
+        Sanitized metadata with JSON-safe types
+    """
+    clean = {}
+    for key, value in metadata.items():
+        if isinstance(value, (str, int, float, bool, type(None))):
+            clean[key] = value
+        elif isinstance(value, (list, tuple)):
+            clean[key] = [str(v) for v in value]
+        else:
+            # Convert IndirectObject and other non-serializable types to string
+            clean[key] = str(value) if value else ''
+    return clean
+
+
 @dataclass
 class PDFContent:
     """Extracted PDF content and metadata."""
@@ -110,7 +133,7 @@ class PDFExtractor:
                 
                 # Extract metadata
                 if pdf_reader.metadata:
-                    metadata = {
+                    raw_metadata = {
                         'title': pdf_reader.metadata.get('/Title', ''),
                         'author': pdf_reader.metadata.get('/Author', ''),
                         'subject': pdf_reader.metadata.get('/Subject', ''),
@@ -118,7 +141,12 @@ class PDFExtractor:
                         'producer': pdf_reader.metadata.get('/Producer', ''),
                         'creation_date': pdf_reader.metadata.get('/CreationDate', ''),
                     }
+                    # Sanitize metadata to JSON-safe types
+                    metadata = sanitize_metadata(raw_metadata)
+                else:
+                    metadata = {}
                 
+                # Ensure num_pages is added after metadata dict initialization
                 metadata['num_pages'] = len(pdf_reader.pages)
                 
                 # Extract text from all pages
