@@ -1,7 +1,7 @@
 """
 RAG Tool für den Chatbot-Agent
 
-Einfaches und robustes Tool für Retrieval-Augmented Generation.
+Modulares Tool für Retrieval-Augmented Generation mit konfigurierbaren Techniken.
 Greift auf die vom Web-Scraper erstellte ChromaDB-Vectordatenbank zu.
 """
 
@@ -10,6 +10,21 @@ from typing import Optional, List, Dict, Any
 from langchain.tools import BaseTool
 from pydantic import Field
 from langsmith import traceable
+
+# Import modular RAG techniques
+from src.rag.config import RAGConfig
+from src.rag.retrieval import (
+    MultiCollectionSearch,
+    ResultAggregation,
+    DistanceToRelevanceConverter,
+    GlobalReranker
+)
+from src.rag.post_retrieval import (
+    RelevanceFilter,
+    ResultFormatter,
+    ContextHintGenerator,
+    EmptyResultHandler
+)
 
 # Import hyperparameters
 try:
@@ -24,6 +39,8 @@ class UniversityRAGTool(BaseTool):
     
     Durchsucht die lokale ChromaDB nach relevanten Informationen
     zu Fragen rund um die Universität zu Köln.
+    
+    Verwendet modulare RAG-Techniken basierend auf RAGConfig.
     """
     
     name: str = "university_knowledge_search"
@@ -34,10 +51,55 @@ class UniversityRAGTool(BaseTool):
         "Nutze dieses Tool für spezifische Uni-Fragen."
     )
     
+    # RAG configuration and techniques
+    config: RAGConfig = Field(default_factory=RAGConfig.load_from_env)
+    _multi_collection_search: Optional[MultiCollectionSearch] = None
+    _result_aggregation: Optional[ResultAggregation] = None
+    _distance_converter: Optional[DistanceToRelevanceConverter] = None
+    _global_reranker: Optional[GlobalReranker] = None
+    _relevance_filter: Optional[RelevanceFilter] = None
+    _result_formatter: Optional[ResultFormatter] = None
+    _context_hints: Optional[ContextHintGenerator] = None
+    _empty_handler: Optional[EmptyResultHandler] = None
+    
+    def __init__(self, **data):
+        """Initialize RAG tool with modular techniques."""
+        super().__init__(**data)
+        
+        # Initialize retrieval techniques
+        self._multi_collection_search = MultiCollectionSearch(
+            enabled=self.config.use_multi_collection_search
+        )
+        self._result_aggregation = ResultAggregation(
+            enabled=self.config.use_result_aggregation
+        )
+        self._distance_converter = DistanceToRelevanceConverter(
+            enabled=self.config.use_distance_conversion
+        )
+        self._global_reranker = GlobalReranker(
+            enabled=self.config.use_global_reranking
+        )
+        
+        # Initialize post-retrieval techniques
+        self._relevance_filter = RelevanceFilter(
+            enabled=self.config.use_relevance_filtering,
+            threshold=self.config.relevance_threshold
+        )
+        self._result_formatter = ResultFormatter(
+            enabled=self.config.use_result_formatting
+        )
+        self._context_hints = ContextHintGenerator(
+            enabled=self.config.use_context_hints
+        )
+        self._empty_handler = EmptyResultHandler(
+            enabled=self.config.use_empty_result_handling
+        )
+    
     @traceable(run_type="retriever")
     def _retrieve_documents(self, query: str) -> List[Dict[str, Any]]:
         """
         Führt eine Suche in der Universitäts-Vectordatenbank durch.
+        Verwendet modulare Retrieval-Techniken basierend auf RAGConfig.
         
         Args:
             query: Die Suchanfrage des Benutzers
@@ -65,45 +127,31 @@ class UniversityRAGTool(BaseTool):
         
         client = chromadb.PersistentClient(path=str(vector_db_path))
         collections = client.list_collections()
-        available_collections = [c.name for c in collections]
         
-        if not available_collections:
+        if not collections:
             return []
         
-        # Durchsuche alle Collections
-        all_results = []
+        # Retrieval Technique 1: Multi-Collection Search
+        all_results = self._multi_collection_search.search(
+            client=client,
+            query=query,
+            k_per_collection=self.config.k_per_collection
+        )
         
-        for collection_name in available_collections:
-            try:
-                collection = client.get_collection(name=collection_name)
-                results = collection.query(
-                    query_texts=[query],
-                    n_results=3
-                )
-                
-                if results['documents'] and results['documents'][0]:
-                    documents = results['documents'][0]
-                    metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(documents)
-                    distances = results['distances'][0] if results['distances'] else [0] * len(documents)
-                    
-                    for doc, metadata, distance in zip(documents, metadatas, distances):
-                        enhanced_metadata = metadata.copy() if metadata else {}
-                        enhanced_metadata['collection'] = collection_name
-                        enhanced_metadata['distance'] = float(distance)
-                        enhanced_metadata['relevance_score'] = float(max(0, 1 - distance))
-                        
-                        all_results.append({
-                            'document': doc,
-                            'metadata': enhanced_metadata,
-                            'distance': distance
-                        })
-            except Exception as e:
-                print(f"Warnung: Fehler beim Zugriff auf Collection '{collection_name}': {str(e)}")
-                continue
+        if not all_results:
+            return []
         
-        # Sortiere nach Relevanz und nehme Top-K
-        all_results.sort(key=lambda x: x['distance'])
-        top_results = all_results[:RAG_SEARCH_RESULTS]
+        # Retrieval Technique 2: Distance to Relevance Conversion
+        all_results = self._distance_converter.convert(all_results)
+        
+        # Retrieval Technique 3: Global Re-ranking
+        all_results = self._global_reranker.rerank(all_results)
+        
+        # Retrieval Technique 4: Result Aggregation (Top-K Selection)
+        top_results = self._result_aggregation.aggregate(
+            results=all_results,
+            top_k=self.config.top_k
+        )
         
         # Konvertiere zu LangSmith-Format (WICHTIG für korrektes Tracing!)
         langsmith_docs = []
@@ -119,6 +167,7 @@ class UniversityRAGTool(BaseTool):
     def _run(self, query: str) -> str:
         """
         Führt eine Suche in der Universitäts-Vectordatenbank durch.
+        Verwendet modulare Post-Retrieval-Techniken basierend auf RAGConfig.
         
         Args:
             query: Die Suchanfrage des Benutzers
@@ -130,66 +179,30 @@ class UniversityRAGTool(BaseTool):
             # Dokumente abrufen (mit LangSmith Tracing via @traceable Decorator)
             retrieved_docs = self._retrieve_documents(query)
             
-            if not retrieved_docs:
-                return (
-                    f"❌ Keine relevanten Informationen zu '{query}' gefunden. "
-                    f"Möglicherweise sind noch keine Daten zu diesem Thema "
-                    f"in der Universitäts-Wissensdatenbank verfügbar."
-                )
+            # Konvertiere zurück zu internem Format für Post-Processing
+            results = []
+            for doc_dict in retrieved_docs:
+                results.append({
+                    'document': doc_dict.get('page_content', ''),
+                    'metadata': doc_dict.get('metadata', {}),
+                    'distance': doc_dict.get('metadata', {}).get('distance', 0)
+                })
             
-            # Ergebnisse formatieren für Antwort
-            formatted_results = []
-            searched_collections = set()
+            # Post-Retrieval Technique 1: Relevance Filtering
+            filtered_results = self._relevance_filter.filter(results)
             
-            for i, doc_dict in enumerate(retrieved_docs, 1):
-                page_content = doc_dict.get('page_content', '')
-                metadata = doc_dict.get('metadata', {})
-                
-                searched_collections.add(metadata.get('collection', 'unbekannt'))
-                
-                relevance = metadata.get('relevance_score', 0)
-                
-                if relevance > 0.1:
-                    source_info = ""
-                    collection_info = f" [aus: {metadata.get('collection', 'unbekannt')}]"
-                    
-                    title = metadata.get('title', '')
-                    source_url = metadata.get('source_url', '')
-                    if title:
-                        source_info = f" (Quelle: {title})"
-                    elif source_url:
-                        source_info = f" (Quelle: {source_url})"
-                    
-                    doc_text = page_content.strip() if page_content else ""
-                    if doc_text:
-                        formatted_results.append(
-                            f"📄 **Information {i}**{source_info}{collection_info}:\n{doc_text}"
-                        )
+            # Prüfe ob Ergebnisse vorhanden
+            if not filtered_results:
+                no_data = not results  # True wenn gar keine Daten, False wenn nur nicht relevant
+                return self._empty_handler.handle_empty(query, no_data=no_data)
             
-            if not formatted_results:
-                return (
-                    f"❌ Die gefundenen Informationen zu '{query}' sind nicht "
-                    f"relevant genug. Versuchen Sie eine andere Formulierung "
-                    f"oder allgemeinere Begriffe."
-                )
+            # Post-Retrieval Technique 2: Result Formatting
+            formatted_response, searched_collections = self._result_formatter.format(filtered_results)
             
-            # Antwort zusammenstellen
-            response = (
-                f"🎓 **Informationen aus der Universitäts-Wissensdatenbank** "
-                f"(durchsuchte Collections: {', '.join(searched_collections)}):\n\n"
-                + "\n\n".join(formatted_results)
-            )
+            # Post-Retrieval Technique 3: Context Hints
+            response_with_hints = self._context_hints.generate_hint(query, formatted_response)
             
-            # Spezielle Hinweise für häufige Themen
-            query_lower = query.lower()
-            if any(keyword in query_lower for keyword in ['bewerbung', 'fachsemester', 'höher']):
-                response += (
-                    "\n\n💡 **Wichtiger Hinweis**: Bei Bewerbungen für höhere "
-                    "Fachsemester sind oft spezielle Bescheinigungen vom "
-                    "Prüfungsamt der WiSo-Fakultät erforderlich."
-                )
-            
-            return response
+            return response_with_hints
             
         except ImportError:
             return (

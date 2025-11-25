@@ -21,25 +21,47 @@ class RAGConfig:
     # === BASELINE RAG ===
     baseline_enabled: bool = True
     
-    # === PRE-RETRIEVAL TECHNIKEN ===
+    # === RETRIEVAL TECHNIKEN ===
+    # Multi-Collection Search: Durchsucht alle Collections statt nur einer
+    use_multi_collection_search: bool = True
+    # Result Aggregation: Kombiniert Results aus mehreren Quellen
+    use_result_aggregation: bool = True
+    # Distance to Relevance: Konvertiert Distanz zu intuitiven Scores
+    use_distance_conversion: bool = True
+    # Global Re-Ranking: Sortiert aggregierte Results global
+    use_global_reranking: bool = True
+    
+    # === POST-RETRIEVAL TECHNIKEN ===
+    # Relevance Filtering: Filtert irrelevante Results
+    use_relevance_filtering: bool = True
+    relevance_threshold: float = 0.1
+    # Result Formatting: Strukturierte Ausgabe mit Metadaten
+    use_result_formatting: bool = True
+    # Context Hints: Query-abhängige Hinweise
+    use_context_hints: bool = True
+    # Empty Result Handling: Intelligente Fehlermeldungen
+    use_empty_result_handling: bool = True
+    
+    # === FUTURE TECHNIKEN (noch nicht implementiert) ===
+    # PRE-RETRIEVAL
     query_expansion_enabled: bool = False
     query_rewriting_enabled: bool = False
     hyde_enabled: bool = False
     multi_query_enabled: bool = False
     
-    # === RETRIEVAL TECHNIKEN ===
+    # RETRIEVAL (Advanced)
     hybrid_retrieval_enabled: bool = False
     reranking_enabled: bool = False
     parent_doc_retrieval_enabled: bool = False
     
-    # === POST-RETRIEVAL TECHNIKEN ===
+    # POST-RETRIEVAL (Advanced)
     context_compression_enabled: bool = False
     context_reordering_enabled: bool = False
     answer_fusion_enabled: bool = False
     
     # === ALLGEMEINE EINSTELLUNGEN ===
-    num_results: int = 5
-    relevance_threshold: float = 0.1
+    k_per_collection: int = 3  # Results pro Collection
+    top_k: int = 5  # Finale Anzahl Results
     debug_mode: bool = False
     
     @classmethod
@@ -90,25 +112,38 @@ class RAGConfig:
             # Baseline
             baseline_enabled=_get_bool_env("RAG_BASELINE_ENABLED", True),
             
-            # Pre-Retrieval
+            # Retrieval (implementiert)
+            use_multi_collection_search=_get_bool_env("RAG_MULTI_COLLECTION_SEARCH", True),
+            use_result_aggregation=_get_bool_env("RAG_RESULT_AGGREGATION", True),
+            use_distance_conversion=_get_bool_env("RAG_DISTANCE_CONVERSION", True),
+            use_global_reranking=_get_bool_env("RAG_GLOBAL_RERANKING", True),
+            
+            # Post-Retrieval (implementiert)
+            use_relevance_filtering=_get_bool_env("RAG_RELEVANCE_FILTERING", True),
+            relevance_threshold=_get_float_env("RAG_RELEVANCE_THRESHOLD", 0.1),
+            use_result_formatting=_get_bool_env("RAG_RESULT_FORMATTING", True),
+            use_context_hints=_get_bool_env("RAG_CONTEXT_HINTS", True),
+            use_empty_result_handling=_get_bool_env("RAG_EMPTY_RESULT_HANDLING", True),
+            
+            # Pre-Retrieval (future)
             query_expansion_enabled=_get_bool_env("RAG_QUERY_EXPANSION_ENABLED", False),
             query_rewriting_enabled=_get_bool_env("RAG_QUERY_REWRITING_ENABLED", False),
             hyde_enabled=_get_bool_env("RAG_HYDE_ENABLED", False),
             multi_query_enabled=_get_bool_env("RAG_MULTI_QUERY_ENABLED", False),
             
-            # Retrieval
+            # Retrieval (future)
             hybrid_retrieval_enabled=_get_bool_env("RAG_HYBRID_RETRIEVAL_ENABLED", False),
             reranking_enabled=_get_bool_env("RAG_RERANKING_ENABLED", False),
             parent_doc_retrieval_enabled=_get_bool_env("RAG_PARENT_DOC_RETRIEVAL_ENABLED", False),
             
-            # Post-Retrieval
+            # Post-Retrieval (future)
             context_compression_enabled=_get_bool_env("RAG_CONTEXT_COMPRESSION_ENABLED", False),
             context_reordering_enabled=_get_bool_env("RAG_CONTEXT_REORDERING_ENABLED", False),
             answer_fusion_enabled=_get_bool_env("RAG_ANSWER_FUSION_ENABLED", False),
             
             # Allgemein
-            num_results=_get_int_env("RAG_NUM_RESULTS", 5),
-            relevance_threshold=_get_float_env("RAG_RELEVANCE_THRESHOLD", 0.1),
+            k_per_collection=_get_int_env("RAG_K_PER_COLLECTION", 3),
+            top_k=_get_int_env("RAG_TOP_K", 5),
             debug_mode=_get_bool_env("RAG_DEBUG_MODE", False)
         )
     

@@ -1,12 +1,23 @@
 """
-RAGAS-Evaluation für WiSo-Chatbot
+RAGAS-Evaluation für WiSo-Chatbot - GEFILTERTE VERSION
+
+Identisch mit ragas_evaluation_with_retry.py, aber:
+- Filtert automatisch nach IDs ohne validen Context
+- Führt komplette Neu-Evaluation für diese IDs durch
+- Merged Ergebnisse zurück in Original-Datei
 
 Features:
 - Checkpointing nach jeder erfolgreichen Frage
 - Wiederaufnahme bei Abbruch
 - Separate Chunks für Context Precision
-- Kein automatischer Retry (nutze retry_selected.py für manuelle Retries)
+- Kein automatischer Retry
 """
+
+# ============================================================================
+# FILTER-KONFIGURATION
+# ============================================================================
+# IDs, die neu evaluiert werden sollen (leer = automatisch finden)
+FILTER_IDS = []  # z.B. [9, 19, 20] für spezifische IDs
 
 import sys
 import pandas as pd
@@ -71,6 +82,42 @@ def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.Da
     # Stelle sicher, dass ID-Spalte existiert
     if 'id' not in df.columns:
         df['id'] = range(1, len(df) + 1)
+    
+    # FILTER: Automatisch IDs ohne Context finden oder FILTER_IDS nutzen
+    if not FILTER_IDS:
+        # Automatische Erkennung
+        results_file = Path(__file__).parent / "data" / "ragas_results.xlsx"
+        if results_file.exists():
+            results_df = pd.read_excel(results_file, engine='openpyxl')
+            filter_ids = []
+            for idx, row in results_df.iterrows():
+                contexts_raw = row['retrieved_contexts']
+                try:
+                    if pd.isna(contexts_raw):
+                        contexts = []
+                    elif isinstance(contexts_raw, str):
+                        contexts = json.loads(contexts_raw)
+                    else:
+                        contexts = contexts_raw
+                except:
+                    contexts = []
+                
+                is_empty = (
+                    len(contexts) == 0 or
+                    (len(contexts) == 1 and contexts[0] == "Kein Kontext gefunden")
+                )
+                if is_empty:
+                    filter_ids.append(idx + 1)  # ID = Index + 1
+            
+            if filter_ids:
+                print(f"\n🔍 Automatisch gefiltert: {len(filter_ids)} IDs ohne Context")
+                print(f"   IDs: {filter_ids}")
+                df = df[df['id'].isin(filter_ids)]
+    else:
+        # Manuelle Filter-IDs
+        print(f"\n🔍 Manuell gefiltert: {len(FILTER_IDS)} IDs")
+        print(f"   IDs: {FILTER_IDS}")
+        df = df[df['id'].isin(FILTER_IDS)]
     
     if limit:
         df = df.head(limit)
@@ -163,15 +210,30 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client) -> Eva
                     is_root=False
                 ))
                 
+                # Debug: Zeige alle run_types
+                print(f"   🔍 Debug: {len(child_runs)} Child-Runs gefunden")
+                run_types = set()
                 for child in child_runs:
-                    if child.run_type == "retriever" and child.outputs:
+                    run_types.add(child.run_type)
+                    if 'tool' in child.run_type.lower() or 'retriever' in child.run_type.lower():
+                        print(f"      - {child.run_type}: {child.name}")
+                print(f"   🔍 Unique run_types: {run_types}")
+                
+                for child in child_runs:
+                    # Suche nach retriever UND tool runs (RAG-Tool könnte als "tool" klassifiziert sein)
+                    if (child.run_type == "retriever" or 
+                        (child.run_type == "tool" and "rag" in child.name.lower())) and child.outputs:
                         documents = child.outputs.get('output', [])
+                        print(f"   📄 Gefunden: {child.run_type} '{child.name}' mit {len(documents) if isinstance(documents, list) else 'unknown'} docs")
                         contexts = []
                         for doc in documents:
                             if isinstance(doc, dict) and 'page_content' in doc:
                                 contexts.append(doc['page_content'])
                         if contexts:
+                            print(f"   ✅ {len(contexts)} Contexts extrahiert")
                             break
+                        else:
+                            print(f"   ⚠️ Keine page_content in outputs gefunden")
             
             total_context_chars = sum(len(c) for c in contexts)
             print(f"   📄 Context: {len(contexts)} chunks, {total_context_chars} chars")
@@ -437,15 +499,65 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
             lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, list) else str(x)
         )
     
-    results_df_export.to_excel(output_file, index=False, engine='openpyxl')
-    print(f"\n💾 Ergebnisse gespeichert: {output_file}")
+    # MERGE zurück in Original-Datei (bei gefilterten Evaluationen)
+    if FILTER_IDS or len(results_df) < 40:
+        print(f"\n🔄 Merge gefilterte Ergebnisse zurück in Original-Datei...")
+        
+        # Lade Original-Datei (die ALLE 40 Zeilen haben sollte)
+        original_df = pd.read_excel(output_file, engine='openpyxl')
+        
+        if len(original_df) != 40:
+            print(f"⚠️  WARNUNG: Original-Datei hat nur {len(original_df)} statt 40 Zeilen!")
+            print(f"   Merge wird trotzdem durchgeführt...")
+        
+        metric_columns = ['faithfulness', 'context_recall', 'context_precision']
+        update_columns = ['retrieved_contexts', 'response'] + metric_columns
+        updates_count = 0
+        
+        # Map via question_id ODER user_input
+        for _, new_row in results_df_export.iterrows():
+            question_id = new_row.get('question_id')
+            user_input = new_row.get('user_input')
+            
+            # Versuche zuerst question_id
+            orig_idx = None
+            if pd.notna(question_id):
+                orig_idx = int(question_id) - 1
+            # Fallback: Finde via user_input
+            elif pd.notna(user_input):
+                matches = original_df[original_df['user_input'] == user_input]
+                if len(matches) > 0:
+                    orig_idx = matches.index[0]
+            
+            if orig_idx is not None and orig_idx < len(original_df):
+                for col in update_columns:
+                    if col in results_df_export.columns:
+                        new_value = new_row[col]
+                        # Update nur valide Werte
+                        if col in metric_columns:
+                            if pd.notna(new_value):
+                                original_df.at[orig_idx, col] = new_value
+                                updates_count += 1
+                        else:
+                            original_df.at[orig_idx, col] = new_value
+        
+        if updates_count > 0:
+            original_df.to_excel(output_file, index=False, engine='openpyxl')
+            print(f"✅ {updates_count} Metriken in Original-Datei aktualisiert")
+            print(f"   Datei hat jetzt {len(original_df)} Zeilen")
+        else:
+            print(f"ℹ️  Keine Updates erforderlich")
+    else:
+        # Keine Filterung - normale Speicherung
+        results_df_export.to_excel(output_file, index=False, engine='openpyxl')
+        print(f"\n💾 Ergebnisse gespeichert: {output_file}")
 
 
 def main():
     """Hauptfunktion."""
     
     print("\n" + "=" * 80)
-    print("🎓 RAGAS-EVALUATION FÜR WISO-CHATBOT (MIT RETRY)")
+    print("RAGAS-EVALUATION FÜR WISO-CHATBOT (GEFILTERT)")
     print("=" * 80)
     
     try:
