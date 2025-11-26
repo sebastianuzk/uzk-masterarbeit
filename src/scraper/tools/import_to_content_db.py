@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.scraper.utils.content_database import ContentDatabase
 from src.scraper.utils.html_cache import HTMLContentCache
-from src.scraper.utils.pdf_extractor import PDFExtractor
+from src.scraper.utils.pdf_extractor import PDFExtractor, sanitize_metadata
 
 logging.basicConfig(
     level=logging.INFO,
@@ -100,33 +100,93 @@ def extract_text_from_html(html_content: str) -> str:
         return ""
 
 
-def sanitize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+def reimport_pdfs_only(content_db: ContentDatabase, pdf_cache_path: Path) -> Dict[str, int]:
     """
-    Konvertiert alle Metadaten-Werte zu JSON-serialisierbaren Typen.
+    Lösche alte PDF-Einträge und importiere sie mit korrekten Metadaten neu.
+    HTMLs bleiben unverändert.
     
-    Behebt Probleme mit PyPDF2 IndirectObject und anderen nicht-serialisierbaren Objekten.
-    
-    Args:
-        metadata: Dictionary mit potentiell nicht-serialisierbaren Werten
-        
     Returns:
-        Dictionary mit nur JSON-sicheren Werten (str, int, float, bool, None, list)
+        Statistiken über Import
     """
-    clean = {}
-    for key, value in metadata.items():
-        if isinstance(value, (str, int, float, bool, type(None))):
-            # Bereits JSON-sicher
-            clean[key] = value
-        elif isinstance(value, (list, tuple)):
-            # Listen/Tupel: Jedes Element zu String konvertieren
-            clean[key] = [str(v) for v in value]
-        elif isinstance(value, dict):
-            # Nested Dictionary: Rekursiv bereinigen
-            clean[key] = sanitize_metadata(value)
-        else:
-            # Alles andere (z.B. PyPDF2.IndirectObject): Zu String
-            clean[key] = str(value)
-    return clean
+    stats = {'deleted': 0, 'success': 0, 'skipped': 0, 'errors': 0}
+    
+    try:
+        # Lösche zuerst alle PDF-Einträge
+        logger.info("Lösche alte PDF-Einträge...")
+        with sqlite3.connect(content_db.db_path, timeout=30.0) as conn:
+            cursor = conn.execute("DELETE FROM documents WHERE content_type='pdf'")
+            stats['deleted'] = cursor.rowcount
+            conn.commit()
+        
+        logger.info(f"Gelöscht: {stats['deleted']} alte PDF-Einträge")
+        
+        # Importiere PDFs neu mit korrekten Metadaten
+        pdf_extractor = PDFExtractor()
+        
+        # Finde alle PDFs
+        pdf_files = list(pdf_cache_path.glob("**/*.pdf"))
+        logger.info(f"Gefunden: {len(pdf_files)} PDFs im Cache")
+        
+        for pdf_path in tqdm(pdf_files, desc="PDFs neu importieren"):
+            try:
+                # Extrahiere Text mit PyPDF2 (enthält bereits sanitize_metadata)
+                text, pdf_metadata = pdf_extractor.extract_text_pypdf2(pdf_path)
+                
+                if not text or not text.strip():
+                    # Versuche pdfplumber als Fallback
+                    text, pdf_metadata = pdf_extractor.extract_text_pdfplumber(pdf_path)
+                
+                if not text or not text.strip():
+                    logger.warning(f"Leerer PDF-Content: {pdf_path}")
+                    stats['skipped'] += 1
+                    continue
+                
+                # Verwende Dateipfad als "URL" für PDFs
+                url = f"file://{pdf_path.as_posix()}"
+                
+                # Hole Titel aus Metadaten (bereits durch sanitize_metadata bereinigt in pdf_extractor)
+                title = pdf_metadata.get('title', '') or pdf_path.stem
+                
+                # Wenn Titel leer oder nur Whitespace, nutze Dateinamen
+                if not title or not title.strip():
+                    title = pdf_path.stem
+                
+                # Kategorisiere basierend auf Pfad
+                category = categorize_url(str(pdf_path))
+                
+                # Metadaten sind bereits durch sanitize_metadata() in extract_text_pypdf2() bereinigt!
+                metadata = {
+                    'file_path': str(pdf_path),
+                    'source': 'pdf_cache',
+                    'pdf_metadata': pdf_metadata,  # Bereits sanitized!
+                    'extraction_method': 'pypdf2'
+                }
+                
+                # Speichere in Content DB
+                doc_id = content_db.add_document(
+                    url=url,
+                    title=title,
+                    content=text,
+                    content_type='pdf',
+                    category=category,
+                    metadata=metadata
+                )
+                
+                if doc_id:
+                    stats['success'] += 1
+                else:
+                    stats['errors'] += 1
+                    
+            except Exception as e:
+                logger.error(f"Fehler bei {pdf_path}: {e}")
+                stats['errors'] += 1
+        
+        logger.info(f"PDF-Reimport abgeschlossen: {stats}")
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Fehler beim PDF-Reimport: {e}")
+        return stats
 
 
 def import_html_cache(content_db: ContentDatabase, html_cache_path: Path) -> Dict[str, int]:
@@ -254,14 +314,12 @@ def import_pdf_cache(content_db: ContentDatabase, pdf_cache_path: Path) -> Dict[
                 # Kategorisiere basierend auf Pfad
                 category = categorize_url(str(pdf_path))
                 
-                # Bereinige PDF-Metadaten für JSON-Serialisierung
-                clean_pdf_metadata = sanitize_metadata(pdf_metadata)
-                
+                # Metadaten sind bereits durch sanitize_metadata() in extract_text_pypdf2() bereinigt
                 # Speichere in Content DB
                 metadata = {
                     'file_path': str(pdf_path),
                     'source': 'pdf_cache',
-                    'pdf_metadata': clean_pdf_metadata
+                    'pdf_metadata': pdf_metadata  # Bereits sanitized in pdf_extractor!
                 }
                 
                 doc_id = content_db.add_document(
@@ -292,8 +350,16 @@ def import_pdf_cache(content_db: ContentDatabase, pdf_cache_path: Path) -> Dict[
 
 def main():
     """Hauptfunktion für Import."""
+    import sys
+    
+    # Prüfe ob nur PDFs reimportiert werden sollen
+    reimport_only = '--reimport-pdfs' in sys.argv
+    
     logger.info("=" * 80)
-    logger.info("Content Database Import")
+    if reimport_only:
+        logger.info("Content Database - PDF Reimport")
+    else:
+        logger.info("Content Database Import")
     logger.info("=" * 80)
     
     # Pfade
@@ -320,13 +386,31 @@ def main():
     logger.info("\nInitialisiere Content Database...")
     content_db = ContentDatabase(content_db_path)
     
-    # Import HTML
-    logger.info("\n" + "=" * 80)
-    html_stats = import_html_cache(content_db, html_cache_path)
-    
-    # Import PDFs
-    logger.info("\n" + "=" * 80)
-    pdf_stats = import_pdf_cache(content_db, pdf_cache_path)
+    if reimport_only:
+        # Nur PDFs reimportieren
+        logger.info("\n" + "=" * 80)
+        logger.info("ACHTUNG: Nur PDFs werden reimportiert, HTMLs bleiben unverändert!")
+        logger.info("=" * 80)
+        
+        # Zeige aktuelle Statistik
+        db_stats = content_db.get_statistics()
+        logger.info(f"\nAktuell in Datenbank:")
+        logger.info(f"  Gesamt: {db_stats.get('total_documents', 0)} Dokumente")
+        for content_type, count in db_stats.get('by_type', {}).items():
+            logger.info(f"  - {content_type}: {count}")
+        
+        pdf_stats = reimport_pdfs_only(content_db, pdf_cache_path)
+        html_stats = {'success': 0, 'skipped': 0, 'errors': 0}  # Dummy für Report
+        
+    else:
+        # Vollständiger Import (HTML + PDF)
+        # Import HTML
+        logger.info("\n" + "=" * 80)
+        html_stats = import_html_cache(content_db, html_cache_path)
+        
+        # Import PDFs
+        logger.info("\n" + "=" * 80)
+        pdf_stats = import_pdf_cache(content_db, pdf_cache_path)
     
     # Gesamtstatistik
     logger.info("\n" + "=" * 80)
