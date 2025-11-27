@@ -43,9 +43,13 @@ class ContentDeduplicator:
         self.seen_fingerprints: Set[str] = set()
         self.url_to_fingerprint: dict = {}
         
+        # Quick-Win Optimierungen
+        self.shingle_cache: dict = {}  # Cache für Shingles
+        self.chunks_by_size: dict = defaultdict(list)  # Size-Bucketing
+        
     def create_shingles(self, text: str) -> Set[str]:
         """
-        Erstelle Shingles (n-grams) aus Text.
+        Erstelle Shingles (n-grams) aus Text mit Caching.
         
         Args:
             text: Eingabetext
@@ -53,6 +57,11 @@ class ContentDeduplicator:
         Returns:
             Set von Shingles
         """
+        # Quick-Win 1: Shingle-Cache
+        text_hash = hash(text)
+        if text_hash in self.shingle_cache:
+            return self.shingle_cache[text_hash]
+        
         # Normalisiere Text
         text = text.lower().strip()
         words = text.split()
@@ -63,6 +72,8 @@ class ContentDeduplicator:
             shingle = " ".join(words[i:i + self.shingle_size])
             shingles.add(shingle)
         
+        # Cache speichern
+        self.shingle_cache[text_hash] = shingles
         return shingles
     
     def compute_content_hash(self, text: str) -> str:
@@ -95,7 +106,7 @@ class ContentDeduplicator:
     
     def jaccard_similarity(self, set1: Set[str], set2: Set[str]) -> float:
         """
-        Berechne Jaccard-Ähnlichkeit zwischen zwei Sets.
+        Berechne Jaccard-Ähnlichkeit zwischen zwei Sets mit Early Exit.
         
         Args:
             set1: Erstes Set
@@ -107,6 +118,15 @@ class ContentDeduplicator:
         if not set1 and not set2:
             return 1.0
         
+        # Quick-Win 2: Early Exit - prüfe maximale mögliche Similarity
+        min_size = min(len(set1), len(set2))
+        max_size = max(len(set1), len(set2))
+        
+        if max_size > 0:
+            max_possible_similarity = min_size / max_size
+            if max_possible_similarity < self.similarity_threshold:
+                return 0.0  # Kann nie Threshold erreichen
+        
         intersection = len(set1 & set2)
         union = len(set1 | set2)
         
@@ -114,7 +134,7 @@ class ContentDeduplicator:
     
     def is_duplicate(self, text: str, url: str) -> Tuple[bool, str]:
         """
-        Prüfe ob Text ein Duplikat ist.
+        Prüfe ob Text ein Duplikat ist mit Size-Bucketing.
         
         Args:
             text: Zu prüfender Text
@@ -128,32 +148,43 @@ class ContentDeduplicator:
         if content_hash in self.seen_fingerprints:
             return True, "exact_duplicate"
         
-        # Near-duplicates
+        # Quick-Win 3: Size-Bucketing - nur ähnlich große Texte vergleichen
+        text_size = len(text)
+        size_bucket = text_size // 500  # Buckets von 500 Zeichen
+        
+        # Kandidaten: Aktueller Bucket ± 1
+        candidates = []
+        for bucket in [size_bucket - 1, size_bucket, size_bucket + 1]:
+            candidates.extend(self.chunks_by_size.get(bucket, []))
+        
+        # Near-duplicates - nur gegen Kandidaten
         shingles = self.create_shingles(text)
         
-        # Prüfe gegen alle gesehenen Dokumente
-        for seen_url, fingerprint in self.url_to_fingerprint.items():
-            seen_shingles = self.create_shingles(
-                self.url_to_fingerprint[seen_url].get('text', '')
-            )
+        for candidate_url in candidates:
+            if candidate_url not in self.url_to_fingerprint:
+                continue
+                
+            candidate_text = self.url_to_fingerprint[candidate_url].get('text', '')
+            seen_shingles = self.create_shingles(candidate_text)
             
             similarity = self.jaccard_similarity(shingles, seen_shingles)
             
             if similarity >= self.similarity_threshold:
                 logger.info(
-                    f"Near-duplicate gefunden: {url} ähnlich zu {seen_url} "
+                    f"Near-duplicate gefunden: {url} ähnlich zu {candidate_url} "
                     f"(Similarity: {similarity:.2f})"
                 )
                 return True, f"near_duplicate_{similarity:.2f}"
         
-        # Kein Duplikat - speichere Fingerprint
+        # Kein Duplikat - speichere Fingerprint UND Size-Bucket
         self.seen_fingerprints.add(content_hash)
         self.url_to_fingerprint[url] = {
             'content_hash': content_hash,
             'shingles_hash': self.compute_shingles_hash(shingles),
-            'text': text[:5000],  # Speichere nur Anfang für Vergleiche
+            'text': text[:5000],
             'word_count': len(text.split())
         }
+        self.chunks_by_size[size_bucket].append(url)
         
         return False, "unique"
     
