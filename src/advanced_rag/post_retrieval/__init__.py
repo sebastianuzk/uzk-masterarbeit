@@ -2,8 +2,16 @@
 
 Module contains advanced post-retrieval techniques that can be used
 to enhance the naive RAG baseline.
-
-Currently placeholder - techniques will be implemented as needed.
 """
 
-__all__ = []
+from .relevance_filtering import RelevanceFilter
+from .result_formatting import ResultFormatter
+from .context_hints import ContextHintProvider
+from .empty_result_handler import EmptyResultHandler
+
+__all__ = [
+    'RelevanceFilter',
+    'ResultFormatter',
+    'ContextHintProvider',
+    'EmptyResultHandler'
+]

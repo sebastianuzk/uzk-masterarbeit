@@ -162,7 +162,18 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     print("\n" + "=" * 80)
     print(f"✅ {len(samples)} Antworten generiert\n")
     
-    return EvaluationDataset(samples=samples)
+    # Zwischenspeicherung der Antworten und Kontexte
+    dataset = EvaluationDataset(samples=samples)
+    checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
+    checkpoint_path.parent.mkdir(exist_ok=True)
+    
+    import pickle
+    with open(checkpoint_path, 'wb') as f:
+        pickle.dump(dataset, f)
+    print(f"💾 Checkpoint gespeichert: {checkpoint_path}")
+    print(f"   (Antworten + Kontexte für alle {len(samples)} Fragen)\n")
+    
+    return dataset
 
 
 def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
@@ -200,11 +211,12 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
-    # Evaluation
+    # Evaluation mit begrenzten Workers für Ollama
     results = evaluate(
         dataset=dataset,
         metrics=metrics,
         llm=llm,
+        max_workers=4,  # Begrenzt parallele Requests an Ollama
         raise_exceptions=False  # Weiter bei Fehlern
     )
     
@@ -293,7 +305,7 @@ def main():
     print("=" * 80 + "\n")
     
     # Anzahl Fragen (für Test: 3, für vollständig: 40)
-    NUM_QUESTIONS = 3
+    NUM_QUESTIONS = 40  # VOLLSTÄNDIGE PRODUKTIVE EVALUATION
     
     try:
         # 1. LangSmith Client

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Import RAG Configuration
 try:
-    from src.advanced_rag.config import RAGConfig
+    from src.advanced_rag.rag_config import RAGConfig
     CONFIG_AVAILABLE = True
 except ImportError:
     logger.warning("RAGConfig nicht gefunden - verwende naive RAG")
@@ -62,8 +62,12 @@ class UniversityRAGTool(BaseTool):
         """Initialize RAG tool with optional advanced techniques."""
         super().__init__(**data)
         
-        # Load configuration if available
-        if CONFIG_AVAILABLE and RAGConfig is not None:
+        # Wenn config übergeben wurde, nutze es
+        if self.config is not None:
+            self._use_advanced = self._should_use_advanced()
+            logger.info(f"RAG-Tool initialisiert mit übergebener Config (Advanced: {self._use_advanced})")
+        # Sonst: Load configuration from env
+        elif CONFIG_AVAILABLE and RAGConfig is not None:
             try:
                 self.config = RAGConfig.load_from_env()
                 self._use_advanced = self._should_use_advanced()
@@ -80,17 +84,8 @@ class UniversityRAGTool(BaseTool):
         if not self.config:
             return False
         
-        # Prüfe ob irgendeine Advanced-Technik aktiviert ist
-        return (
-            self.config.use_multi_collection_search or
-            self.config.use_result_aggregation or
-            self.config.use_distance_conversion or
-            self.config.use_global_reranking or
-            self.config.use_relevance_filtering or
-            self.config.use_result_formatting or
-            self.config.use_context_hints or
-            self.config.use_empty_result_handling
-        )
+        # Baseline-Modus = Naive = Kein Advanced
+        return not self.config.baseline_enabled
     
     @traceable(run_type="retriever")
     def _naive_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
@@ -108,56 +103,77 @@ class UniversityRAGTool(BaseTool):
         from pathlib import Path
         
         # Verbindung zur ChromaDB
+        # WICHTIG: Relative Paths benutzen! ChromaDB hat Bug mit absoluten Windows-Pfaden
         vector_db_paths = [
-            Path("data/vector_db").resolve(),
-            Path("src/scraper/vector_db").resolve()
+            "data/vector_db",
+            "src/scraper/vector_db"
         ]
         
         vector_db_path = None
-        for path in vector_db_paths:
-            if path.exists():
-                vector_db_path = path
+        for path_str in vector_db_paths:
+            if Path(path_str).exists():
+                vector_db_path = path_str
                 break
         
         if vector_db_path is None:
             return []
         
-        client = chromadb.PersistentClient(path=str(vector_db_path))
-        collections = client.list_collections()
+        client = chromadb.PersistentClient(path=vector_db_path)
         
-        if not collections:
+        # WORKAROUND für ChromaDB Bug: list_collections() Iterator verursacht
+        # "Error loading hnsw index" bei großen Collections (41k+ chunks).
+        # Lösung: Collection-Namen einzeln holen statt Iterator
+        collection_names = [coll.name for coll in client.list_collections()]
+        
+        if not collection_names:
             return []
         
-        # Verwende die erste Collection (naive Variante)
-        collection = collections[0]
-        
-        # Einfache Vektorsuche
-        results = collection.query(
-            query_texts=[query],
-            n_results=k
-        )
-        
-        # Konvertiere zu einheitlichem Format
+        # NAIVE: Durchsuche ALLE Collections unabhängig (als wäre es eine große Collection)
+        # Im echten Naive-Ansatz würde beim Indexing alles in eine Collection geschrieben
         documents = []
-        if results and results['documents'] and results['documents'][0]:
-            for i, doc in enumerate(results['documents'][0]):
-                doc_dict = {
-                    'page_content': doc,
-                    'type': 'Document',
-                    'metadata': {}
-                }
-                
-                # Füge Metadaten hinzu wenn vorhanden
-                if results.get('metadatas') and results['metadatas'][0]:
-                    doc_dict['metadata'] = results['metadatas'][0][i] or {}
-                
-                # Füge Distance hinzu wenn vorhanden
-                if results.get('distances') and results['distances'][0]:
-                    doc_dict['metadata']['distance'] = results['distances'][0][i]
-                
-                documents.append(doc_dict)
         
-        return documents
+        for name in collection_names:
+            collection = client.get_collection(name)
+            
+            try:
+                # Suche in jeder Collection
+                results = collection.query(
+                    query_texts=[query],
+                    n_results=min(k, 10)  # Max 10 pro Collection
+                )
+                
+                # Konvertiere Ergebnisse
+                if results and results['documents'] and results['documents'][0]:
+                    for i, doc in enumerate(results['documents'][0]):
+                        # Format für Naive RAG (Backward compatibility)
+                        doc_dict = {
+                            'page_content': doc,
+                            'type': 'Document',
+                            'metadata': {}
+                        }
+                        
+                        # Format für Advanced RAG (neue Felder)
+                        doc_dict['id'] = results['ids'][0][i] if results.get('ids') else f"doc_{i}"
+                        doc_dict['document'] = doc  # Alias für Advanced-Techniken
+                        doc_dict['collection'] = name  # Collection-Name
+                        
+                        # Füge Metadaten hinzu
+                        if results.get('metadatas') and results['metadatas'][0]:
+                            doc_dict['metadata'] = results['metadatas'][0][i] or {}
+                        
+                        # Füge Distance hinzu (wichtig für Sorting!)
+                        if results.get('distances') and results['distances'][0]:
+                            doc_dict['distance'] = results['distances'][0][i]
+                            doc_dict['metadata']['distance'] = results['distances'][0][i]
+                        
+                        documents.append(doc_dict)
+            except Exception as e:
+                logger.warning(f"Fehler bei Collection {name}: {e}")
+                continue
+        
+        # Naive: Einfach nach Distance sortieren und top-k nehmen
+        documents.sort(key=lambda x: x.get('distance', float('inf')))
+        return documents[:k]
     
     def _run(self, query: str) -> str:
         """
@@ -229,19 +245,88 @@ class UniversityRAGTool(BaseTool):
     
     def _advanced_process(self, query: str, documents: List[Dict[str, Any]]) -> str:
         """
-        Verarbeite Ergebnisse mit Advanced-Techniken (falls verfügbar).
+        Verarbeite Ergebnisse mit Advanced-Techniken.
         
         Args:
             query: Die ursprüngliche Anfrage
-            documents: Liste von Dokumenten
+            documents: Liste von Dokumenten (von _naive_retrieve)
             
         Returns:
-            Verarbeiteter Response-String
+            Verarbeiteter Response-String mit allen Advanced-Techniken
         """
-        # TODO: Implementierung der Advanced-Techniken
-        # Für jetzt: Fallback zu naiver Formatierung
-        logger.info("Advanced RAG-Techniken angefordert, aber noch nicht implementiert")
-        return self._format_naive_results(documents)
+        from src.advanced_rag.retrieval import (
+            DistanceConverter,
+            ResultAggregator,
+            GlobalReranker
+        )
+        from src.advanced_rag.post_retrieval import (
+            RelevanceFilter,
+            ResultFormatter,
+            ContextHintProvider,
+            EmptyResultHandler
+        )
+        
+        logger.info("Verwende Advanced RAG-Techniken")
+        
+        # Merke ob wir Ergebnisse vor Filterung hatten
+        had_results = len(documents) > 0
+        
+        # 1. Distance → Relevance Conversion
+        if self.config.use_distance_conversion:
+            converter = DistanceConverter()
+            documents = converter.convert(documents)
+            logger.debug("✓ Distance Conversion angewendet")
+        
+        # 2. Result Aggregation (deduplizieren + sortieren)
+        if self.config.use_result_aggregation:
+            aggregator = ResultAggregator(top_k=self.config.top_k)
+            documents = aggregator.deduplicate(documents)
+            documents = aggregator.aggregate(documents, sort_by='relevance')
+            logger.debug("✓ Result Aggregation angewendet")
+        
+        # 3. Global Re-Ranking
+        if self.config.use_global_reranking:
+            reranker = GlobalReranker(use_relevance=True)
+            documents = reranker.rerank(documents)
+            # Optional: Diversity-Penalty
+            documents = reranker.apply_diversity_penalty(documents, max_per_source=2)
+            logger.debug("✓ Global Re-Ranking angewendet")
+        
+        # 4. Relevance Filtering
+        if self.config.use_relevance_filtering:
+            relevance_filter = RelevanceFilter(threshold=self.config.relevance_threshold)
+            documents = relevance_filter.filter(documents)
+            logger.debug(f"✓ Relevance Filtering angewendet (Threshold: {self.config.relevance_threshold})")
+        
+        # 5. Prüfe ob noch Ergebnisse vorhanden
+        if not documents:
+            if self.config.use_empty_result_handling:
+                handler = EmptyResultHandler()
+                return handler.handle_empty_results(
+                    query=query,
+                    had_results_before_filtering=had_results,
+                    relevance_threshold=self.config.relevance_threshold
+                )
+            else:
+                return "ℹ️ Keine relevanten Informationen gefunden."
+        
+        # 6. Result Formatting
+        if self.config.use_result_formatting:
+            formatter = ResultFormatter(include_metadata=True, include_sources=True)
+            formatted = formatter.format(documents, query=query)
+            logger.debug("✓ Result Formatting angewendet")
+        else:
+            # Fallback: Kompakte Formatierung
+            formatted = "\n\n".join([doc.get('document', '') for doc in documents])
+        
+        # 7. Context Hints
+        if self.config.use_context_hints:
+            hint_provider = ContextHintProvider()
+            formatted = hint_provider.add_hints(formatted, query=query, results=documents)
+            logger.debug("✓ Context Hints hinzugefügt")
+        
+        logger.info("Advanced RAG-Pipeline abgeschlossen")
+        return formatted
     
     async def _arun(self, query: str) -> str:
         """Asynchrone Version - ruft die synchrone Version auf."""

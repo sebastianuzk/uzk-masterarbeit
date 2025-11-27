@@ -2,8 +2,16 @@
 
 Module contains advanced retrieval techniques that can be used
 to enhance the naive RAG baseline.
-
-Currently placeholder - techniques will be implemented as needed.
 """
 
-__all__ = []
+from .multi_collection_search import MultiCollectionSearcher
+from .result_aggregation import ResultAggregator
+from .distance_conversion import DistanceConverter
+from .global_reranking import GlobalReranker
+
+__all__ = [
+    'MultiCollectionSearcher',
+    'ResultAggregator',
+    'DistanceConverter',
+    'GlobalReranker'
+]

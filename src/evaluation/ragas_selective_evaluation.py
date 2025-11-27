@@ -38,7 +38,66 @@ from src.agent.react_agent import create_react_agent
 # ============================================================================
 # KONFIGURATION: Hier die Indizes eintragen (1-basiert wie in CSV)
 # ============================================================================
-SPECIFIC_INDICES = [2, 5, 10]  # ID 2 wird überschrieben, IDs 5 und 10 werden hinzugefügt
+SPECIFIC_INDICES = []  # Leer lassen für Auto-Detect (fehlgeschlagen + fehlend)
+AUTO_DETECT_FAILED = True  # Automatisch fehlgeschlagene IDs aus ragas_results.csv erkennen
+AUTO_DETECT_MISSING = True  # Automatisch noch nicht evaluierte IDs erkennen
+
+
+def detect_failed_and_missing_indices(results_path: Path, testset_path: Path) -> tuple:
+    """
+    Erkennt fehlgeschlagene IDs aus ragas_results.csv UND noch nicht evaluierte IDs.
+    
+    Fehlgeschlagen: Mindestens eine Metrik ist NaN
+    Fehlend: ID existiert im Testset aber nicht in ragas_results.csv
+    
+    Returns:
+        Tuple (failed_ids, missing_ids)
+    """
+    failed_ids = []
+    missing_ids = []
+    
+    # Lade Testset um alle erwarteten IDs zu kennen
+    testset_df = pd.read_csv(testset_path, sep=';', encoding='utf-8')
+    all_expected_ids = set(testset_df['id'].tolist())
+    
+    if not results_path.exists():
+        print("ℹ️  Keine bestehende ragas_results.csv gefunden")
+        missing_ids = sorted(list(all_expected_ids))
+        print(f"📋 Alle {len(missing_ids)} IDs müssen evaluiert werden: {missing_ids}")
+        return failed_ids, missing_ids
+    
+    df = pd.read_csv(results_path, encoding='utf-8')
+    
+    if 'id' not in df.columns:
+        print("⚠️  CSV hat keine 'id' Spalte - kann Status nicht prüfen")
+        missing_ids = sorted(list(all_expected_ids))
+        return failed_ids, missing_ids
+    
+    # Prüfe welche IDs NaN-Werte in den Metriken haben
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+    existing_ids = set()
+    
+    for _, row in df.iterrows():
+        row_id = int(row['id'])
+        existing_ids.add(row_id)
+        has_nan = any(pd.isna(row.get(metric)) for metric in metric_cols)
+        if has_nan:
+            failed_ids.append(row_id)
+    
+    # Finde IDs die im Testset sind aber nicht in Results
+    missing_ids = sorted(list(all_expected_ids - existing_ids))
+    
+    if failed_ids:
+        print(f"🔍 {len(failed_ids)} fehlgeschlagene IDs erkannt: {sorted(failed_ids)}")
+    else:
+        print("✅ Keine fehlgeschlagenen IDs gefunden")
+    
+    if missing_ids:
+        print(f"📋 {len(missing_ids)} noch nicht evaluierte IDs erkannt: {missing_ids}")
+    else:
+        print("✅ Alle IDs wurden bereits evaluiert")
+    
+    return failed_ids, missing_ids
 
 
 def load_testset_filtered(csv_path: str = "data/Testset.CSV", indices: List[int] = None) -> pd.DataFrame:
@@ -176,7 +235,13 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
-    results = evaluate(dataset, metrics=metrics, llm=llm)
+    # Evaluation mit begrenzten Workers für Ollama
+    results = evaluate(
+        dataset, 
+        metrics=metrics, 
+        llm=llm,
+        max_workers=4  # Begrenzt parallele Requests an Ollama
+    )
     
     results_df = results.to_pandas()
     
@@ -282,7 +347,32 @@ def main():
     print("🎯 RAGAS-EVALUATION - Spezifische Indizes")
     print("=" * 80 + "\n")
     
-    print(f"🔢 Zu evaluierende Indizes: {SPECIFIC_INDICES}\n")
+    # Auto-Detect fehlgeschlagene und fehlende IDs wenn aktiviert
+    indices_to_eval = SPECIFIC_INDICES.copy()
+    
+    if AUTO_DETECT_FAILED or AUTO_DETECT_MISSING:
+        results_path = Path(__file__).parent / "data" / "ragas_results.csv"
+        testset_path = Path(__file__).parent / "data" / "Testset.CSV"
+        failed_ids, missing_ids = detect_failed_and_missing_indices(results_path, testset_path)
+        
+        # Kombiniere alle IDs (manuell + fehlgeschlagen + fehlend)
+        all_ids = set(indices_to_eval)
+        
+        if AUTO_DETECT_FAILED:
+            all_ids.update(failed_ids)
+        
+        if AUTO_DETECT_MISSING:
+            all_ids.update(missing_ids)
+        
+        indices_to_eval = sorted(list(all_ids))
+        
+        if indices_to_eval:
+            print(f"📝 Zu evaluierende Indizes: {indices_to_eval}\n")
+        else:
+            print("✅ Keine IDs zu evaluieren - alle vollständig!\n")
+            sys.exit(0)
+    else:
+        print(f"🔢 Zu evaluierende Indizes: {sorted(indices_to_eval)}\n")
     
     try:
         # 1. LangSmith Client
@@ -292,7 +382,7 @@ def main():
         
         # 2. Testset laden (nur spezifische Indizes)
         print("📂 Lade Testset (gefiltert)...")
-        test_df = load_testset_filtered(indices=SPECIFIC_INDICES)
+        test_df = load_testset_filtered(indices=indices_to_eval)
         print()
         
         # 3. Chatbot initialisieren

@@ -8,7 +8,7 @@ Modulares RAG-System mit konfigurierbaren Techniken für:
 
 Verwendung:
     # Standard (Advanced RAG aus Umgebungsvariablen)
-    from src.advanced_rag.config import RAGConfig
+    from src.advanced_rag.rag_config import RAGConfig
     config = RAGConfig.load_from_env()
     
     # Pre-Retrieval Techniken
@@ -19,7 +19,7 @@ Verwendung:
     )
 """
 
-from src.advanced_rag.config import RAGConfig
+from src.advanced_rag.rag_config import RAGConfig
 
 # Pre-retrieval techniques
 from src.advanced_rag.pre_retrieval import (
