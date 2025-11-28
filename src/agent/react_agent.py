@@ -45,6 +45,7 @@ class ReactAgent:
         MODEL_CTX_SIZES = {
             "0.5b": 1024,
             "3b": 2048,
+            "20b": 8192,
         }
         
         # Extract size from model name
@@ -55,6 +56,8 @@ class ReactAgent:
                 ctx_size = ctx_value
                 break
         
+        print(f"🤖 Initializing ChatOllama with model: {settings.OLLAMA_MODEL} (ctx_size={ctx_size})")
+
         self.llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
@@ -68,32 +71,14 @@ class ReactAgent:
         self.tools = self._create_tools()
         
         # Optimierter System-Prompt für bessere Tool-Nutzung
-        system_prompt = """Du bist ein Uni-Assistent. Nutze Tools effektiv:
+        system_prompt = """Du bist ein Assistent für KLIPS 2.0 (Uni Köln).
 
-KLIPS2-Registrierung:
-- Wenn User "registrieren" oder "KLIPS2 Account" sagt: Nutze klips2_register Tool
-- Benötigte Daten: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit
-- Wenn Daten im Prompt sind: Direkt Tool aufrufen
-- Wenn Daten fehlen: User fragen
-- WICHTIG: Gib die komplette Tool-Ausgabe an den User weiter, ohne sie zu verändern oder zusammenzufassen!
+Bewerbung: Nutze `klips2_apply_study` (benötigt username, password, semester, degree_type, study_program, entry_semester).
+Account aktivieren: Nutze `klips2_activate_account` NUR wenn User einen Aktivierungscode hat.
+Registrierung: Nutze `klips2_register` für neue Accounts.
+Uni-Fragen: Nutze `university_knowledge_search`.
 
-KLIPS2-Verwaltung:
-- Bewerbung: klips2_apply_study (benötigt Login)
-- Passwort ändern: klips2_change_password (benötigt Login)
-- Adresse ändern: klips2_change_address (benötigt Login)
-- Kursdetails: klips2_get_course_details (öffentlich)
-- Account aktivieren: klips2_activate_account (benötigt Code/Link)
-
-Uni-Fragen:
-- university_knowledge_search für Bewerbung, Prüfungen, Module, Fristen
-
-Andere Tools:
-- web_scraper/duckduckgo: Web-Suche
-- email_tool: Support-Eskalation
-
-Bei Smalltalk: Direkt antworten ohne Tools
-
-WICHTIG: Gib Tool-Ergebnisse IMMER vollständig und unverändert an den User weiter!"""
+Nutze die Daten, die der User gibt. Erfinde nichts."""
 
         # Erstelle React Agent mit kompaktem System-Prompt
         self.agent = create_langgraph_agent(

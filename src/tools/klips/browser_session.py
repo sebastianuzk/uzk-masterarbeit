@@ -121,8 +121,9 @@ class KLIPSBrowserSession:
             # e.g. "Logout", "Abmelden", or user profile icon
             # Or check if we are NOT on the login page anymore
             
-            if self.page.locator("#username").is_visible():
-                # Still on login page -> failed
+            # Check if the login input is still visible (meaning we are still on login page)
+            if self.page.locator("#id_brm-pm-dtop_login_uname_input").is_visible():
+                print("Login input still visible. Login likely failed.")
                 return False
                 
             return True
