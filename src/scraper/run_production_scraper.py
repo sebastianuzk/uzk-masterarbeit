@@ -1,15 +1,20 @@
 """
 Produktiver Offline-Scraper für die komplette Datenbasis
 =========================================================
-Verarbeitet alle 2675 Dokumente (2242 HTML + 433 PDF) mit Advanced Pre-Retrieval Techniken
-und speichert sie in ChromaDB Collections.
+Verarbeitet alle 2675 Dokumente (2242 HTML + 433 PDF).
+Respektiert RAG_NAIVE_SETUP Flag:
+- RAG_NAIVE_SETUP=true  → Naive RAG ohne Advanced Pre-Retrieval
+- RAG_NAIVE_SETUP=false → Advanced RAG mit Pre-Retrieval Techniken
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Füge Projekt-Root zum Path hinzu
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
 
 import sqlite3
 import gzip
+import re
 from pathlib import Path
 import chromadb
 from chromadb.config import Settings
@@ -19,10 +24,21 @@ import time
 from datetime import datetime
 import pickle
 
-# Import unserer Module
-from src.advanced_rag.pre_retrieval.cleaning import ContentCleaner
-from src.advanced_rag.pre_retrieval.chunking import SemanticChunker
-from src.advanced_rag.pre_retrieval.deduplication import ContentDeduplicator
+# Lade RAG Configuration
+try:
+    from src.advanced_rag.rag_config import RAGConfig
+    rag_config = RAGConfig.load_from_env()
+    USE_ADVANCED = not rag_config.baseline_enabled  # baseline=True bedeutet Naive
+except Exception as e:
+    print(f"⚠️  Fehler beim Laden der RAG-Config: {e}")
+    print("   Verwende Advanced RAG als Fallback")
+    USE_ADVANCED = True
+
+# Conditional Imports für Advanced-Techniken
+if USE_ADVANCED:
+    from src.advanced_rag.pre_retrieval.cleaning import ContentCleaner
+    from src.advanced_rag.pre_retrieval.chunking import SemanticChunker
+    from src.advanced_rag.pre_retrieval.deduplication import ContentDeduplicator
 
 # Datenbank-Pfade
 CONTENT_DB = Path("data/content_database.db")
@@ -121,10 +137,40 @@ def decompress_content(compressed_data: bytes) -> str:
     """Dekomprimiere gzip-Content."""
     return gzip.decompress(compressed_data).decode('utf-8')
 
+def naive_clean_text(text: str) -> str:
+    """Naive Text-Bereinigung ohne Advanced-Techniken."""
+    # Nur grundlegende Bereinigung
+    text = re.sub(r'\s+', ' ', text)  # Normalisiere Leerzeichen
+    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Entferne mehrfache Zeilenumbrüche
+    return text.strip()
+
+def naive_chunk_text(text: str, chunk_size: int = 1500) -> list:
+    """Naive Chunking: Einfach nach Zeichenzahl ohne Semantik."""
+    chunks = []
+    words = text.split()
+    current_chunk = []
+    current_length = 0
+    
+    for word in words:
+        word_length = len(word) + 1  # +1 für Leerzeichen
+        if current_length + word_length > chunk_size and current_chunk:
+            chunks.append(' '.join(current_chunk))
+            current_chunk = [word]
+            current_length = word_length
+        else:
+            current_chunk.append(word)
+            current_length += word_length
+    
+    if current_chunk:
+        chunks.append(' '.join(current_chunk))
+    
+    return chunks
+
 def process_document(doc_id, url, title, content, content_type, 
-                     content_cleaner, chunker, deduplicator):
+                     content_cleaner=None, chunker=None, deduplicator=None):
     """
     Verarbeite ein einzelnes Dokument (ohne Embeddings).
+    Respektiert USE_ADVANCED Flag.
     
     Returns:
         dict mit Chunks und Metadaten oder None wenn übersprungen
@@ -133,27 +179,27 @@ def process_document(doc_id, url, title, content, content_type,
         # Dekomprimiere
         raw_content = decompress_content(content)
         
-        # Bereinige Content
-        if content_type == 'html':
-            cleaned_text = content_cleaner.clean_html(raw_content)
-        else:  # pdf
-            cleaned_text = content_cleaner._clean_text(raw_content)
-        
-        # Chunking
-        chunks = chunker.chunk_by_paragraphs(cleaned_text)
+        if USE_ADVANCED:
+            # ADVANCED: Mit Pre-Retrieval Techniken
+            if content_type == 'html':
+                cleaned_text = content_cleaner.clean_html(raw_content)
+            else:  # pdf
+                cleaned_text = content_cleaner._clean_text(raw_content)
+            
+            chunks = chunker.chunk_by_paragraphs(cleaned_text)
+            
+            # Deduplication nur für HTMLs
+            if content_type == 'html' and len(chunks) > 0:
+                chunk_docs = [{"url": f"{url}#chunk_{i}", "content": chunk} for i, chunk in enumerate(chunks)]
+                unique_chunks, _ = deduplicator.deduplicate_batch(chunk_docs)
+                chunks = [doc["content"] for doc in unique_chunks]
+        else:
+            # NAIVE: Ohne Advanced-Techniken
+            cleaned_text = naive_clean_text(raw_content)
+            chunks = naive_chunk_text(cleaned_text, chunk_size=1500)
         
         if len(chunks) == 0:
             return None
-        
-        # Quick-Win Deduplication: Nur für HTMLs (wenige Chunks)
-        # PDFs haben zu viele Chunks (~200-300), skip für Performance
-        if content_type == 'html':
-            chunk_docs = [{"url": f"{url}#chunk_{i}", "content": chunk} for i, chunk in enumerate(chunks)]
-            unique_chunks, _ = deduplicator.deduplicate_batch(chunk_docs)
-            chunks = [doc["content"] for doc in unique_chunks]
-            
-            if len(chunks) == 0:
-                return None
         
         # Bestimme Collection
         collection_name = get_collection_name(url)
@@ -190,16 +236,24 @@ def run_production_scraper():
     print("\n" + "=" * 80)
     print("SCHRITT 2: Module initialisieren")
     print("=" * 80)
-    print("📦 Lade Komponenten...")
     
-    content_cleaner = ContentCleaner()
-    print("   ✅ ContentCleaner")
-    
-    chunker = SemanticChunker(max_chunk_size=1500, min_chunk_size=200, overlap=300)
-    print("   ✅ SemanticChunker (max=1500, min=200, overlap=300)")
-    
-    deduplicator = ContentDeduplicator(similarity_threshold=0.85, shingle_size=3)
-    print("   ✅ ContentDeduplicator (Quick-Win optimiert: Cache + Early Exit + Size-Bucketing)")
+    if USE_ADVANCED:
+        print("📦 Lade Advanced Pre-Retrieval Komponenten...")
+        content_cleaner = ContentCleaner()
+        print("   ✅ ContentCleaner")
+        
+        chunker = SemanticChunker(max_chunk_size=1500, min_chunk_size=200, overlap=300)
+        print("   ✅ SemanticChunker (max=1500, min=200, overlap=300)")
+        
+        deduplicator = ContentDeduplicator(similarity_threshold=0.85, shingle_size=3)
+        print("   ✅ ContentDeduplicator (Quick-Win optimiert: Cache + Early Exit + Size-Bucketing)")
+    else:
+        print("📦 Verwende Naive RAG (keine Advanced-Techniken)...")
+        content_cleaner = None
+        chunker = None
+        deduplicator = None
+        print("   ✅ Naive Text-Bereinigung")
+        print("   ✅ Naive Chunking (einfache Zeichenzahl-basiert)")
     
     print("\n🤖 Lade Embedding-Modell...")
     embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -231,6 +285,20 @@ def run_production_scraper():
     
     # Verbinde zur Content Database
     conn = sqlite3.connect(CONTENT_DB)
+    
+    # Initialisiere Stats und Collections
+    stats = {
+        'total': 0,
+        'html': 0,
+        'pdf': 0,
+        'chunks': 0,
+        'skipped': 0,
+        'collections': {name: 0 for name in COLLECTIONS.keys()},
+        'errors': 0
+    }
+    
+    # Sammle verarbeitete Dokumente nach Collection
+    docs_by_collection = {name: [] for name in COLLECTIONS.keys()}
     
     # Phase 1: Dokumente verarbeiten oder aus Checkpoint laden
     if phase1_checkpoint is not None:
@@ -274,23 +342,9 @@ def run_production_scraper():
             FROM documents
             ORDER BY id
         """)
-    
-    # Statistiken
-    stats = {
-        'total': 0,
-        'html': 0,
-        'pdf': 0,
-        'chunks': 0,
-        'skipped': 0,
-        'collections': {name: 0 for name in COLLECTIONS.keys()},
-        'errors': 0
-    }
-    
-    # Sammle verarbeitete Dokumente nach Collection
-    docs_by_collection = {name: [] for name in COLLECTIONS.keys()}
-    
-    # Progress bar für Phase 1
-    with tqdm(total=total_docs, desc="📝 Phase 1: Dokumente verarbeiten", unit="doc") as pbar:
+        
+        # Progress bar für Phase 1
+        with tqdm(total=total_docs, desc="📝 Phase 1: Dokumente verarbeiten", unit="doc") as pbar:
         for row in cursor:
             doc_id, url, title, content, content_type = row
             

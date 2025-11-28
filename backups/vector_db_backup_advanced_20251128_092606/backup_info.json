@@ -1,0 +1,11 @@
+﻿{
+    "source":  "data/vector_db",
+    "timestamp":  "20251128_092606",
+    "datetime":  "2025-11-28T09:26:10",
+    "description":  "Advanced RAG Vector DB - vor Naive RAG Scraping",
+    "files":  {
+                  "path":  "vector_db/",
+                  "size_mb":  584.33,
+                  "num_files":  18
+              }
+}

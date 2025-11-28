@@ -25,6 +25,7 @@ sys.path.insert(0, str(project_root))
 from ragas import evaluate
 from ragas.metrics import faithfulness, context_recall, context_precision
 from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
+from ragas.run_config import RunConfig
 from langchain_ollama import ChatOllama
 from langsmith import Client
 from config.settings import (
@@ -235,12 +236,16 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
-    # Evaluation mit begrenzten Workers für Ollama
+    # RunConfig für parallele Requests an Ollama
+    run_config = RunConfig(max_workers=4)
+    
+    # Evaluation durchführen
     results = evaluate(
         dataset, 
         metrics=metrics, 
         llm=llm,
-        max_workers=4  # Begrenzt parallele Requests an Ollama
+        run_config=run_config,
+        raise_exceptions=False
     )
     
     results_df = results.to_pandas()

@@ -80,6 +80,10 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Evaluation Checkpoints
+checkpoints/
+src/evaluation/checkpoints/
+
 # IPython
 profile_default/
 ipython_config.py
