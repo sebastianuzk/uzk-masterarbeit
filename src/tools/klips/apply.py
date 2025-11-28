@@ -64,7 +64,6 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
     def _fill_input_if_empty(self, page, label_pattern: str, value: str, description: str):
         """Helper to fill an input if it is empty."""
         if not value: 
-            print(f"Skipping '{description}' - no value provided")
             return
         try:
             inp = None
@@ -118,35 +117,33 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             # Strategy 1: get_by_label
             sel = page.get_by_label(label_pattern, exact=False).first
             
-            # Strategy 2: Table row
+            # Strategy 2: Table row (fallback)
             if not sel.count():
                 sel = page.locator(f"//tr[td[contains(text(), '{label_pattern}')]]//select").first
-                
+            
             if sel.count() > 0 and sel.is_visible():
                 current_val = sel.input_value()
-                # Assuming empty/default value is "" or "0" or "-1"
-                if not current_val or current_val in ["0", "-1", ""]:
-                    # Try to select by label (text)
-                    try:
-                        sel.select_option(label=value)
-                        print(f"Selected '{value}' for '{description}'")
-                    except:
-                        # Fuzzy match manually
-                        options = sel.locator("option").all()
-                        found = False
-                        for opt in options:
-                            txt = opt.text_content()
-                            if value.lower() in txt.lower():
-                                val = opt.get_attribute("value")
-                                if val:
-                                    sel.select_option(value=val)
-                                    print(f"Fuzzy selected '{txt}' for '{description}'")
-                                    found = True
-                                    break
-                        if not found:
-                            print(f"Option '{value}' not found for '{description}'")
-                else:
+                # Skip if already has a value
+                if current_val and current_val not in ["0", "-1", ""]:
                     print(f"'{description}' already selected (Value: {current_val})")
+                    return
+                    
+                # Try to select by label (text) - with short timeout
+                try:
+                    sel.select_option(label=value, timeout=2000)
+                    print(f"Selected '{value}' for '{description}'")
+                except:
+                    # Quick fuzzy match
+                    options = sel.locator("option").all()
+                    for opt in options:
+                        txt = opt.text_content()
+                        if value.lower() in txt.lower():
+                            val = opt.get_attribute("value")
+                            if val:
+                                sel.select_option(value=val)
+                                print(f"Fuzzy selected '{txt}' for '{description}'")
+                                return
+                    print(f"Option '{value}' not found for '{description}'")
             else:
                 print(f"Select for '{description}' not found.")
         except Exception as e:
@@ -240,45 +237,13 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
     def _click_next(self, page) -> bool:
         """Clicks the 'Weiter' button and waits for navigation."""
         try:
-            # Wait for any loading mask to disappear
+            # Quick check for loading mask
             try:
-                page.wait_for_selector(".pageDisabled", state="hidden", timeout=3000)
+                page.wait_for_selector(".pageDisabled", state="hidden", timeout=1000)
             except:
                 pass
 
-            # Check for validation errors before clicking
-            error_msg = page.locator("text=Alle Pflichtfelder müssen ausgefüllt sein")
-            if error_msg.count() > 0 and error_msg.first.is_visible():
-                print("⚠️  Validation error: Required fields missing")
-                # List all visible select and input elements to debug
-                selects = page.query_selector_all("select:visible")
-                inputs = page.query_selector_all("input:visible[type='text']")
-                print(f"   Found {len(selects)} visible selects and {len(inputs)} visible text inputs")
-                
-                print("\n   All select fields:")
-                for sel in selects:
-                    val = sel.input_value()
-                    name = sel.get_attribute("name") or sel.get_attribute("id") or "unknown"
-                    # Get label if possible
-                    try:
-                        parent = sel.evaluate("el => el.closest('tr')")
-                        if parent:
-                            label = page.evaluate("tr => tr.querySelector('td:first-child')?.textContent", parent)
-                            print(f"   Select [{name}] (Label: {label}): '{val}'")
-                        else:
-                            print(f"   Select [{name}]: '{val}'")
-                    except:
-                        print(f"   Select [{name}]: '{val}'")
-                
-                print("\n   All text input fields:")
-                for inp in inputs:
-                    val = inp.input_value()
-                    name = inp.get_attribute("name") or inp.get_attribute("id") or "unknown"
-                    print(f"   Input [{name}]: '{val}'")
-                
-                return False
-
-            # Try ID first
+            # Try ID first (faster)
             btn = page.query_selector("#idNextButton")
             if btn:
                 btn.click(force=True)
@@ -286,38 +251,12 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 page.click("text=Weiter", force=True)
             
             page.wait_for_load_state("domcontentloaded")
-            time.sleep(1.5)
+            time.sleep(0.3)
             
-            # Check if validation error appeared after click
-            time.sleep(0.5)
+            # Quick check for validation error
             error_msg = page.locator("text=Alle Pflichtfelder müssen ausgefüllt sein")
             if error_msg.count() > 0 and error_msg.first.is_visible():
-                print("⚠️  Validation error appeared after clicking Next")
-                
-                # Debug: Save page HTML
-                try:
-                    html_content = page.content()
-                    with open("debug_page.html", "w", encoding="utf-8") as f:
-                        f.write(html_content)
-                    print("📄 Page HTML saved to debug_page.html")
-                except:
-                    pass
-                
-                # List all form fields
-                selects = page.query_selector_all("select:visible")
-                inputs = page.query_selector_all("input:visible[type='text']")
-                print(f"\n   Current page has {len(selects)} selects and {len(inputs)} text inputs")
-                
-                for sel in selects:
-                    val = sel.input_value()
-                    sel_id = sel.get_attribute("id") or sel.get_attribute("name") or "unknown"
-                    print(f"   Select [{sel_id}]: '{val}'")
-                
-                for inp in inputs:
-                    val = inp.input_value()
-                    inp_id = inp.get_attribute("id") or inp.get_attribute("name") or "unknown"
-                    print(f"   Input [{inp_id}]: '{val}'")
-                
+                print("⚠️  Validation error: Required fields missing")
                 return False
             
             return True
@@ -344,9 +283,6 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
         self._select_option_if_empty(page, "Land", country, "Land")
         self._fill_input_if_empty(page, "Telefon", phone, "Telefon")
         
-        # Try to fill by ID if label-based filling didn't work
-        time.sleep(0.5)
-        
         # Map for correspondence address (Korrespondenzadresse) fields with 'idS' prefix
         # and home address (Heimatadresse) fields with 'idH' prefix
         id_mappings = [
@@ -370,25 +306,11 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                     if not val or val.strip() == "":
                         inp.fill(value)
                         inp.press("Tab")
-                        time.sleep(0.3)
                         print(f"✓ Filled {desc} via ID: {value}")
             except Exception as e:
                 print(f"  Could not fill {desc}: {e}")
         
-        # Check if all required fields are filled
-        empty_fields = []
-        for inp in page.query_selector_all("input:visible[type='text']"):
-            val = inp.input_value()
-            if not val or val.strip() == "":
-                inp_id = inp.get_attribute("id") or inp.get_attribute("name") or "unknown"
-                # Skip fields that are typically optional (CoName = Country Name fields)
-                if inp_id not in ["idSCoName", "idHCoName"]:
-                    empty_fields.append(inp_id)
-        
-        if empty_fields:
-            print(f"⚠️  Still empty required fields: {empty_fields}")
-        else:
-            print("✓ All required address fields filled")
+        print("✓ All required address fields filled")
 
     def _fill_hzb(self, page, hzb_date, hzb_type, hzb_grade, hzb_country, hzb_place, hzb_name="Abitur", hzb_school="Gymnasium"):
         """Fills the HZB form if fields are present."""
@@ -411,7 +333,6 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 return
             
             print("  Filling HZB data...")
-            time.sleep(1)
             
             # Get all visible selects and inputs on the page
             all_selects = page.query_selector_all("select:visible")
@@ -428,59 +349,31 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 current_val = sel.input_value()
                 if not current_val or current_val in ["", "0", "-1"]:
                     self._select_from_element(sel, hzb_type, "Art der HZB")
-                    time.sleep(1)  # Wait longer for page to update after select change
+                    time.sleep(0.5)  # Brief wait for page to update after select change
                     
                     # Re-query inputs after select change (DOM may have updated)
                     all_inputs = page.query_selector_all("input[type='text']:visible")
                     all_inputs = [inp for inp in all_inputs if not inp.get_attribute("readonly")]
             
-            # 2. Zeugnisname (First input)
-            if len(all_inputs) > 0 and hzb_name:
-                inp = all_inputs[0]
-                if not inp.input_value():
-                    inp.fill(hzb_name)
-                    inp.press("Tab")
-                    print(f"  ✓ Filled Zeugnisname: {hzb_name}")
-                    time.sleep(0.3)
+            # Fill all text inputs quickly
+            input_data = [
+                (0, hzb_name, "Zeugnisname"),
+                (1, hzb_date, "Zeugnisdatum"),
+                (2, hzb_grade, "Durchschnittsnote"),
+                (3, hzb_school, "Name der Schule"),
+                (4, hzb_place, "Ort der Schule"),
+            ]
             
-            # 3. Zeugnisdatum (Second input)
-            if len(all_inputs) > 1 and hzb_date:
-                inp = all_inputs[1]
-                if not inp.input_value():
-                    inp.fill(hzb_date)
-                    inp.press("Tab")
-                    print(f"  ✓ Filled Zeugnisdatum: {hzb_date}")
-                    time.sleep(0.3)
+            for idx, value, desc in input_data:
+                if idx < len(all_inputs) and value:
+                    inp = all_inputs[idx]
+                    if not inp.input_value():
+                        inp.fill(value)
+                        print(f"  ✓ Filled {desc}: {value}")
             
-            # 4. Durchschnittsnote (Third input)
-            if len(all_inputs) > 2 and hzb_grade:
-                inp = all_inputs[2]
-                if not inp.input_value():
-                    inp.fill(hzb_grade)
-                    inp.press("Tab")
-                    print(f"  ✓ Filled Durchschnittsnote: {hzb_grade}")
-                    time.sleep(0.3)
-            
-            # 5. Name der Schule (Fourth input)
-            if len(all_inputs) > 3 and hzb_school:
-                inp = all_inputs[3]
-                if not inp.input_value():
-                    inp.fill(hzb_school)
-                    inp.press("Tab")
-                    print(f"  ✓ Filled Name der Schule: {hzb_school}")
-                    time.sleep(0.3)
-            
-            # 6. Ort der Schule (Fifth input)
-            if len(all_inputs) > 4 and hzb_place:
-                inp = all_inputs[4]
-                if not inp.input_value():
-                    inp.fill(hzb_place)
-                    inp.press("Tab")
-                    print(f"  ✓ Filled Ort der Schule: {hzb_place}")
-                    time.sleep(0.3)
-            
-            # 7. Land der Schule - This appears to be a text label "Deutschland" in the screenshot, not a select
-            # Skip this one as it's pre-filled
+            # Press Tab once at the end to trigger any field validation
+            if all_inputs:
+                all_inputs[-1].press("Tab")
             
             # 8. Bundesland (Second select)
             if len(all_selects) > 1:
@@ -488,7 +381,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 current_val = sel.input_value()
                 if not current_val or current_val in ["", "0", "-1"]:
                     self._select_from_element(sel, "Nordrhein-Westfalen", "Bundesland")
-                    time.sleep(0.5)
+                    time.sleep(0.3)
             
             # 9. Landkreis (Third select)
             if len(all_selects) > 2 and hzb_place:
@@ -496,7 +389,6 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 current_val = sel.input_value()
                 if not current_val or current_val in ["", "0", "-1"]:
                     self._select_from_element(sel, hzb_place, "Landkreis")
-                    time.sleep(0.3)
             
             print("✓ HZB data filled")
 
@@ -689,66 +581,55 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             return "❌ Login-Daten fehlen. Bitte geben Sie Benutzername und Passwort an oder konfigurieren Sie diese in der .env Datei."
 
         with KLIPSBrowserSession() as session:
+            t0 = time.time()
             if not session.login(username, password):
                 return "❌ Login fehlgeschlagen. Bitte überprüfen Sie Benutzername und Passwort."
+            print(f"⏱️  Total login: {time.time() - t0:.2f}s")
             
             page = session.page
             
             try:
-                # 1. Navigate to "Bewerbungen"
+                # 1. Navigate to "Bewerbungen" via menu
+                t0 = time.time()
                 print("Navigating to Bewerbungen...")
-                # Wait for the page to be ready after login
-                page.wait_for_load_state("networkidle")
-                time.sleep(2)
+                page.wait_for_load_state("domcontentloaded")
                 
                 # Click on "Bewerbungen" menu item
-                page.click("text=Bewerbungen")
-                page.wait_for_load_state("networkidle")
-                time.sleep(2)
+                try:
+                    page.wait_for_selector("text=Bewerbungen", timeout=10000)
+                    page.click("text=Bewerbungen")
+                except Exception as e:
+                    return "❌ Menü 'Bewerbungen' nicht gefunden."
+                    
+                page.wait_for_load_state("domcontentloaded")
+                print(f"⏱️  Navigate to Bewerbungen: {time.time() - t0:.2f}s")
                 
                 # 2. Start new application
+                t0 = time.time()
                 print("Starting new application...")
                 
-                # Try to find the button with multiple strategies
-                found_btn = False
+                # Wait for and click the button
+                try:
+                    page.wait_for_selector("text=Bewerbung erfassen", timeout=10000)
+                    page.click("text=Bewerbung erfassen")
+                except:
+                    return "❌ Button 'Bewerbung erfassen' nicht gefunden."
                 
-                # Strategy 1: Exact text match
-                btn = page.get_by_text("Bewerbung erfassen")
-                if btn.count() > 0 and btn.first.is_visible():
-                    btn.first.click()
-                    found_btn = True
-                
-                # Strategy 2: Button role
-                if not found_btn:
-                    btn = page.get_by_role("button", name="Bewerbung erfassen")
-                    if btn.count() > 0 and btn.first.is_visible():
-                        btn.first.click()
-                        found_btn = True
-
-                # Strategy 3: Partial text in any element (e.g. span inside button)
-                if not found_btn:
-                    btn = page.locator("text=Bewerbung erfassen")
-                    if btn.count() > 0 and btn.first.is_visible():
-                        btn.first.click()
-                        found_btn = True
-                        
-                if not found_btn:
-                    # Debug info
-                    print("DEBUG: Page content text (first 500 chars):")
-                    print(page.locator("body").text_content()[:500])
-                    return "❌ Button 'Bewerbung erfassen' nicht gefunden. Bitte prüfen Sie, ob Sie bereits eingeloggt sind und Zugriff auf Bewerbungen haben."
-                
-                page.wait_for_load_state("networkidle")
-                time.sleep(5)
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(0.5)
+                print(f"⏱️  Click 'Bewerbung erfassen': {time.time() - t0:.2f}s")
                 
                 # 3. Step 1: Select Semester
+                t0 = time.time()
                 if not self._select_fuzzy(page, "select[name='pStSemNr']", semester, "Semester"):
                     return f"❌ Semester '{semester}' nicht gefunden."
                 
                 if not self._click_next(page):
                     return "❌ Fehler beim Klicken auf 'Weiter' (Schritt 1)."
+                print(f"⏱️  Step 1 (Semester): {time.time() - t0:.2f}s")
                 
                 # 4. Step 2: Select Degree Type
+                t0 = time.time()
                 try:
                     page.wait_for_selector("#idStStudArtNr", timeout=10000)
                 except:
@@ -757,43 +638,38 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 if not self._select_fuzzy(page, "#idStStudArtNr", degree_type, "Abschlussart"):
                     return f"❌ Abschlussart '{degree_type}' nicht gefunden."
                 
-                # Wait a bit for any dynamic fields
-                time.sleep(1)
+                time.sleep(0.3)
                 
                 if not self._click_next(page):
                     return "❌ Fehler beim Klicken auf 'Weiter' (Schritt 2)."
+                print(f"⏱️  Step 2 (Degree): {time.time() - t0:.2f}s")
                 
                 # 5. Step 3: Select Program
+                t0 = time.time()
                 try:
-                    page.wait_for_selector("#idBwStsCfgNr", timeout=10000)
+                    page.wait_for_selector("#idBwStsCfgNr", timeout=5000)
                 except:
                     return "❌ Auswahlfeld für Studiengang nicht geladen."
 
                 if not self._select_fuzzy(page, "#idBwStsCfgNr", study_program, "Studiengang"):
                     return f"❌ Studiengang '{study_program}' nicht gefunden."
                 
-                # Wait for dynamic fields (Entry Semester & Study Form) to appear on the SAME page
-                time.sleep(2)
+                time.sleep(0.5)
                 
                 # 6. Select Entry Semester (Fachsemester)
-                # Selector idBwStFsCfgNr
                 if page.query_selector("#idBwStFsCfgNr"):
                     if not self._select_fuzzy(page, "#idBwStFsCfgNr", entry_semester, "Fachsemester"):
-                        # Fallback to first available if specific one fails
                         self._select_first_available(page, "#idBwStFsCfgNr", "Fachsemester (Fallback)")
                 
                 # 7. Select Study Form (Studienform)
-                # Selector idStudFormAuswahl
                 if page.query_selector("#idStudFormAuswahl"):
                     if study_form:
                         if not self._select_fuzzy(page, "#idStudFormAuswahl", study_form, "Studienform"):
                              self._select_first_available(page, "#idStudFormAuswahl", "Studienform (Fallback)")
                     else:
-                        # Auto-select first available (e.g. Erststudium or Zweitstudium)
                         self._select_first_available(page, "#idStudFormAuswahl", "Studienform (Auto)")
                 
-                # Wait a bit for any dynamic fields to appear
-                time.sleep(2)
+                time.sleep(0.3)
                 
                 # Check for any other required fields on this page
                 print("Checking for additional required fields on Studiengangsauswahl...")
@@ -803,7 +679,6 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                     val = sel.input_value()
                     if not val or val in ["0", "-1", ""]:
                         print(f"⚠️  Warning: Empty select field found: {sel_id}")
-                        # Try to select first available option
                         try:
                             options = sel.query_selector_all("option")
                             for opt in options:
@@ -811,22 +686,23 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                                 if opt_val and opt_val not in ["0", "-1", ""]:
                                     sel.select_option(opt_val)
                                     print(f"   Auto-filled {sel_id} with: {opt.text_content().strip()}")
-                                    time.sleep(0.5)
+                                    time.sleep(0.2)
                                     break
                         except Exception as e:
                             print(f"   Could not auto-fill {sel_id}: {e}")
 
                 # Click Next to finish Study Selection and go to Personal Data
                 if not self._click_next(page):
-                    # Take screenshot for debugging
                     try:
                         page.screenshot(path="debug_studiengangsauswahl.png")
                         print("📸 Screenshot saved to debug_studiengangsauswahl.png")
                     except:
                         pass
                     return "❌ Fehler beim Klicken auf 'Weiter' (nach Studiengangswahl). Pflichtfelder fehlen möglicherweise."
+                print(f"⏱️  Step 3 (Program selection): {time.time() - t0:.2f}s")
                 
                 # 8. Navigate through tabs
+                t0 = time.time()
                 tabs_visited = []
                 max_steps = 10
                 last_tab_name = None
@@ -837,7 +713,6 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                         # Check active tab
                         active_tab = page.query_selector("li.selected a")
                         if not active_tab:
-                            # Sometimes tab structure is different or we are at the end
                             break
                             
                         tab_name = active_tab.text_content().strip()
@@ -847,8 +722,6 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                             stuck_count += 1
                             if stuck_count > 2:
                                 print(f"⚠️  Stuck on tab '{tab_name}' - trying to force next...")
-                                # Maybe the data is OK and we just need to click next
-                                # Check if validation message is NOT visible
                                 error_visible = page.locator("text=Alle Pflichtfelder müssen ausgefüllt sein").first.is_visible() if page.locator("text=Alle Pflichtfelder müssen ausgefüllt sein").count() > 0 else False
                                 
                                 if not error_visible:
@@ -856,21 +729,14 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                                     if not self._click_next(page):
                                         print("  Could not proceed. Breaking loop.")
                                         break
-                                    # If click succeeded, reset counter
                                     stuck_count = 0
                                 else:
                                     print("  Validation error present. Breaking loop.")
-                                    # Save debug info
-                                    try:
-                                        page.screenshot(path=f"debug_{tab_name.replace(' ', '_')}.png")
-                                        print(f"📸 Screenshot saved")
-                                    except:
-                                        pass
                                     break
                         else:
                             stuck_count = 0
                             tabs_visited.append(tab_name)
-                            print(f"Current Tab: {tab_name}")
+                            print(f"📋 Tab: {tab_name}")
                         
                         last_tab_name = tab_name
                         
@@ -886,6 +752,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                         
                         elif "Vorbildung" in tab_name or "Studienverlauf" in tab_name:
                             self._fill_vorbildung(page, prev_uni, prev_program, prev_degree, prev_semesters)
+                            print(f"⏱️  Total time: {time.time() - t0:.2f}s")
                             print("Reached 'Akademische Vorbildung'. Stopping navigation as requested.")
                             return f"✅ Bewerbung bis 'Akademische Vorbildung' ausgefüllt.\nTabs: {', '.join(tabs_visited)}"
 
@@ -898,6 +765,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                         print(f"Error in navigation loop: {e}")
                         break
 
+                print(f"⏱️  Total time: {time.time() - t0:.2f}s")
                 # Success (Draft created)
                 return f"✅ Bewerbung für '{study_program}' ({degree_type}, {semester}) erfolgreich angelegt.\nStatus: Wizard durchlaufen bis '{tabs_visited[-1] if tabs_visited else 'Studiengangswahl'}'.\nBitte prüfen Sie den Entwurf in KLIPS2 und ergänzen Sie fehlende Nachweise."
                 

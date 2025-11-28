@@ -54,74 +54,69 @@ class KLIPSBrowserSession:
             raise RuntimeError("Session not started. Call start() or use 'with' statement.")
 
         try:
-            # Navigate directly to the login page as requested
+            import time as t
+            
+            # Navigate directly to the login page
+            t0 = t.time()
             self.page.goto("https://klips2.uni-koeln.de/co/ee/ui/ca2/app/desktop/#/login", timeout=30000)
+            print(f"⏱️  Page load: {t.time() - t0:.2f}s")
             
             # Wait for login form elements
-            # Use specific IDs provided by user
+            t0 = t.time()
             try:
                 # Username
                 self.page.wait_for_selector("#id_brm-pm-dtop_login_uname_input", state="visible", timeout=10000)
                 self.page.fill("#id_brm-pm-dtop_login_uname_input", username)
                 
-                # Password - assuming standard password input or similar ID pattern
-                # We'll try a robust selector for password since we don't have the exact ID yet
+                # Password
                 self.page.fill("input[type='password']", password)
                 
-                # Wait for button to become enabled (it starts as disabled)
-                submit_selector = "#id_brm-pm-dtop_login_submitbutton"
-                
-                # Force enable if needed (sometimes Angular validation is slow) or just wait
-                # self.page.wait_for_function(f"document.querySelector('{submit_selector}').disabled === false")
-                
                 # Click login button
+                submit_selector = "#id_brm-pm-dtop_login_submitbutton"
                 self.page.click(submit_selector, timeout=5000)
                 
             except Exception as e:
                 print(f"Specific selector login failed: {e}")
-                # Fallback to previous generic logic if specific IDs fail (e.g. if page changes)
                 print("Trying generic fallback...")
                 self.page.fill("input[name='username']", username)
                 self.page.fill("input[type='password']", password)
                 self.page.click("button[type='submit']", timeout=5000)
+            print(f"⏱️  Login form fill & submit: {t.time() - t0:.2f}s")
             
-            # Wait for navigation back to the app
-            self.page.wait_for_load_state("networkidle")
+            # Wait for navigation after login
+            t0 = t.time()
+            self.page.wait_for_load_state("domcontentloaded")
+            print(f"⏱️  Post-login wait: {t.time() - t0:.2f}s")
             
             # Handle Interstitial "Hooks" page (e.g. News, Terms)
-            # Loop a few times in case there are multiple pages or it reloads
-            for _ in range(3):
-                if "wbEeHooks.showHooks" in self.page.url:
-                    print("Interstitial page detected, clicking 'Weiter'...")
+            # Check both URL pattern AND presence of "Weiter" button
+            t0 = t.time()
+            interstitial_count = 0
+            for _ in range(5):
+                time.sleep(0.2)  # Brief pause for page to settle
+                current_url = self.page.url
+                
+                # Check for interstitial by URL or by presence of "Weiter" link
+                is_interstitial = "wbEeHooks.showHooks" in current_url
+                weiter_btn = self.page.locator("a:text-is('Weiter')").first
+                has_weiter = weiter_btn.count() > 0 and weiter_btn.is_visible()
+                
+                if is_interstitial or has_weiter:
+                    interstitial_count += 1
+                    print(f"Interstitial page #{interstitial_count} detected, clicking 'Weiter'...")
                     try:
-                        # Try to find a "Weiter" link or button
-                        # Use get_by_role to avoid matching large text blocks containing "Weiter"
-                        weiter_btn = self.page.get_by_role("link", name="Weiter", exact=True)
-                        if weiter_btn.count() > 0:
-                            weiter_btn.first.click()
-                        else:
-                            # Fallback to button
-                            self.page.get_by_role("button", name="Weiter").first.click()
-                            
-                        self.page.wait_for_load_state("networkidle")
-                        time.sleep(1) # Short pause to allow redirect
+                        weiter_btn.click(timeout=2000)
+                        self.page.wait_for_load_state("domcontentloaded")
                     except Exception as e:
                         print(f"Failed to click 'Weiter': {e}")
-                        # Last resort: generic text click but try to be specific to 'a' tag
-                        try:
-                            self.page.click("a:text-is('Weiter')", timeout=2000)
-                        except:
-                            pass
                         break
+                elif "login" in current_url.lower():
+                    time.sleep(0.2)
                 else:
                     break
+            print(f"⏱️  Interstitial handling ({interstitial_count} pages): {t.time() - t0:.2f}s")
 
             # Verify login success
-            # Check for elements that only exist when logged in
-            # e.g. "Logout", "Abmelden", or user profile icon
-            # Or check if we are NOT on the login page anymore
-            
-            # Check if the login input is still visible (meaning we are still on login page)
             if self.page.locator("#id_brm-pm-dtop_login_uname_input").is_visible():
                 print("Login input still visible. Login likely failed.")
                 return False
