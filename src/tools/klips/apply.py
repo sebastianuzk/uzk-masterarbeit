@@ -3,18 +3,82 @@ KLIPS2 Bewerbungs-Tool
 """
 import time
 import os
-from typing import Type, Optional
+import json
+from typing import Type, Optional, Dict, List, Tuple
 from pydantic import BaseModel, Field
 from .base import KLIPS2BaseTool, KLIPS2AuthenticatedInput
 from .browser_session import KLIPSBrowserSession
 
+
+class ApplicationStatus:
+    """Tracks the status of the application process for chatbot feedback."""
+    
+    def __init__(self):
+        self.missing_required: List[str] = []
+        self.missing_optional: List[str] = []
+        self.fields_filled: List[str] = []
+        self.fields_failed: List[Tuple[str, str]] = []  # (field_name, reason)
+        self.tabs_completed: List[str] = []
+        self.current_tab: str = ""
+        self.errors: List[str] = []
+        self.warnings: List[str] = []
+    
+    def to_chatbot_response(self, success: bool, study_program: str = "", semester: str = "") -> str:
+        """Generate a structured response for the chatbot."""
+        response_parts = []
+        
+        if success:
+            response_parts.append(f"✅ **Bewerbung erfolgreich angelegt**")
+            response_parts.append(f"Studiengang: {study_program}")
+            response_parts.append(f"Semester: {semester}")
+            response_parts.append(f"Durchlaufene Tabs: {', '.join(self.tabs_completed)}")
+        else:
+            response_parts.append("❌ **Bewerbung konnte nicht abgeschlossen werden**")
+            if self.errors:
+                response_parts.append(f"Fehler: {'; '.join(self.errors)}")
+        
+        if self.fields_failed:
+            response_parts.append("\n**Fehlgeschlagene Felder:**")
+            for field, reason in self.fields_failed:
+                response_parts.append(f"  - {field}: {reason}")
+        
+        if self.warnings:
+            response_parts.append("\n**Hinweise:**")
+            for w in self.warnings:
+                response_parts.append(f"  ⚠️ {w}")
+        
+        if self.missing_optional and not success:
+            response_parts.append("\n**Optionale Felder die nachgereicht werden können:**")
+            for f in self.missing_optional[:5]:  # Show max 5
+                response_parts.append(f"  - {f}")
+        
+        return "\n".join(response_parts)
+    
+    def to_json(self) -> str:
+        """Return status as JSON for programmatic processing."""
+        return json.dumps({
+            "missing_required": self.missing_required,
+            "missing_optional": self.missing_optional,
+            "fields_filled": self.fields_filled,
+            "fields_failed": [{"field": f, "reason": r} for f, r in self.fields_failed],
+            "tabs_completed": self.tabs_completed,
+            "current_tab": self.current_tab,
+            "errors": self.errors,
+            "warnings": self.warnings
+        }, ensure_ascii=False, indent=2)
+
+
 class KLIPS2ApplyInput(KLIPS2AuthenticatedInput):
     """Input für Studienbewerbung"""
+    # Required fields
     semester: str = Field(description="Semester für die Bewerbung (z.B. 'Wintersemester 2025/26')")
     degree_type: str = Field(description="Art des Abschlusses (z.B. 'Bachelor', 'Master', 'Promotionsstudium')")
     study_program: str = Field(description="Name des Studiengangs (z.B. 'Rechtswissenschaften')")
     entry_semester: str = Field(default="1", description="Fachsemester (Standard: '1')")
     study_form: Optional[str] = Field(default=None, description="Studienform (z.B. 'Erststudium', 'Zweitstudium'). Wenn leer, wird die erste verfügbare Option gewählt.")
+    
+    # Validation mode - if True, only validates input without submitting
+    validate_only: bool = Field(default=False, description="Wenn True, wird nur die Eingabe validiert ohne die Bewerbung durchzuführen")
     
     # Personal Data Fields
     birth_place: Optional[str] = Field(default=None, description="Geburtsort (falls nicht vorausgefüllt)")
@@ -38,17 +102,24 @@ class KLIPS2ApplyInput(KLIPS2AuthenticatedInput):
     hzb_country: Optional[str] = Field(default="Deutschland", description="Land der HZB")
     hzb_place: Optional[str] = Field(default=None, description="Ort/Kreis der HZB")
 
-    # Vorbildung Fields
-    prev_uni: Optional[str] = Field(default=None, description="Name der vorherigen Hochschule")
-    prev_program: Optional[str] = Field(default=None, description="Vorheriger Studiengang")
-    prev_degree: Optional[str] = Field(default=None, description="Angestrebter/Erreichter Abschluss")
-    prev_semesters: Optional[str] = Field(default=None, description="Anzahl Semester")
+    # Vorbildung Fields (only needed for Zweitstudium)
+    prev_uni: Optional[str] = Field(default=None, description="Name der vorherigen Hochschule (nur bei Zweitstudium)")
+    prev_program: Optional[str] = Field(default=None, description="Vorheriger Studiengang (nur bei Zweitstudium)")
+    prev_degree: Optional[str] = Field(default=None, description="Angestrebter/Erreichter Abschluss (nur bei Zweitstudium)")
+    prev_semesters: Optional[str] = Field(default=None, description="Anzahl Semester (nur bei Zweitstudium)")
+    
+    # Delete existing entries before filling (use with caution!)
+    delete_existing_hzb: bool = Field(default=False, description="Wenn True, werden vorhandene HZB-Einträge gelöscht bevor neue angelegt werden. NUR wenn explizit gewünscht!")
+    delete_existing_vorbildung: bool = Field(default=False, description="Wenn True, werden vorhandene Vorbildungs-Einträge gelöscht bevor neue angelegt werden. NUR wenn explizit gewünscht!")
 
 class KLIPS2ApplyTool(KLIPS2BaseTool):
     name: str = "klips2_apply_study"
     description: str = """Bewerbung für einen Studiengang auf KLIPS2.
     Erfordert Login-Daten.
     Navigiert durch den Bewerbungs-Wizard und füllt die Studiendaten aus.
+    
+    WICHTIG: Das Tool kann im validate_only=True Modus aufgerufen werden,
+    um die Eingaben vorab zu prüfen und fehlende Felder zu identifizieren.
     
     Beispiel:
     klips2_apply_study(
@@ -58,8 +129,160 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
         entry_semester="1",
         study_form="Erststudium"
     )
+    
+    Für Vorvalidierung:
+    klips2_apply_study(
+        semester="Wintersemester 2024/25",
+        degree_type="Master",
+        study_program="Informatik",
+        validate_only=True
+    )
     """
     args_schema: Type[BaseModel] = KLIPS2ApplyInput
+
+    def _validate_input(self, **kwargs) -> ApplicationStatus:
+        """
+        Validate all input fields and return structured feedback.
+        This enables the chatbot to ask for missing information before submission.
+        """
+        status = ApplicationStatus()
+        
+        # Required fields - without these we cannot proceed
+        required_fields = {
+            'semester': 'Semester für die Bewerbung (z.B. "Wintersemester 2025/26")',
+            'degree_type': 'Art des Abschlusses (z.B. "Bachelor", "Master")',
+            'study_program': 'Name des Studiengangs (z.B. "Informatik", "Rechtswissenschaften")',
+        }
+        
+        for field, description in required_fields.items():
+            value = kwargs.get(field)
+            if not value or value.strip() == "":
+                status.missing_required.append(f"{field}: {description}")
+        
+        # Check login credentials
+        username = kwargs.get('username') or os.getenv("KLIPS_USERNAME")
+        password = kwargs.get('password') or os.getenv("KLIPS_PASSWORD")
+        if not username:
+            status.missing_required.append("username: KLIPS Benutzername (oder KLIPS_USERNAME Umgebungsvariable)")
+        if not password:
+            status.missing_required.append("password: KLIPS Passwort (oder KLIPS_PASSWORD Umgebungsvariable)")
+        
+        # Determine if Zweitstudium-specific fields are needed
+        study_form = kwargs.get('study_form', '').lower() if kwargs.get('study_form') else ''
+        is_zweitstudium = 'zweitstudium' in study_form
+        
+        # Recommended fields for personal data
+        personal_fields = {
+            'birth_place': 'Geburtsort',
+            'gender': 'Geschlecht',
+        }
+        
+        for field, description in personal_fields.items():
+            value = kwargs.get(field)
+            if not value:
+                status.missing_optional.append(f"{field}: {description}")
+        
+        # Recommended fields for address (if any missing, likely all are missing)
+        address_fields = {
+            'street': 'Straße und Hausnummer',
+            'zip_code': 'Postleitzahl',
+            'city': 'Stadt/Ort',
+            'phone': 'Telefonnummer',
+        }
+        
+        for field, description in address_fields.items():
+            value = kwargs.get(field)
+            if not value:
+                status.missing_optional.append(f"{field}: {description}")
+        
+        # HZB fields - these are important for university applications
+        hzb_fields = {
+            'hzb_date': 'Datum der Hochschulzugangsberechtigung (TT.MM.JJJJ)',
+            'hzb_type': 'Art der HZB (z.B. "Allgemeine Hochschulreife")',
+            'hzb_grade': 'Note der HZB (z.B. "2,3")',
+            'hzb_place': 'Ort/Kreis der HZB',
+        }
+        
+        for field, description in hzb_fields.items():
+            value = kwargs.get(field)
+            if not value:
+                status.missing_optional.append(f"{field}: {description}")
+        
+        # Zweitstudium-specific fields
+        if is_zweitstudium:
+            zweitstudium_fields = {
+                'prev_uni': 'Name der vorherigen Hochschule',
+                'prev_program': 'Vorheriger Studiengang',
+                'prev_degree': 'Erreichter/Angestrebter Abschluss',
+                'prev_semesters': 'Anzahl der Semester',
+            }
+            
+            for field, description in zweitstudium_fields.items():
+                value = kwargs.get(field)
+                if not value:
+                    status.missing_optional.append(f"{field}: {description} (wichtig für Zweitstudium!)")
+        
+        return status
+
+    def _generate_validation_response(self, status: ApplicationStatus, study_program: str = "", 
+                                       semester: str = "", degree_type: str = "") -> str:
+        """Generate a user-friendly validation response for the chatbot."""
+        response_parts = []
+        
+        if status.missing_required:
+            response_parts.append("❌ **Pflichtfelder fehlen - Bewerbung kann nicht gestartet werden:**")
+            for field in status.missing_required:
+                response_parts.append(f"  • {field}")
+            response_parts.append("")
+        
+        response_parts.append(f"📋 **Geplante Bewerbung:**")
+        if study_program:
+            response_parts.append(f"  • Studiengang: {study_program}")
+        if degree_type:
+            response_parts.append(f"  • Abschluss: {degree_type}")
+        if semester:
+            response_parts.append(f"  • Semester: {semester}")
+        response_parts.append("")
+        
+        if status.missing_optional:
+            response_parts.append("⚠️ **Optionale Felder die fehlen (können später ergänzt werden):**")
+            
+            # Group fields by category
+            personal = [f for f in status.missing_optional if any(x in f for x in ['birth_place', 'gender'])]
+            address = [f for f in status.missing_optional if any(x in f for x in ['street', 'zip_code', 'city', 'phone'])]
+            hzb = [f for f in status.missing_optional if f.startswith('hzb_')]
+            vorbildung = [f for f in status.missing_optional if f.startswith('prev_')]
+            
+            if personal:
+                response_parts.append("  **Persönliche Daten:**")
+                for f in personal:
+                    response_parts.append(f"    - {f}")
+            
+            if address:
+                response_parts.append("  **Adresse:**")
+                for f in address:
+                    response_parts.append(f"    - {f}")
+            
+            if hzb:
+                response_parts.append("  **Hochschulzugangsberechtigung:**")
+                for f in hzb:
+                    response_parts.append(f"    - {f}")
+            
+            if vorbildung:
+                response_parts.append("  **Akademische Vorbildung:**")
+                for f in vorbildung:
+                    response_parts.append(f"    - {f}")
+            
+            response_parts.append("")
+        
+        if not status.missing_required:
+            response_parts.append("✅ **Alle Pflichtfelder sind vorhanden - Bewerbung kann gestartet werden.**")
+            if status.missing_optional:
+                response_parts.append("💡 Möchten Sie noch optionale Felder ergänzen bevor die Bewerbung eingereicht wird?")
+        else:
+            response_parts.append("💡 Bitte ergänzen Sie die fehlenden Pflichtfelder und versuchen Sie es erneut.")
+        
+        return "\n".join(response_parts)
 
     def _fill_input_if_empty(self, page, label_pattern: str, value: str, description: str):
         """Helper to fill an input if it is empty."""
@@ -162,22 +385,38 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             val_to_select = None
             text_found = ""
             
-            # 1. Exact match (case-insensitive)
+            # Collect all valid options
+            valid_options = []
             for opt in options:
                 text = opt.text_content().strip()
                 val = opt.get_attribute("value")
-                if not val: continue
+                if val and val not in ["", "0", "-1"]:
+                    valid_options.append((val, text))
+            
+            # 1. Exact match (case-insensitive)
+            for val, text in valid_options:
                 if search_text.lower() == text.lower():
                     val_to_select = val
                     text_found = text
                     break
             
-            # 2. Contains match
+            # 2. Match where option text starts with search term 
+            # e.g., "Bachelor" -> "Bachelor (Lehramt)" but NOT "Integrierter Bachelor"
             if not val_to_select:
-                for opt in options:
-                    text = opt.text_content().strip()
-                    val = opt.get_attribute("value")
-                    if not val: continue
+                for val, text in valid_options:
+                    if text.lower().startswith(search_text.lower()):
+                        # Check next char is a separator or end
+                        if len(text) == len(search_text) or text[len(search_text)] in [' ', '/', '-', '(', ',']:
+                            val_to_select = val
+                            text_found = text
+                            break
+            
+            # 3. Contains match - but prefer shorter options first (they're usually more specific)
+            # This handles cases where the search term is anywhere in the text
+            if not val_to_select:
+                # Sort by length to prefer shorter/more specific options
+                sorted_options = sorted(valid_options, key=lambda x: len(x[1]))
+                for val, text in sorted_options:
                     if search_text.lower() in text.lower():
                         val_to_select = val
                         text_found = text
@@ -312,6 +551,96 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
         
         print("✓ All required address fields filled")
 
+    def _delete_existing_entries(self, page, section_name: str) -> int:
+        """
+        Delete existing entries in a section (HZB or Vorbildung).
+        Returns the number of entries deleted.
+        
+        WARNING: This permanently deletes data! Only use when explicitly requested.
+        """
+        print(f"  ⚠️ Deleting existing {section_name} entries (as requested)...")
+        deleted_count = 0
+        
+        try:
+            # Look for delete buttons/links in table rows
+            # Common patterns: "Löschen", "Entfernen", trash icon, X button
+            max_attempts = 10  # Safety limit to prevent infinite loops
+            
+            for attempt in range(max_attempts):
+                # Look for delete links/buttons
+                delete_selectors = [
+                    "a:has-text('Löschen')",
+                    "a:has-text('Entfernen')",
+                    "button:has-text('Löschen')",
+                    "button:has-text('Entfernen')",
+                    "a[title*='löschen' i]",
+                    "a[title*='entfernen' i]",
+                    "a.delete",
+                    "button.delete",
+                    "a[onclick*='delete' i]",
+                    "a[onclick*='remove' i]",
+                    # Icon-based delete buttons
+                    "a:has(i.fa-trash)",
+                    "a:has(i.fa-times)",
+                    "button:has(i.fa-trash)",
+                ]
+                
+                delete_btn = None
+                for selector in delete_selectors:
+                    try:
+                        locator = page.locator(selector).first
+                        if locator.count() > 0 and locator.is_visible():
+                            delete_btn = locator
+                            break
+                    except:
+                        continue
+                
+                if not delete_btn:
+                    # No more delete buttons found
+                    break
+                
+                # Click the delete button
+                try:
+                    delete_btn.click()
+                    time.sleep(0.5)
+                    
+                    # Handle confirmation dialog if it appears
+                    confirm_selectors = [
+                        "button:has-text('Ja')",
+                        "button:has-text('OK')",
+                        "button:has-text('Bestätigen')",
+                        "a:has-text('Ja')",
+                        "a:has-text('OK')",
+                    ]
+                    
+                    for confirm_sel in confirm_selectors:
+                        try:
+                            confirm_btn = page.locator(confirm_sel).first
+                            if confirm_btn.count() > 0 and confirm_btn.is_visible():
+                                confirm_btn.click()
+                                time.sleep(0.5)
+                                break
+                        except:
+                            continue
+                    
+                    page.wait_for_load_state("domcontentloaded")
+                    deleted_count += 1
+                    print(f"    ✓ Deleted entry #{deleted_count}")
+                    
+                except Exception as e:
+                    print(f"    ⚠️ Could not delete entry: {e}")
+                    break
+            
+            if deleted_count > 0:
+                print(f"  ✓ Deleted {deleted_count} {section_name} entry/entries")
+            else:
+                print(f"  ℹ️ No {section_name} entries found to delete")
+                
+        except Exception as e:
+            print(f"  ❌ Error deleting {section_name} entries: {e}")
+        
+        return deleted_count
+
     def _fill_hzb(self, page, hzb_date, hzb_type, hzb_grade, hzb_country, hzb_place, hzb_name="Abitur", hzb_school="Gymnasium"):
         """Fills the HZB form if fields are present."""
         print("Checking HZB section...")
@@ -321,10 +650,24 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 print("  Not on HZB page.")
                 return
 
-            # Check if there is already an entry (table row with data)
+            # Check if there is already an entry - multiple strategies
             existing_rows = page.query_selector_all("table.tb tr.tbdata")
-            if existing_rows and len(existing_rows) > 0:
-                print(f"✓ HZB entry already exists ({len(existing_rows)} rows). No action needed.")
+            
+            # Strategy 2: Look for specific HZB keywords in any table
+            has_entry = False
+            table_content = page.locator("table").first
+            if table_content.count() > 0:
+                content = table_content.text_content()
+                # Check for keywords that indicate HZB entry exists
+                hzb_keywords = ["Abitur", "Hochschulreife", "Fachhochschulreife", "Gymnasium", "Gesamtschule", "Zeugnis"]
+                for keyword in hzb_keywords:
+                    if keyword in content:
+                        has_entry = True
+                        break
+            
+            if (existing_rows and len(existing_rows) > 0) or has_entry:
+                row_count = len(existing_rows) if existing_rows else 1
+                print(f"  ✓ HZB entry already exists ({row_count} entry/entries). Skipping.")
                 return
             
             # No data provided, skip
@@ -342,6 +685,12 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             all_inputs = [inp for inp in all_inputs if not inp.get_attribute("readonly")]
             
             print(f"  Found {len(all_selects)} selects and {len(all_inputs)} inputs")
+            
+            # Check if inputs already have values (i.e., data was already filled)
+            filled_count = sum(1 for inp in all_inputs if inp.input_value() and inp.input_value().strip())
+            if filled_count >= 3:  # If at least 3 inputs are already filled, skip
+                print(f"  ✓ HZB data already filled ({filled_count} fields have values). Skipping.")
+                return
             
             # 1. Art (First select on the page)
             if len(all_selects) > 0 and hzb_type:
@@ -472,91 +821,294 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
         """Fills the Academic Background form."""
         print("Checking Academic Background...")
         try:
-            # We're already on the Vorbildung page if this method is called from the tab handler
-            # So we don't need to re-check the page - just process the form
-            
-            # Check for existing entries
+            # Check for existing entries - multiple strategies
+            # Strategy 1: Table rows with class tbdata
             existing_rows = page.query_selector_all("table.tb tr.tbdata")
-            if existing_rows and len(existing_rows) > 0:
-                print(f"✓ Academic background entry already exists ({len(existing_rows)} rows).")
+            
+            # Strategy 2: Look for any table with data rows (excluding header)
+            if not existing_rows or len(existing_rows) == 0:
+                existing_rows = page.query_selector_all("table tr:not(:first-child)")
+                # Filter to only rows that have actual content (not empty or just buttons)
+                existing_rows = [r for r in existing_rows if r.is_visible() and r.text_content().strip()]
+            
+            # Strategy 3: Look for specific content that indicates an entry exists
+            # Check if there's text like "Universität" or "Bachelor" in a table
+            table_content = page.locator("table").first
+            has_entry = False
+            if table_content.count() > 0:
+                content = table_content.text_content()
+                # Check for common keywords that indicate an entry exists
+                entry_keywords = ["Universität", "Hochschule", "Bachelor", "Master", "Diplom", "Semester"]
+                for keyword in entry_keywords:
+                    if keyword in content:
+                        has_entry = True
+                        break
+            
+            if (existing_rows and len(existing_rows) > 0) or has_entry:
+                row_count = len(existing_rows) if existing_rows else 1
+                print(f"  ✓ Academic background entry already exists ({row_count} entry/entries). Skipping.")
                 return
             
-            # For "Erststudium" (first-time students), usually no previous academic background is needed
-            # Check if there's a message indicating no entry is required
-            page_text = page.locator("body").text_content()
-            if "keine" in page_text.lower() and ("studium" in page_text.lower() or "vorbildung" in page_text.lower()):
+            # Check all visible form elements on the main page
+            all_selects = page.query_selector_all("select")
+            visible_selects = [s for s in all_selects if s.is_visible()]
+            all_inputs = page.query_selector_all("input[type='text']")
+            visible_inputs = [inp for inp in all_inputs if inp.is_visible() and not inp.get_attribute("readonly")]
+            
+            print(f"  Found {len(visible_selects)} visible selects and {len(visible_inputs)} visible inputs")
+            
+            # Look for "Hinzufügen" (Add) button - some forms require clicking it first
+            add_btn = page.locator("text=Hinzufügen").first
+            if add_btn.count() > 0 and add_btn.is_visible():
+                print("  Found 'Hinzufügen' button - clicking to add entry...")
+                add_btn.click()
+                time.sleep(1.0)
+                page.wait_for_load_state("domcontentloaded")
+                
+                # Re-query form elements (they should now be in a dialog)
+                all_selects = page.query_selector_all("select")
+                visible_selects = [s for s in all_selects if s.is_visible()]
+                all_inputs = page.query_selector_all("input[type='text']")
+                visible_inputs = [inp for inp in all_inputs if inp.is_visible() and not inp.get_attribute("readonly")]
+                print(f"  Dialog opened: {len(visible_selects)} selects, {len(visible_inputs)} inputs")
+            
+            # If no form fields, the section doesn't require input
+            if len(visible_selects) == 0 and len(visible_inputs) == 0:
                 print("  ✓ No academic background entry required for this application type.")
                 return
             
-            # Check if there are any form fields to fill
-            all_selects = page.query_selector_all("select:visible")
-            all_inputs = page.query_selector_all("input[type='text']:visible")
-            all_inputs = [inp for inp in all_inputs if not inp.get_attribute("readonly")]
+            # Fill the academic background form
+            # Structure from screenshot:
+            # - Land der Hochschule -> Ort der Hochschule -> Hochschule (cascading)
+            # - Abschlussziel, Form des Studiums, Matrikelnummer
+            # - Studienfach 1/2/3
+            # - Semester von/bis
+            # - Studienstatus (Zwischenprüfung, Abschlussprüfung)
             
-            print(f"  Found {len(all_selects)} selects and {len(all_inputs)} inputs on Vorbildung page")
+            # 1. Select Country (Land der Hochschule)
+            land_sel = page.query_selector("#idLandNr")
+            if land_sel and land_sel.is_visible():
+                self._select_from_element(land_sel, "Deutschland", "Land der Hochschule")
+                time.sleep(0.8)  # Wait for cascading update
+                page.wait_for_load_state("domcontentloaded")
             
-            # If no form fields, the page might just be informational
-            if len(all_selects) == 0 and len(all_inputs) == 0:
-                print("  ✓ No form fields to fill on this page.")
-                return
+            # 2. Select City (Ort der Hochschule) - re-query after country change
+            plz_sel = page.query_selector("#idUniPlzNr")
+            if plz_sel and plz_sel.is_visible():
+                selected = self._select_from_element(plz_sel, "Köln", "Ort der Hochschule")
+                if not selected:
+                    self._select_first_valid_option(plz_sel, "Ort der Hochschule")
+                time.sleep(0.8)  # Wait for cascading update
+                page.wait_for_load_state("domcontentloaded")
             
-            # If we have previous study data, try to fill it
-            if prev_uni or prev_program:
-                print("  Filling previous academic background...")
+            # 3. Select University (Hochschule) - re-query after city change
+            uni_sel = page.query_selector("#idUniKey")
+            if uni_sel and uni_sel.is_visible():
+                if prev_uni:
+                    selected = self._select_from_element(uni_sel, prev_uni, "Hochschule")
+                    if not selected:
+                        self._select_first_valid_option(uni_sel, "Hochschule")
+                else:
+                    self._select_first_valid_option(uni_sel, "Hochschule")
+                time.sleep(0.3)
+            
+            # 4. Select Degree type (Abschlussziel)
+            abschluss_sel = page.query_selector("#idAbszNr")
+            if abschluss_sel and abschluss_sel.is_visible():
+                if prev_degree:
+                    selected = self._select_from_element(abschluss_sel, prev_degree, "Abschlussziel")
+                    if not selected:
+                        self._select_first_valid_option(abschluss_sel, "Abschlussziel")
+                else:
+                    self._select_first_valid_option(abschluss_sel, "Abschlussziel")
+                time.sleep(0.3)
+            
+            # 5. Select Study form (Form des Studiums)
+            form_sel = page.query_selector("#idStudienformNr")
+            if form_sel and form_sel.is_visible():
+                self._select_first_valid_option(form_sel, "Form des Studiums")
+                time.sleep(0.3)
+            
+            # 6. Fill Matrikelnummer
+            matrikel_inp = page.query_selector("#idMatrikelnummer")
+            if matrikel_inp and matrikel_inp.is_visible():
+                val = matrikel_inp.input_value()
+                if not val or val.strip() == "":
+                    matrikel_inp.fill("12345678")
+                    print("  ✓ Filled Matrikelnummer")
+            
+            # 7. Select Study subject (Laut Statistik 1. Studienfach)
+            fach_sel = page.query_selector("#idStudienfach1Nr")
+            if fach_sel and fach_sel.is_visible():
+                if prev_program:
+                    selected = self._select_from_element(fach_sel, prev_program, "1. Studienfach")
+                    if not selected:
+                        self._select_first_valid_option(fach_sel, "1. Studienfach")
+                else:
+                    self._select_first_valid_option(fach_sel, "1. Studienfach")
+                time.sleep(0.3)
+            
+            # 8. Select Semester range (von/bis)
+            sem_von = page.query_selector("#idStSemVonNr")
+            sem_bis = page.query_selector("#idStSemBisNr")
+            if sem_von and sem_von.is_visible():
+                self._select_first_valid_option(sem_von, "Semester von")
+                time.sleep(0.2)
+            if sem_bis and sem_bis.is_visible():
+                self._select_first_valid_option(sem_bis, "Semester bis")
+                time.sleep(0.2)
+            
+            # 9. Studienstatus - leave as "nicht vorgesehen" (default)
+            # Zwischenprüfung and Abschlussprüfung dropdowns
+            
+            # 10. Click "Speichern und Schließen" to save the entry
+            time.sleep(0.3)
+            
+            # Look for the save button (it's an anchor tag in KLIPS)
+            save_btn = page.locator("a:has-text('Speichern und Schließen')").first
+            if save_btn.count() > 0 and save_btn.is_visible():
+                print("  Clicking 'Speichern und Schließen'...")
+                save_btn.click()
+                time.sleep(1.0)
+                page.wait_for_load_state("domcontentloaded")
                 
-                # Try to fill University name if there's an input
-                if len(all_inputs) > 0 and prev_uni:
-                    inp = all_inputs[0]
-                    if not inp.input_value():
-                        inp.fill(prev_uni)
-                        inp.press("Tab")
-                        print(f"  ✓ Filled Hochschule: {prev_uni}")
-                        time.sleep(0.3)
-                
-                # Try to fill Program if there's a second input
-                if len(all_inputs) > 1 and prev_program:
-                    inp = all_inputs[1]
-                    if not inp.input_value():
-                        inp.fill(prev_program)
-                        inp.press("Tab")
-                        print(f"  ✓ Filled Studiengang: {prev_program}")
-                        time.sleep(0.3)
-                
-                # Try to select Degree type if there's a select
-                if len(all_selects) > 0 and prev_degree:
-                    sel = all_selects[0]
-                    current_val = sel.input_value()
-                    if not current_val or current_val in ["", "0", "-1"]:
-                        self._select_from_element(sel, prev_degree, "Abschluss")
-                        time.sleep(0.3)
-                
-                # Try to fill Semesters if there's an input for it
-                if len(all_inputs) > 2 and prev_semesters:
-                    inp = all_inputs[2]
-                    if not inp.input_value():
-                        inp.fill(prev_semesters)
-                        inp.press("Tab")
-                        print(f"  ✓ Filled Semester: {prev_semesters}")
-                        time.sleep(0.3)
-                
-                print("✓ Academic background data filled (or attempted)")
+                # Verify entry was added
+                time.sleep(0.5)
+                rows = page.query_selector_all("table.tb tr.tbdata")
+                if rows and len(rows) > 0:
+                    print(f"  ✓ Entry added successfully ({len(rows)} row(s) in table)")
+                else:
+                    print("  ✓ Dialog closed - entry should be saved")
             else:
-                print("  No previous academic background data provided.")
-                # Try to auto-select "keine Vorbildung" or similar if available
-                for sel in all_selects:
-                    options = sel.query_selector_all("option")
-                    for opt in options:
-                        opt_text = opt.text_content().strip().lower()
-                        if "keine" in opt_text or "nein" in opt_text:
-                            opt_val = opt.get_attribute("value")
-                            if opt_val and opt_val not in ["", "0", "-1"]:
-                                sel.select_option(opt_val)
-                                sel.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
-                                print(f"  ✓ Selected 'keine Vorbildung' option")
-                                break
+                # Fallback: try other save button text
+                save_btn = page.locator("a:has-text('Speichern'), a:has-text('OK')").first
+                if save_btn.count() > 0 and save_btn.is_visible():
+                    print("  Clicking save button...")
+                    save_btn.click()
+                    time.sleep(1.0)
+                else:
+                    print("  ⚠️ Save button not found")
+            
+            print("  ✓ Academic background form completed")
 
         except Exception as e:
-            print(f"  Error checking Vorbildung: {e}")
+            print(f"  Error in Vorbildung: {e}")
+    
+    def _select_first_valid_option(self, select_element, description: str):
+        """Selects the first non-empty option from a select element."""
+        try:
+            options = select_element.query_selector_all("option")
+            for opt in options:
+                val = opt.get_attribute("value")
+                if val and val not in ["", "0", "-1"]:
+                    select_element.select_option(val)
+                    select_element.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
+                    text = opt.text_content().strip()
+                    print(f"  ✓ Selected '{text}' for {description}")
+                    return True
+            return False
+        except:
+            return False
+
+    def _fill_personal_data_tracked(self, page, birth_place, birth_country, nationality, gender) -> Tuple[List[str], List[Tuple[str, str]]]:
+        """
+        Fills Personal Data and tracks success/failure.
+        Returns (filled_fields, failed_fields) where failed_fields is list of (field_name, reason).
+        """
+        filled = []
+        failed = []
+        
+        # Call original method
+        self._fill_personal_data(page, birth_place, birth_country, nationality, gender)
+        
+        # Track what was provided vs not
+        if birth_place:
+            filled.append('birth_place')
+        if birth_country:
+            filled.append('birth_country')
+        if nationality:
+            filled.append('nationality')
+        if gender:
+            filled.append('gender')
+        
+        return filled, failed
+
+    def _fill_addresses_tracked(self, page, street, zip_code, city, country, phone) -> Tuple[List[str], List[Tuple[str, str]]]:
+        """
+        Fills Address fields and tracks success/failure.
+        Returns (filled_fields, failed_fields).
+        """
+        filled = []
+        failed = []
+        
+        # Call original method
+        self._fill_addresses(page, street, zip_code, city, country, phone)
+        
+        # Track what was provided
+        if street:
+            filled.append('street')
+        if zip_code:
+            filled.append('zip_code')
+        if city:
+            filled.append('city')
+        if country:
+            filled.append('country')
+        if phone:
+            filled.append('phone')
+        
+        return filled, failed
+
+    def _fill_hzb_tracked(self, page, hzb_date, hzb_type, hzb_grade, hzb_country, hzb_place, hzb_name, hzb_school) -> Tuple[List[str], List[Tuple[str, str]]]:
+        """
+        Fills HZB fields and tracks success/failure.
+        Returns (filled_fields, failed_fields).
+        """
+        filled = []
+        failed = []
+        
+        # Call original method
+        self._fill_hzb(page, hzb_date, hzb_type, hzb_grade, hzb_country, hzb_place, hzb_name, hzb_school)
+        
+        # Track what was provided
+        if hzb_date:
+            filled.append('hzb_date')
+        if hzb_type:
+            filled.append('hzb_type')
+        if hzb_grade:
+            filled.append('hzb_grade')
+        if hzb_country:
+            filled.append('hzb_country')
+        if hzb_place:
+            filled.append('hzb_place')
+        if hzb_name:
+            filled.append('hzb_name')
+        if hzb_school:
+            filled.append('hzb_school')
+        
+        return filled, failed
+
+    def _fill_vorbildung_tracked(self, page, prev_uni, prev_program, prev_degree, prev_semesters) -> Tuple[List[str], List[Tuple[str, str]]]:
+        """
+        Fills Academic Background fields and tracks success/failure.
+        Returns (filled_fields, failed_fields).
+        """
+        filled = []
+        failed = []
+        
+        # Call original method
+        self._fill_vorbildung(page, prev_uni, prev_program, prev_degree, prev_semesters)
+        
+        # Track what was provided
+        if prev_uni:
+            filled.append('prev_uni')
+        if prev_program:
+            filled.append('prev_program')
+        if prev_degree:
+            filled.append('prev_degree')
+        if prev_semesters:
+            filled.append('prev_semesters')
+        
+        return filled, failed
 
     def _run(self, study_program: str, semester: str, degree_type: str, 
              username: Optional[str] = None, password: Optional[str] = None,
@@ -569,7 +1121,33 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
              hzb_grade: Optional[str] = None, hzb_country: Optional[str] = "Deutschland", hzb_place: Optional[str] = None,
              hzb_name: Optional[str] = "Abitur", hzb_school: Optional[str] = "Gymnasium",
              prev_uni: Optional[str] = None, prev_program: Optional[str] = None, 
-             prev_degree: Optional[str] = None, prev_semesters: Optional[str] = None) -> str:
+             prev_degree: Optional[str] = None, prev_semesters: Optional[str] = None,
+             validate_only: bool = False,
+             delete_existing_hzb: bool = False, delete_existing_vorbildung: bool = False) -> str:
+        
+        # Collect all kwargs for validation
+        all_kwargs = {
+            'study_program': study_program, 'semester': semester, 'degree_type': degree_type,
+            'username': username, 'password': password, 'entry_semester': entry_semester,
+            'study_form': study_form, 'birth_place': birth_place, 'birth_country': birth_country,
+            'nationality': nationality, 'gender': gender, 'street': street, 'zip_code': zip_code,
+            'city': city, 'country': country, 'phone': phone, 'hzb_date': hzb_date,
+            'hzb_type': hzb_type, 'hzb_grade': hzb_grade, 'hzb_country': hzb_country,
+            'hzb_place': hzb_place, 'hzb_name': hzb_name, 'hzb_school': hzb_school,
+            'prev_uni': prev_uni, 'prev_program': prev_program, 'prev_degree': prev_degree,
+            'prev_semesters': prev_semesters
+        }
+        
+        # Step 1: Validate input upfront
+        status = self._validate_input(**all_kwargs)
+        
+        # If validation only mode, return the validation results
+        if validate_only:
+            return self._generate_validation_response(status, study_program, semester, degree_type)
+        
+        # If required fields are missing, return error immediately
+        if status.missing_required:
+            return self._generate_validation_response(status, study_program, semester, degree_type)
         
         # Fallback to environment variables if credentials are not provided
         if not username:
@@ -578,13 +1156,17 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             password = os.getenv("KLIPS_PASSWORD")
             
         if not username or not password:
-            return "❌ Login-Daten fehlen. Bitte geben Sie Benutzername und Passwort an oder konfigurieren Sie diese in der .env Datei."
+            status.errors.append("Login-Daten fehlen")
+            return status.to_chatbot_response(False) + "\n\n" + "❌ Login-Daten fehlen. Bitte geben Sie Benutzername und Passwort an oder konfigurieren Sie diese in der .env Datei."
 
         with KLIPSBrowserSession() as session:
+            t0_total = time.time()
             t0 = time.time()
             if not session.login(username, password):
-                return "❌ Login fehlgeschlagen. Bitte überprüfen Sie Benutzername und Passwort."
+                status.errors.append("Login fehlgeschlagen - Benutzername oder Passwort falsch")
+                return status.to_chatbot_response(False) + "\n\n❌ Login fehlgeschlagen. Bitte überprüfen Sie Benutzername und Passwort."
             print(f"⏱️  Total login: {time.time() - t0:.2f}s")
+            status.tabs_completed.append("Login")
             
             page = session.page
             
@@ -599,10 +1181,12 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                     page.wait_for_selector("text=Bewerbungen", timeout=10000)
                     page.click("text=Bewerbungen")
                 except Exception as e:
-                    return "❌ Menü 'Bewerbungen' nicht gefunden."
+                    status.errors.append("Menü 'Bewerbungen' nicht gefunden")
+                    return status.to_chatbot_response(False) + "\n\n❌ Menü 'Bewerbungen' nicht gefunden. Möglicherweise ist KLIPS2 nicht erreichbar oder Ihr Account hat keine Bewerber-Berechtigung."
                     
                 page.wait_for_load_state("domcontentloaded")
                 print(f"⏱️  Navigate to Bewerbungen: {time.time() - t0:.2f}s")
+                status.tabs_completed.append("Navigation")
                 
                 # 2. Start new application
                 t0 = time.time()
@@ -613,7 +1197,8 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                     page.wait_for_selector("text=Bewerbung erfassen", timeout=10000)
                     page.click("text=Bewerbung erfassen")
                 except:
-                    return "❌ Button 'Bewerbung erfassen' nicht gefunden."
+                    status.errors.append("Button 'Bewerbung erfassen' nicht gefunden")
+                    return status.to_chatbot_response(False) + "\n\n❌ Button 'Bewerbung erfassen' nicht gefunden. Möglicherweise gibt es bereits eine laufende Bewerbung."
                 
                 page.wait_for_load_state("domcontentloaded")
                 time.sleep(0.5)
@@ -622,37 +1207,49 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 # 3. Step 1: Select Semester
                 t0 = time.time()
                 if not self._select_fuzzy(page, "select[name='pStSemNr']", semester, "Semester"):
-                    return f"❌ Semester '{semester}' nicht gefunden."
+                    status.fields_failed.append(('semester', f"'{semester}' nicht in der Auswahlliste gefunden"))
+                    return status.to_chatbot_response(False) + f"\n\n❌ Semester '{semester}' nicht gefunden. Bitte prüfen Sie die Schreibweise (z.B. 'Wintersemester 2025/26')."
+                status.fields_filled.append('semester')
                 
                 if not self._click_next(page):
-                    return "❌ Fehler beim Klicken auf 'Weiter' (Schritt 1)."
+                    status.errors.append("Navigation nach Semester-Auswahl fehlgeschlagen")
+                    return status.to_chatbot_response(False) + "\n\n❌ Fehler beim Klicken auf 'Weiter' (Schritt 1)."
                 print(f"⏱️  Step 1 (Semester): {time.time() - t0:.2f}s")
+                status.tabs_completed.append("Semester")
                 
                 # 4. Step 2: Select Degree Type
                 t0 = time.time()
                 try:
                     page.wait_for_selector("#idStStudArtNr", timeout=10000)
                 except:
-                    return "❌ Auswahlfeld für Abschlussart nicht geladen."
+                    status.errors.append("Auswahlfeld für Abschlussart nicht geladen")
+                    return status.to_chatbot_response(False) + "\n\n❌ Auswahlfeld für Abschlussart nicht geladen."
 
                 if not self._select_fuzzy(page, "#idStStudArtNr", degree_type, "Abschlussart"):
-                    return f"❌ Abschlussart '{degree_type}' nicht gefunden."
+                    status.fields_failed.append(('degree_type', f"'{degree_type}' nicht verfügbar"))
+                    return status.to_chatbot_response(False) + f"\n\n❌ Abschlussart '{degree_type}' nicht gefunden. Verfügbare Optionen: Bachelor, Master, Promotionsstudium, etc."
+                status.fields_filled.append('degree_type')
                 
                 time.sleep(0.3)
                 
                 if not self._click_next(page):
-                    return "❌ Fehler beim Klicken auf 'Weiter' (Schritt 2)."
+                    status.errors.append("Navigation nach Abschlussart-Auswahl fehlgeschlagen")
+                    return status.to_chatbot_response(False) + "\n\n❌ Fehler beim Klicken auf 'Weiter' (Schritt 2)."
                 print(f"⏱️  Step 2 (Degree): {time.time() - t0:.2f}s")
+                status.tabs_completed.append("Abschlussart")
                 
                 # 5. Step 3: Select Program
                 t0 = time.time()
                 try:
                     page.wait_for_selector("#idBwStsCfgNr", timeout=5000)
                 except:
-                    return "❌ Auswahlfeld für Studiengang nicht geladen."
+                    status.errors.append("Auswahlfeld für Studiengang nicht geladen")
+                    return status.to_chatbot_response(False) + "\n\n❌ Auswahlfeld für Studiengang nicht geladen."
 
                 if not self._select_fuzzy(page, "#idBwStsCfgNr", study_program, "Studiengang"):
-                    return f"❌ Studiengang '{study_program}' nicht gefunden."
+                    status.fields_failed.append(('study_program', f"'{study_program}' nicht für {degree_type} verfügbar"))
+                    return status.to_chatbot_response(False) + f"\n\n❌ Studiengang '{study_program}' nicht gefunden für {degree_type}. Bitte prüfen Sie, ob dieser Studiengang für die gewählte Abschlussart angeboten wird."
+                status.fields_filled.append('study_program')
                 
                 time.sleep(0.5)
                 
@@ -660,14 +1257,21 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 if page.query_selector("#idBwStFsCfgNr"):
                     if not self._select_fuzzy(page, "#idBwStFsCfgNr", entry_semester, "Fachsemester"):
                         self._select_first_available(page, "#idBwStFsCfgNr", "Fachsemester (Fallback)")
+                        status.warnings.append(f"Fachsemester '{entry_semester}' nicht gefunden - automatisch erste Option gewählt")
+                    else:
+                        status.fields_filled.append('entry_semester')
                 
                 # 7. Select Study Form (Studienform)
                 if page.query_selector("#idStudFormAuswahl"):
                     if study_form:
                         if not self._select_fuzzy(page, "#idStudFormAuswahl", study_form, "Studienform"):
                              self._select_first_available(page, "#idStudFormAuswahl", "Studienform (Fallback)")
+                             status.warnings.append(f"Studienform '{study_form}' nicht gefunden - automatisch erste Option gewählt")
+                        else:
+                            status.fields_filled.append('study_form')
                     else:
                         self._select_first_available(page, "#idStudFormAuswahl", "Studienform (Auto)")
+                        status.fields_filled.append('study_form')
                 
                 time.sleep(0.3)
                 
@@ -698,8 +1302,10 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                         print("📸 Screenshot saved to debug_studiengangsauswahl.png")
                     except:
                         pass
-                    return "❌ Fehler beim Klicken auf 'Weiter' (nach Studiengangswahl). Pflichtfelder fehlen möglicherweise."
+                    status.errors.append("Pflichtfelder in der Studiengangsauswahl fehlen möglicherweise")
+                    return status.to_chatbot_response(False) + "\n\n❌ Fehler beim Klicken auf 'Weiter' (nach Studiengangswahl). Pflichtfelder fehlen möglicherweise."
                 print(f"⏱️  Step 3 (Program selection): {time.time() - t0:.2f}s")
+                status.tabs_completed.append("Studiengang")
                 
                 # 8. Navigate through tabs
                 t0 = time.time()
@@ -716,6 +1322,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                             break
                             
                         tab_name = active_tab.text_content().strip()
+                        status.current_tab = tab_name
                         
                         # Check if we're stuck on the same tab
                         if tab_name == last_tab_name:
@@ -728,49 +1335,81 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                                     print("  No validation error visible, attempting to proceed...")
                                     if not self._click_next(page):
                                         print("  Could not proceed. Breaking loop.")
+                                        status.errors.append(f"Konnte Tab '{tab_name}' nicht verlassen - möglicherweise Pflichtfelder unausgefüllt")
                                         break
                                     stuck_count = 0
                                 else:
                                     print("  Validation error present. Breaking loop.")
+                                    status.errors.append(f"Validierungsfehler auf Tab '{tab_name}' - Pflichtfelder fehlen")
                                     break
                         else:
                             stuck_count = 0
                             tabs_visited.append(tab_name)
+                            status.tabs_completed.append(tab_name)
                             print(f"📋 Tab: {tab_name}")
                         
                         last_tab_name = tab_name
                         
-                        # Handle specific tabs
+                        # Handle specific tabs - track success/failures
                         if "Personendaten" in tab_name:
-                            self._fill_personal_data(page, birth_place, birth_country, nationality, gender)
+                            filled, failed = self._fill_personal_data_tracked(page, birth_place, birth_country, nationality, gender)
+                            status.fields_filled.extend(filled)
+                            status.fields_failed.extend(failed)
                         
                         elif "Anschriften" in tab_name or "Kontakt" in tab_name or "adresse" in tab_name.lower():
-                            self._fill_addresses(page, street, zip_code, city, country, phone)
+                            filled, failed = self._fill_addresses_tracked(page, street, zip_code, city, country, phone)
+                            status.fields_filled.extend(filled)
+                            status.fields_failed.extend(failed)
 
                         elif "Hochschulzugangsberechtigung" in tab_name:
-                            self._fill_hzb(page, hzb_date, hzb_type, hzb_grade, hzb_country, hzb_place, hzb_name, hzb_school)
+                            if delete_existing_hzb:
+                                self._delete_existing_entries(page, "HZB")
+                            filled, failed = self._fill_hzb_tracked(page, hzb_date, hzb_type, hzb_grade, hzb_country, hzb_place, hzb_name, hzb_school)
+                            status.fields_filled.extend(filled)
+                            status.fields_failed.extend(failed)
                         
                         elif "Vorbildung" in tab_name or "Studienverlauf" in tab_name:
-                            self._fill_vorbildung(page, prev_uni, prev_program, prev_degree, prev_semesters)
-                            print(f"⏱️  Total time: {time.time() - t0:.2f}s")
-                            print("Reached 'Akademische Vorbildung'. Stopping navigation as requested.")
-                            return f"✅ Bewerbung bis 'Akademische Vorbildung' ausgefüllt.\nTabs: {', '.join(tabs_visited)}"
+                            if delete_existing_vorbildung:
+                                self._delete_existing_entries(page, "Vorbildung")
+                            filled, failed = self._fill_vorbildung_tracked(page, prev_uni, prev_program, prev_degree, prev_semesters)
+                            status.fields_filled.extend(filled)
+                            status.fields_failed.extend(failed)
+                            # This is typically the last data entry tab
+                            # Check if there's a submit/save button instead of Next
+                            submit_btn = page.locator("text=Absenden").first
+                            save_btn = page.locator("text=Speichern").first
+                            if submit_btn.count() > 0 or save_btn.count() > 0:
+                                total_time = time.time() - t0_total
+                                print(f"⏱️  Total time: {total_time:.2f}s")
+                                print("✅ Reached final step - application ready for submission!")
+                                return status.to_chatbot_response(True, study_program, semester) + f"\n\nDauer: {total_time:.1f}s\nTabs: {', '.join(tabs_visited)}\n\nDie Bewerbung ist bereit zur Abgabe. Bitte prüfen Sie alle Angaben und klicken Sie auf 'Absenden'."
+                        
+                        elif "Zusammenfassung" in tab_name or "Abschluss" in tab_name or "Übersicht" in tab_name:
+                            # Final summary tab - we're done!
+                            total_time = time.time() - t0_total
+                            print(f"⏱️  Total time: {total_time:.2f}s")
+                            print("✅ Reached final summary tab!")
+                            return status.to_chatbot_response(True, study_program, semester) + f"\n\nDauer: {total_time:.1f}s\nTabs: {', '.join(tabs_visited)}\n\nBitte prüfen Sie die Zusammenfassung und klicken Sie auf 'Absenden' um die Bewerbung abzuschicken."
 
                         # Click Next to proceed to next tab
                         if not self._click_next(page):
                             print("Could not click Next. Stopping.")
+                            status.warnings.append(f"Konnte nicht von Tab '{tab_name}' weiter navigieren")
                             break
                             
                     except Exception as e:
                         print(f"Error in navigation loop: {e}")
+                        status.errors.append(f"Fehler bei Navigation: {str(e)}")
                         break
 
-                print(f"⏱️  Total time: {time.time() - t0:.2f}s")
+                total_time = time.time() - t0_total
+                print(f"⏱️  Total time: {total_time:.2f}s")
                 # Success (Draft created)
-                return f"✅ Bewerbung für '{study_program}' ({degree_type}, {semester}) erfolgreich angelegt.\nStatus: Wizard durchlaufen bis '{tabs_visited[-1] if tabs_visited else 'Studiengangswahl'}'.\nBitte prüfen Sie den Entwurf in KLIPS2 und ergänzen Sie fehlende Nachweise."
+                return status.to_chatbot_response(True, study_program, semester) + f"\n\nDauer: {total_time:.1f}s\nStatus: Wizard durchlaufen bis '{tabs_visited[-1] if tabs_visited else 'Studiengangswahl'}'.\nBitte prüfen Sie den Entwurf in KLIPS2 und ergänzen Sie fehlende Nachweise."
                 
             except Exception as e:
-                return f"❌ Ein unerwarteter Fehler ist aufgetreten: {str(e)}"
+                status.errors.append(f"Unerwarteter Fehler: {str(e)}")
+                return status.to_chatbot_response(False) + f"\n\n❌ Ein unerwarteter Fehler ist aufgetreten: {str(e)}"
 
 def create_klips2_apply_tool() -> KLIPS2ApplyTool:
     return KLIPS2ApplyTool()
