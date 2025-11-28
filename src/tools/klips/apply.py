@@ -171,35 +171,42 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
         study_form = kwargs.get('study_form', '').lower() if kwargs.get('study_form') else ''
         is_zweitstudium = 'zweitstudium' in study_form
         
-        # Recommended fields for personal data
-        personal_fields = {
-            'birth_place': 'Geburtsort',
-            'gender': 'Geschlecht',
+        # Check if study_form is provided - this is important for KLIPS!
+        if not kwargs.get('study_form'):
+            status.missing_optional.append("study_form: Studienform (WICHTIG - z.B. 'Erststudium' oder 'Zweitstudium')")
+        
+        # IMPORTANT: These fields are marked as "recommended" but KLIPS will likely require them!
+        # The tool can start without them, but the application may fail or be incomplete.
+        
+        # Fields that KLIPS typically requires (will be filled from profile if available)
+        important_fields = {
+            'birth_place': 'Geburtsort (WICHTIG - wird von KLIPS benötigt)',
+            'gender': 'Geschlecht (WICHTIG - wird von KLIPS benötigt)',
+            'street': 'Straße und Hausnummer (WICHTIG für Korrespondenzadresse)',
+            'zip_code': 'Postleitzahl (WICHTIG für Korrespondenzadresse)',
+            'city': 'Stadt/Ort (WICHTIG für Korrespondenzadresse)',
         }
         
-        for field, description in personal_fields.items():
+        for field, description in important_fields.items():
             value = kwargs.get(field)
             if not value:
                 status.missing_optional.append(f"{field}: {description}")
         
-        # Recommended fields for address (if any missing, likely all are missing)
-        address_fields = {
-            'street': 'Straße und Hausnummer',
-            'zip_code': 'Postleitzahl',
-            'city': 'Stadt/Ort',
+        # Less critical optional fields
+        optional_fields = {
             'phone': 'Telefonnummer',
         }
         
-        for field, description in address_fields.items():
+        for field, description in optional_fields.items():
             value = kwargs.get(field)
             if not value:
                 status.missing_optional.append(f"{field}: {description}")
         
-        # HZB fields - these are important for university applications
+        # HZB fields - these are REQUIRED for new applications in KLIPS
         hzb_fields = {
-            'hzb_date': 'Datum der Hochschulzugangsberechtigung (TT.MM.JJJJ)',
-            'hzb_type': 'Art der HZB (z.B. "Allgemeine Hochschulreife")',
-            'hzb_grade': 'Note der HZB (z.B. "2,3")',
+            'hzb_date': 'Datum der Hochschulzugangsberechtigung (WICHTIG - TT.MM.JJJJ)',
+            'hzb_type': 'Art der HZB (WICHTIG - z.B. "Allgemeine Hochschulreife")',
+            'hzb_grade': 'Note der HZB (WICHTIG - z.B. "2,3")',
             'hzb_place': 'Ort/Kreis der HZB',
         }
         
@@ -244,42 +251,65 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             response_parts.append(f"  • Semester: {semester}")
         response_parts.append("")
         
+        # Separate IMPORTANT (KLIPS-required) fields from truly optional ones
         if status.missing_optional:
-            response_parts.append("⚠️ **Optionale Felder die fehlen (können später ergänzt werden):**")
+            # Split into KLIPS-required (WICHTIG) and truly optional fields
+            wichtig_fields = [f for f in status.missing_optional if 'WICHTIG' in f]
+            optional_fields = [f for f in status.missing_optional if 'WICHTIG' not in f]
             
-            # Group fields by category
-            personal = [f for f in status.missing_optional if any(x in f for x in ['birth_place', 'gender'])]
-            address = [f for f in status.missing_optional if any(x in f for x in ['street', 'zip_code', 'city', 'phone'])]
-            hzb = [f for f in status.missing_optional if f.startswith('hzb_')]
-            vorbildung = [f for f in status.missing_optional if f.startswith('prev_')]
+            if wichtig_fields:
+                response_parts.append("🔴 **WICHTIGE Felder die KLIPS wahrscheinlich benötigt:**")
+                
+                # Group by category for better readability
+                personal = [f for f in wichtig_fields if any(x in f for x in ['birth_place', 'gender'])]
+                address = [f for f in wichtig_fields if any(x in f for x in ['street', 'zip_code', 'city'])]
+                hzb = [f for f in wichtig_fields if f.startswith('hzb_')]
+                
+                if personal:
+                    response_parts.append("  **Persönliche Daten:**")
+                    for f in personal:
+                        # Clean up the display
+                        field_desc = f.split(':')[1].strip() if ':' in f else f
+                        response_parts.append(f"    - {field_desc}")
+                
+                if address:
+                    response_parts.append("  **Korrespondenzadresse:**")
+                    for f in address:
+                        field_desc = f.split(':')[1].strip() if ':' in f else f
+                        response_parts.append(f"    - {field_desc}")
+                
+                if hzb:
+                    response_parts.append("  **Hochschulzugangsberechtigung (HZB):**")
+                    for f in hzb:
+                        field_desc = f.split(':')[1].strip() if ':' in f else f
+                        response_parts.append(f"    - {field_desc}")
+                
+                response_parts.append("")
             
-            if personal:
-                response_parts.append("  **Persönliche Daten:**")
-                for f in personal:
-                    response_parts.append(f"    - {f}")
-            
-            if address:
-                response_parts.append("  **Adresse:**")
-                for f in address:
-                    response_parts.append(f"    - {f}")
-            
-            if hzb:
-                response_parts.append("  **Hochschulzugangsberechtigung:**")
-                for f in hzb:
-                    response_parts.append(f"    - {f}")
-            
-            if vorbildung:
-                response_parts.append("  **Akademische Vorbildung:**")
-                for f in vorbildung:
-                    response_parts.append(f"    - {f}")
-            
-            response_parts.append("")
+            if optional_fields:
+                response_parts.append("ℹ️ **Optionale Felder:**")
+                for f in optional_fields:
+                    field_desc = f.split(':')[1].strip() if ':' in f else f
+                    response_parts.append(f"  - {field_desc}")
+                response_parts.append("")
         
-        if not status.missing_required:
-            response_parts.append("✅ **Alle Pflichtfelder sind vorhanden - Bewerbung kann gestartet werden.**")
-            if status.missing_optional:
-                response_parts.append("💡 Möchten Sie noch optionale Felder ergänzen bevor die Bewerbung eingereicht wird?")
+        # Decision logic based on both required AND important fields
+        has_important_missing = any('WICHTIG' in f for f in status.missing_optional)
+        
+        if not status.missing_required and not has_important_missing:
+            response_parts.append("✅ **Alle wichtigen Felder sind vorhanden - Bewerbung kann gestartet werden.**")
+        elif not status.missing_required and has_important_missing:
+            response_parts.append("⚠️ **Das Tool kann starten, aber WICHTIGE Felder fehlen!**")
+            response_parts.append("Die Bewerbung wird wahrscheinlich unvollständig sein oder von KLIPS abgelehnt werden.")
+            response_parts.append("")
+            response_parts.append("🔵 **Bitte ergänzen Sie mindestens:**")
+            response_parts.append("  - Ihre Adresse (Straße, PLZ, Ort)")
+            response_parts.append("  - Ihren Geburtsort")
+            response_parts.append("  - Ihre HZB-Daten (Datum, Art, Note)")
+            response_parts.append("")
+            response_parts.append("💡 Möchten Sie diese Daten jetzt ergänzen?")
         else:
+            response_parts.append("❌ **Pflichtfelder fehlen - Bewerbung kann nicht gestartet werden.**")
             response_parts.append("💡 Bitte ergänzen Sie die fehlenden Pflichtfelder und versuchen Sie es erneut.")
         
         return "\n".join(response_parts)
