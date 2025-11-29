@@ -87,93 +87,95 @@ class UniversityRAGTool(BaseTool):
         # Baseline-Modus = Naive = Kein Advanced
         return not self.config.baseline_enabled
     
-    @traceable(run_type="retriever")
-    def _naive_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
-        """
-        Naives RAG: Einfache Vektorsuche in ChromaDB.
-        
-        Args:
-            query: Die Suchanfrage
-            k: Anzahl der Ergebnisse
-            
-        Returns:
-            Liste von Dokumenten mit Metadaten
-        """
+    def _get_chromadb_client(self):
+        """Hole ChromaDB Client (Shared Helper)."""
         import chromadb
         from pathlib import Path
         
-        # Verbindung zur ChromaDB
         # WICHTIG: Relative Paths benutzen! ChromaDB hat Bug mit absoluten Windows-Pfaden
         vector_db_paths = [
             "data/vector_db",
             "src/scraper/vector_db"
         ]
         
-        vector_db_path = None
         for path_str in vector_db_paths:
             if Path(path_str).exists():
-                vector_db_path = path_str
-                break
+                return chromadb.PersistentClient(path=path_str)
         
-        if vector_db_path is None:
-            return []
+        raise FileNotFoundError("Vector DB nicht gefunden")
+    
+    @traceable(run_type="retriever")
+    def _naive_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Naives RAG: Einfache Vektorsuche in Single Collection.
         
-        client = chromadb.PersistentClient(path=vector_db_path)
-        
-        # WORKAROUND für ChromaDB Bug: list_collections() Iterator verursacht
-        # "Error loading hnsw index" bei großen Collections (41k+ chunks).
-        # Lösung: Collection-Namen einzeln holen statt Iterator
-        collection_names = [coll.name for coll in client.list_collections()]
-        
-        if not collection_names:
-            return []
-        
-        # NAIVE: Durchsuche ALLE Collections unabhängig (als wäre es eine große Collection)
-        # Im echten Naive-Ansatz würde beim Indexing alles in eine Collection geschrieben
-        documents = []
-        
-        for name in collection_names:
-            collection = client.get_collection(name)
+        Args:
+            query: Die Suchanfrage
+            k: Anzahl der Ergebnisse
             
-            try:
-                # Suche in jeder Collection
-                results = collection.query(
-                    query_texts=[query],
-                    n_results=min(k, 10)  # Max 10 pro Collection
-                )
-                
-                # Konvertiere Ergebnisse
-                if results and results['documents'] and results['documents'][0]:
-                    for i, doc in enumerate(results['documents'][0]):
-                        # Format für Naive RAG (Backward compatibility)
-                        doc_dict = {
-                            'page_content': doc,
-                            'type': 'Document',
-                            'metadata': {}
-                        }
-                        
-                        # Format für Advanced RAG (neue Felder)
-                        doc_dict['id'] = results['ids'][0][i] if results.get('ids') else f"doc_{i}"
-                        doc_dict['document'] = doc  # Alias für Advanced-Techniken
-                        doc_dict['collection'] = name  # Collection-Name
-                        
-                        # Füge Metadaten hinzu
-                        if results.get('metadatas') and results['metadatas'][0]:
-                            doc_dict['metadata'] = results['metadatas'][0][i] or {}
-                        
-                        # Füge Distance hinzu (wichtig für Sorting!)
-                        if results.get('distances') and results['distances'][0]:
-                            doc_dict['distance'] = results['distances'][0][i]
-                            doc_dict['metadata']['distance'] = results['distances'][0][i]
-                        
-                        documents.append(doc_dict)
-            except Exception as e:
-                logger.warning(f"Fehler bei Collection {name}: {e}")
-                continue
+        Returns:
+            Liste von Dokumenten mit Metadaten (simples Format)
+        """
+        try:
+            client = self._get_chromadb_client()
+        except FileNotFoundError:
+            return []
         
-        # Naive: Einfach nach Distance sortieren und top-k nehmen
-        documents.sort(key=lambda x: x.get('distance', float('inf')))
-        return documents[:k]
+        # NAIVE: Nur eine Collection - wiso_documents
+        try:
+            collection = client.get_collection('wiso_documents')
+        except Exception as e:
+            logger.warning(f"Collection 'wiso_documents' nicht gefunden: {e}")
+            return []
+        
+        # Einfache Vektorsuche
+        try:
+            results = collection.query(
+                query_texts=[query],
+                n_results=k
+            )
+        except Exception as e:
+            logger.error(f"Fehler bei Vektorsuche: {e}")
+            return []
+        
+        # Simples Document-Format (nur für Naive)
+        documents = []
+        if results and results['documents'] and results['documents'][0]:
+            for i, doc in enumerate(results['documents'][0]):
+                doc_dict = {
+                    'page_content': doc,
+                    'type': 'Document',
+                    'metadata': {}
+                }
+                
+                # Füge Metadaten hinzu
+                if results.get('metadatas') and results['metadatas'][0]:
+                    doc_dict['metadata'] = results['metadatas'][0][i] or {}
+                
+                documents.append(doc_dict)
+        
+        return documents
+    
+    @traceable(run_type="retriever")
+    def _advanced_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Advanced RAG: Importiert komplette Logik aus multi_collection_search.
+        
+        Args:
+            query: Die Suchanfrage
+            k: Anzahl der Ergebnisse (wird für k_per_collection verwendet)
+            
+        Returns:
+            Liste von Dokumenten mit erweiterten Metadaten
+        """
+        from src.advanced_rag.retrieval.multi_collection_search import advanced_retrieve
+        
+        # Nutze k_per_collection aus Config
+        k_per_collection = self.config.multi_collection_k_per_collection if self.config else 3
+        
+        # Alle Advanced-Logik ist in multi_collection_search.py
+        return advanced_retrieve(query, k_per_collection=k_per_collection)
+
     
     def _run(self, query: str) -> str:
         """
@@ -189,8 +191,13 @@ class UniversityRAGTool(BaseTool):
             # Bestimme k basierend auf Config oder Default
             k = self.config.top_k if self.config else RAG_SEARCH_RESULTS
             
-            # Naive Retrieval (immer)
-            documents = self._naive_retrieve(query, k=k)
+            # Retrieval basierend auf Modus
+            if self._use_advanced and self.config:
+                # Advanced: Multi-Collection Search
+                documents = self._advanced_retrieve(query, k=k)
+            else:
+                # Naive: Single Collection Search
+                documents = self._naive_retrieve(query, k=k)
             
             if not documents:
                 return (
@@ -198,7 +205,7 @@ class UniversityRAGTool(BaseTool):
                     "Möglicherweise ist die Datenbank leer oder Ihre Anfrage konnte nicht zugeordnet werden."
                 )
             
-            # Wenn Advanced-Techniken verfügbar und aktiviert sind
+            # Post-Retrieval Processing
             if self._use_advanced and self.config:
                 return self._advanced_process(query, documents)
             

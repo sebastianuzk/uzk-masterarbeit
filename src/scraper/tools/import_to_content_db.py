@@ -75,15 +75,218 @@ def extract_title_from_html(html_content: str) -> str:
         return "Unbekannter Titel"
 
 
-def extract_text_from_html(html_content: str) -> str:
+def extract_clean_text_from_html(html: str, url: str = None) -> dict:
     """
-    DEPRECATED: Diese Funktion wird nicht mehr verwendet.
-    Für Naive-RAG speichern wir RAW-HTML direkt in die Datenbank.
+    Konvertiert HTML in strukturierten Markdown-ähnlichen Text.
     
-    Diese Funktion bleibt nur für Kompatibilität erhalten.
+    Entfernt Navigation, Footer, Scripts und behält die inhaltliche Struktur
+    mit Überschriften, Listen, Tabellen und Absätzen.
+    
+    Args:
+        html: RAW-HTML Content
+        url: Optionale URL für Metadaten
+        
+    Returns:
+        dict mit:
+            - url: URL oder None
+            - title: Seitentitel
+            - clean_text: Strukturierter Markdown-ähnlicher Text
     """
-    # Für RAW-HTML Speicherung geben wir einfach den Original-Content zurück
-    return html_content
+    from bs4 import BeautifulSoup, NavigableString, Comment
+    
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    # === 1. GLOBAL ENTFERNEN ===
+    # Entferne Scripts, Styles, etc.
+    for tag_name in ['script', 'style', 'noscript', 'iframe']:
+        for tag in soup.find_all(tag_name):
+            tag.decompose()
+    
+    # Entferne Kommentare
+    for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+        comment.extract()
+    
+    # Entferne Layout-Container
+    for tag_name in ['header', 'nav', 'footer']:
+        for tag in soup.find_all(tag_name):
+            tag.decompose()
+    
+    # Entferne Elemente mit typischen Layout-Klassen
+    layout_classes = [
+        'cookie', 'cookies', 'banner', 'navbar', 'breadcrumb', 'breadcrumbs',
+        'social', 'footer', 'menu', 'navigation', 'sidebar', 'side-bar'
+    ]
+    for tag in soup.find_all(class_=True):
+        if not hasattr(tag, 'attrs') or tag.attrs is None:
+            continue
+        classes = tag.get('class', [])
+        if isinstance(classes, str):
+            classes = [classes]
+        if any(layout_class in ' '.join(classes).lower() for layout_class in layout_classes):
+            tag.decompose()
+    
+    # === 2. TITEL EXTRAHIEREN ===
+    title = None
+    if soup.title and soup.title.string:
+        title = soup.title.string.strip()
+    
+    if not title:
+        h1 = soup.find('h1')
+        if h1:
+            title = h1.get_text(strip=True)
+    
+    if not title:
+        og_title = soup.find('meta', property='og:title')
+        if og_title and og_title.get('content'):
+            title = og_title['content'].strip()
+    
+    title = title or "Unbekannter Titel"
+    
+    # === 3. HAUPTINHALT FINDEN ===
+    main_content = (
+        soup.find('main') or
+        soup.find('article') or
+        soup.find('div', id='content') or
+        soup.find('div', class_=lambda c: c and 'content' in str(c).lower()) or
+        soup.body or
+        soup
+    )
+    
+    # === 4. MARKDOWN-KONVERTIERUNG ===
+    def process_element(element, depth=0) -> str:
+        """Rekursive Verarbeitung eines Elements."""
+        if isinstance(element, NavigableString):
+            text = str(element).strip()
+            return text if text else ''
+        
+        if element.name is None:
+            return ''
+        
+        tag_name = element.name.lower()
+        result = []
+        
+        # Überschriften
+        if tag_name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+            level = int(tag_name[1])
+            text = element.get_text(strip=True)
+            if text:
+                result.append(f"\n{'#' * level} {text}\n")
+        
+        # Absätze
+        elif tag_name == 'p':
+            text = element.get_text(strip=True)
+            if text:
+                result.append(f"\n{text}\n")
+        
+        # Ungeordnete Listen
+        elif tag_name == 'ul':
+            for li in element.find_all('li', recursive=False):
+                text = li.get_text(strip=True)
+                if text:
+                    result.append(f"- {text}\n")
+            result.append('\n')
+        
+        # Geordnete Listen
+        elif tag_name == 'ol':
+            for idx, li in enumerate(element.find_all('li', recursive=False), 1):
+                text = li.get_text(strip=True)
+                if text:
+                    result.append(f"{idx}. {text}\n")
+            result.append('\n')
+        
+        # Tabellen
+        elif tag_name == 'table':
+            rows = []
+            
+            # Header-Zeile
+            thead = element.find('thead')
+            if thead:
+                headers = [th.get_text(strip=True) for th in thead.find_all(['th', 'td'])]
+                if headers:
+                    rows.append('| ' + ' | '.join(headers) + ' |')
+                    rows.append('|' + '|'.join(['---' for _ in headers]) + '|')
+            
+            # Body-Zeilen
+            tbody = element.find('tbody') or element
+            for tr in tbody.find_all('tr'):
+                cells = [td.get_text(strip=True) for td in tr.find_all(['td', 'th'])]
+                if cells:
+                    rows.append('| ' + ' | '.join(cells) + ' |')
+            
+            if rows:
+                result.append('\n' + '\n'.join(rows) + '\n\n')
+        
+        # Listen-Items (falls einzeln verarbeitet)
+        elif tag_name == 'li':
+            text = element.get_text(strip=True)
+            if text:
+                result.append(f"- {text}\n")
+        
+        # Zeilenumbrüche
+        elif tag_name == 'br':
+            result.append('\n')
+        
+        # Horizontale Linien
+        elif tag_name == 'hr':
+            result.append('\n---\n\n')
+        
+        # Inline-Elemente mit Formatierung: Text extrahieren, aber Kinder rekursiv verarbeiten
+        # (damit verschachtelte Strukturen wie <a><h2>Titel</h2></a> funktionieren)
+        elif tag_name in ['span', 'strong', 'b', 'em', 'i', 'code']:
+            # Prüfe ob Kinder Block-Elemente enthalten
+            has_block_children = any(
+                child.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'section', 'ul', 'ol', 'table']
+                for child in element.children
+                if hasattr(child, 'name') and child.name
+            )
+            
+            if has_block_children:
+                # Rekursiv verarbeiten
+                for child in element.children:
+                    result.append(process_element(child, depth + 1))
+            else:
+                # Nur Text extrahieren
+                text = element.get_text(strip=True)
+                if text:
+                    result.append(text + ' ')
+        
+        # Alle anderen Elemente: Rekursiv verarbeiten
+        # (div, section, article, main, a, und alles Unbekannte)
+        else:
+            for child in element.children:
+                result.append(process_element(child, depth + 1))
+        
+        return ''.join(result)
+    
+    # Verarbeite Hauptinhalt
+    clean_text = process_element(main_content)
+    
+    # === 5. TEXT-BEREINIGUNG ===
+    # Entferne mehrfache Leerzeilen
+    lines = clean_text.split('\n')
+    cleaned_lines = []
+    prev_empty = False
+    
+    for line in lines:
+        line_stripped = line.strip()
+        if line_stripped:
+            cleaned_lines.append(line_stripped)
+            prev_empty = False
+        elif not prev_empty:
+            cleaned_lines.append('')
+            prev_empty = True
+    
+    clean_text = '\n'.join(cleaned_lines).strip()
+    
+    # Entferne mehrfache Leerzeichen
+    import re
+    clean_text = re.sub(r' +', ' ', clean_text)
+    
+    return {
+        'url': url,
+        'title': title,
+        'clean_text': clean_text
+    }
 
 
 def reimport_html_only(content_db: ContentDatabase, html_cache_path: Path) -> Dict[str, int]:
@@ -139,29 +342,30 @@ def reimport_html_only(content_db: ContentDatabase, html_cache_path: Path) -> Di
                         compressed_data = f.read()
                     html_content = gzip.decompress(compressed_data).decode('utf-8')
                     
-                    # Extrahiere nur Titel
-                    title = extract_title_from_html(html_content)
+                    # Extrahiere strukturierten Text (Markdown-ähnlich)
+                    result = extract_clean_text_from_html(html_content, url)
                     
-                    if not html_content.strip():
-                        logger.warning(f"Leerer HTML-Content: {url}")
+                    if not result['clean_text'].strip():
+                        logger.warning(f"Leerer Clean-Text: {url}")
                         stats['skipped'] += 1
                         continue
                     
                     # Kategorisiere
                     category = categorize_url(url)
                     
-                    # Speichere RAW-HTML in Content DB
+                    # Speichere strukturierten Text in Content DB
                     metadata = {
                         'content_type': content_type,
                         'status_code': status_code,
                         'source': 'html_cache',
-                        'raw_html': True
+                        'structured_text': True,  # Marker für Markdown-ähnliche Struktur
+                        'extraction_method': 'markdown_conversion'
                     }
                     
                     doc_id = content_db.add_document(
                         url=url,
-                        title=title,
-                        content=html_content,  # RAW-HTML!
+                        title=result['title'],
+                        content=result['clean_text'],  # Strukturierter Markdown-Text!
                         content_type='html',
                         category=category,
                         metadata=metadata
@@ -315,33 +519,30 @@ def import_html_cache(content_db: ContentDatabase, html_cache_path: Path) -> Dic
                         compressed_data = f.read()
                     html_content = gzip.decompress(compressed_data).decode('utf-8')
                     
-                    # 🔥 WICHTIG: Speichere RAW-HTML für Naive-RAG!
-                    # Extrahiere nur Titel, aber behalte HTML für Content
-                    title = extract_title_from_html(html_content)
+                    # Extrahiere strukturierten Text (Markdown-ähnlich)
+                    result = extract_clean_text_from_html(html_content, url)
                     
-                    # Speichere RAW-HTML statt extrahiertem Text
-                    raw_content = html_content
-                    
-                    if not raw_content.strip():
-                        logger.warning(f"Leerer HTML-Content: {url}")
+                    if not result['clean_text'].strip():
+                        logger.warning(f"Leerer Clean-Text: {url}")
                         stats['skipped'] += 1
                         continue
                     
                     # Kategorisiere
                     category = categorize_url(url)
                     
-                    # Speichere in Content DB mit RAW-HTML
+                    # Speichere strukturierten Text in Content DB
                     metadata = {
                         'content_type': content_type,
                         'status_code': status_code,
                         'source': 'html_cache',
-                        'raw_html': True  # Markierung dass dies RAW-HTML ist
+                        'structured_text': True,  # Marker für Markdown-ähnliche Struktur
+                        'extraction_method': 'markdown_conversion'
                     }
                     
                     doc_id = content_db.add_document(
                         url=url,
-                        title=title,
-                        content=raw_content,  # RAW-HTML speichern!
+                        title=result['title'],
+                        content=result['clean_text'],  # Strukturierter Markdown-Text!
                         content_type='html',
                         category=category,
                         metadata=metadata
@@ -441,8 +642,57 @@ def main():
     import sys
     
     # Prüfe Kommandozeilen-Argumente
+    test_mode = '--test' in sys.argv
     reimport_pdfs = '--reimport-pdfs' in sys.argv
     reimport_html = '--reimport-html' in sys.argv
+    
+    # Test-Modus: Zeige Extraktion eines einzelnen HTML-Dokuments
+    if test_mode:
+        logger.info("=" * 80)
+        logger.info("TEST-MODUS: HTML-Markdown-Extraktion")
+        logger.info("=" * 80)
+        
+        # Pfade
+        base_dir = Path(__file__).parent.parent.parent.parent
+        data_dir = base_dir / "data"
+        html_cache_path = data_dir / "html_cache"
+        
+        # Lade erste HTML-Datei aus Cache
+        import gzip
+        with sqlite3.connect(html_cache_path / "html_cache.db") as conn:
+            cursor = conn.execute("""
+                SELECT url, file_path
+                FROM html_cache
+                WHERE status_code = 200
+                LIMIT 1
+            """)
+            url, file_path = cursor.fetchone()
+        
+        logger.info(f"\nVerarbeite Test-Dokument:")
+        logger.info(f"URL: {url}")
+        logger.info(f"Datei: {file_path}")
+        
+        # Lade HTML
+        file_path_obj = Path(file_path)
+        with open(file_path_obj, 'rb') as f:
+            compressed_data = f.read()
+        html_content = gzip.decompress(compressed_data).decode('utf-8')
+        
+        logger.info(f"HTML Größe: {len(html_content):,} Zeichen")
+        
+        # Extrahiere strukturierten Text
+        result = extract_clean_text_from_html(html_content, url)
+        
+        logger.info(f"\nErgebnis:")
+        logger.info(f"Titel: {result['title']}")
+        logger.info(f"Clean Text Größe: {len(result['clean_text']):,} Zeichen")
+        logger.info(f"Kompressionsrate: {len(result['clean_text']) / len(html_content) * 100:.1f}%")
+        logger.info(f"\nVollständiger strukturierter Text:")
+        logger.info("-" * 80)
+        logger.info(result['clean_text'])
+        logger.info("-" * 80)
+        
+        return
     
     logger.info("=" * 80)
     if reimport_pdfs:

@@ -199,7 +199,6 @@ data/*
 # Specific data subdirectories
 data/scraped/
 data/pdfs/
-data/vector_db/
 data/pipeline_*/
 data/test_*/
 data/enhanced_*/
@@ -212,10 +211,12 @@ data/cache/
 *.sqlite
 *.sqlite3
 url_cache.db
-chroma.sqlite3
 
-# ChromaDB
-**/chroma.sqlite3
+# Erlaube Vector DB (wird via Git LFS verwaltet)
+!data/vector_db/
+!data/vector_db/chroma.sqlite3
+
+# ChromaDB (andere Orte ignorieren)
 **/vector_db/*.bin
 **/vector_db/*.pkl
 src/scraper/vector_db/*

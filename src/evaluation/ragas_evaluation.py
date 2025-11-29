@@ -44,8 +44,6 @@ def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.Da
         df = df.head(limit)
     
     print(f"✅ {len(df)} Testfragen geladen")
-    print(f"   Kategorien: {df['category'].unique().tolist()}")
-    print(f"   Schwierigkeiten: easy={len(df[df['difficulty']=='easy'])}, medium={len(df[df['difficulty']=='medium'])}, hard={len(df[df['difficulty']=='hard'])}")
     
     return df
 

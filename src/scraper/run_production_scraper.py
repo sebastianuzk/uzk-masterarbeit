@@ -22,7 +22,9 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import time
 from datetime import datetime
-import pickle
+
+# Scraper Utils
+from src.scraper.utils.checkpoint_manager import CheckpointManager
 
 # Lade RAG Configuration
 try:
@@ -39,61 +41,32 @@ if USE_ADVANCED:
     from src.advanced_rag.pre_retrieval.cleaning import ContentCleaner
     from src.advanced_rag.pre_retrieval.chunking import SemanticChunker
     from src.advanced_rag.pre_retrieval.deduplication import ContentDeduplicator
+    from src.advanced_rag.pre_retrieval.collection_categorizer import CollectionCategorizer
 
 # Datenbank-Pfade
 CONTENT_DB = Path("data/content_database.db")
 VECTOR_DB = Path("data/vector_db")
-CHECKPOINT_DIR = Path("checkpoints")
-PHASE1_CHECKPOINT = CHECKPOINT_DIR / "phase1_processed_docs.pkl"
 
-# Collection-Namen basierend auf URL-Patterns
-COLLECTIONS = {
-    'wiso_studium': ['studies', 'students', 'admission', 'application', 'programme'],
-    'wiso_services': ['services', 'facilities', 'library', 'support', 'career'],
-    'wiso_forschung': ['research', 'publications', 'projects', 'phd'],
-    'wiso_allgemein': []  # Fallback für alles andere
-}
+# Initialisiere Checkpoint Manager
+checkpoint_mgr = CheckpointManager()
 
-def get_collection_name(url: str) -> str:
-    """Bestimme Collection-Name basierend auf URL."""
-    url_lower = url.lower()
+def get_collection_name(url: str, categorizer=None) -> str:
+    """
+    Bestimme Collection-Name basierend auf URL.
     
-    for collection, keywords in COLLECTIONS.items():
-        if collection == 'wiso_allgemein':
-            continue
-        for keyword in keywords:
-            if keyword in url_lower:
-                return collection
+    Args:
+        url: Dokument-URL
+        categorizer: Optional CollectionCategorizer (Advanced RAG)
     
-    return 'wiso_allgemein'
-
-def load_phase1_checkpoint():
-    """Lade Phase 1 Checkpoint falls vorhanden."""
-    if PHASE1_CHECKPOINT.exists():
-        print("\n📂 Lade Phase 1 Checkpoint...")
-        with open(PHASE1_CHECKPOINT, 'rb') as f:
-            data = pickle.load(f)
-        print(f"   ✅ {len(data):,} verarbeitete Dokumente aus Checkpoint geladen")
-        total_chunks = sum(len(docs) for docs in data.values())
-        print(f"   📊 Insgesamt {total_chunks:,} Collections mit Dokumenten")
-        return data
-    return None
-
-def save_phase1_checkpoint(docs_by_collection):
-    """Speichere Phase 1 Ergebnisse als Checkpoint."""
-    CHECKPOINT_DIR.mkdir(exist_ok=True)
-    print("\n💾 Speichere Phase 1 Checkpoint...")
-    with open(PHASE1_CHECKPOINT, 'wb') as f:
-        pickle.dump(docs_by_collection, f)
-    file_size = PHASE1_CHECKPOINT.stat().st_size / (1024 * 1024)
-    print(f"   ✅ Checkpoint gespeichert ({file_size:.1f} MB)")
-    print(f"   📍 Pfad: {PHASE1_CHECKPOINT}")
-
-def delete_phase1_checkpoint():
-    """Lösche Phase 1 Checkpoint nach erfolgreichem Abschluss."""
-    if PHASE1_CHECKPOINT.exists():
-        PHASE1_CHECKPOINT.unlink()
-        print("\n🗑️  Phase 1 Checkpoint gelöscht (nicht mehr benötigt)")
+    Returns:
+        Collection-Name
+    """
+    # ADVANCED RAG: Multi-Collection via CollectionCategorizer
+    if categorizer is not None:
+        return categorizer.get_collection_name(url)
+    
+    # NAIVE RAG (Standard): Nur eine Collection
+    return 'wiso_documents'
 
 def check_existing_progress():
     """Prüfe welche Collections bereits existieren und vollständig sind."""
@@ -103,7 +76,7 @@ def check_existing_progress():
     
     if not VECTOR_DB.exists():
         print("✅ Vektordatenbank existiert noch nicht - starte von vorne")
-        phase1_data = load_phase1_checkpoint()
+        phase1_data = checkpoint_mgr.load_phase1_checkpoint()
         return set(), phase1_data  # Keine Collections vorhanden, aber evtl. Phase 1 Checkpoint
     
     # Verbinde zu ChromaDB
@@ -129,7 +102,7 @@ def check_existing_progress():
         print("✅ Keine bestehenden Collections - starte von vorne")
     
     # Prüfe Phase 1 Checkpoint
-    phase1_data = load_phase1_checkpoint()
+    phase1_data = checkpoint_mgr.load_phase1_checkpoint()
     
     return completed_collections, phase1_data
 
@@ -144,30 +117,39 @@ def naive_clean_text(text: str) -> str:
     text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Entferne mehrfache Zeilenumbrüche
     return text.strip()
 
-def naive_chunk_text(text: str, chunk_size: int = 1500) -> list:
-    """Naive Chunking: Einfach nach Zeichenzahl ohne Semantik."""
+def naive_chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list:
+    """
+    Naive Chunking: Einfaches Character-basiertes Chunking mit Overlap.
+    
+    Args:
+        text: Eingabetext
+        chunk_size: Chunk-Größe in Zeichen (Standard: 1000)
+        overlap: Überlappung zwischen Chunks (Standard: 200)
+    
+    Returns:
+        Liste von Text-Chunks
+    """
+    if len(text) <= chunk_size:
+        return [text]
+    
     chunks = []
-    words = text.split()
-    current_chunk = []
-    current_length = 0
+    start = 0
     
-    for word in words:
-        word_length = len(word) + 1  # +1 für Leerzeichen
-        if current_length + word_length > chunk_size and current_chunk:
-            chunks.append(' '.join(current_chunk))
-            current_chunk = [word]
-            current_length = word_length
-        else:
-            current_chunk.append(word)
-            current_length += word_length
-    
-    if current_chunk:
-        chunks.append(' '.join(current_chunk))
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
+        
+        # Nur hinzufügen wenn nicht zu klein
+        if len(chunk.strip()) > 50:
+            chunks.append(chunk.strip())
+        
+        # Nächster Start mit Overlap
+        start = end - overlap
     
     return chunks
 
 def process_document(doc_id, url, title, content, content_type, 
-                     content_cleaner=None, chunker=None, deduplicator=None):
+                     content_cleaner=None, chunker=None, deduplicator=None, categorizer=None):
     """
     Verarbeite ein einzelnes Dokument (ohne Embeddings).
     Respektiert USE_ADVANCED Flag.
@@ -196,13 +178,13 @@ def process_document(doc_id, url, title, content, content_type,
         else:
             # NAIVE: Ohne Advanced-Techniken
             cleaned_text = naive_clean_text(raw_content)
-            chunks = naive_chunk_text(cleaned_text, chunk_size=1500)
+            chunks = naive_chunk_text(cleaned_text, chunk_size=1000, overlap=200)
         
         if len(chunks) == 0:
             return None
         
-        # Bestimme Collection
-        collection_name = get_collection_name(url)
+        # Bestimme Collection (mit categorizer für Advanced)
+        collection_name = get_collection_name(url, categorizer)
         
         return {
             'doc_id': doc_id,
@@ -242,16 +224,28 @@ def run_production_scraper():
         content_cleaner = ContentCleaner()
         print("   ✅ ContentCleaner")
         
-        chunker = SemanticChunker(max_chunk_size=1500, min_chunk_size=200, overlap=300)
-        print("   ✅ SemanticChunker (max=1500, min=200, overlap=300)")
+        # Lade Chunking-Parameter aus Config
+        chunker = SemanticChunker(
+            max_chunk_size=rag_config.semantic_chunking_max_size,
+            min_chunk_size=rag_config.semantic_chunking_min_size,
+            overlap=rag_config.semantic_chunking_overlap
+        )
+        print(f"   ✅ SemanticChunker (max={rag_config.semantic_chunking_max_size}, min={rag_config.semantic_chunking_min_size}, overlap={rag_config.semantic_chunking_overlap})")
         
-        deduplicator = ContentDeduplicator(similarity_threshold=0.85, shingle_size=3)
+        deduplicator = ContentDeduplicator(
+            similarity_threshold=rag_config.deduplication_similarity_threshold,
+            shingle_size=rag_config.deduplication_shingle_size
+        )
         print("   ✅ ContentDeduplicator (Quick-Win optimiert: Cache + Early Exit + Size-Bucketing)")
+        
+        categorizer = CollectionCategorizer()  # Verwendet DEFAULT_COLLECTIONS
+        print(f"   ✅ CollectionCategorizer ({len(categorizer.get_collection_names())} Collections)")
     else:
         print("📦 Verwende Naive RAG (keine Advanced-Techniken)...")
         content_cleaner = None
         chunker = None
         deduplicator = None
+        categorizer = None
         print("   ✅ Naive Text-Bereinigung")
         print("   ✅ Naive Chunking (einfache Zeichenzahl-basiert)")
     
@@ -265,40 +259,67 @@ def run_production_scraper():
     
     # Erstelle/Lade Collections
     collections_dict = {}
-    for collection_name in COLLECTIONS.keys():
+    
+    # NAIVE RAG: Nur eine Collection
+    if not USE_ADVANCED:
+        collection_name = 'wiso_documents'
         if collection_name in completed_collections:
-            # Collection existiert bereits - lade sie
             collections_dict[collection_name] = client.get_collection(name=collection_name)
             print(f"   ♻️  Collection '{collection_name}' geladen (bereits fertig)")
         else:
-            # Neue Collection erstellen
             try:
                 collections_dict[collection_name] = client.create_collection(
                     name=collection_name,
-                    metadata={"description": f"WiSo Fakultät - {collection_name}"}
+                    metadata={"description": "WiSo Fakultät - Alle Dokumente (Naive RAG)"}
                 )
-                print(f"   ✅ Collection '{collection_name}' erstellt")
+                print(f"   ✅ Collection '{collection_name}' erstellt (NAIVE RAG - keine Kategorisierung)")
             except:
-                # Falls Collection existiert aber leer ist
                 collections_dict[collection_name] = client.get_collection(name=collection_name)
                 print(f"   ♻️  Collection '{collection_name}' geladen")
+    
+    # ADVANCED RAG: Multi-Collections
+    else:
+        collection_names = categorizer.get_collection_names()
+        for collection_name in collection_names:
+            if collection_name in completed_collections:
+                # Collection existiert bereits - lade sie
+                collections_dict[collection_name] = client.get_collection(name=collection_name)
+                print(f"   ♻️  Collection '{collection_name}' geladen (bereits fertig)")
+            else:
+                # Neue Collection erstellen
+                try:
+                    collections_dict[collection_name] = client.create_collection(
+                        name=collection_name,
+                        metadata={"description": f"WiSo Fakultät - {collection_name}"}
+                    )
+                    print(f"   ✅ Collection '{collection_name}' erstellt")
+                except:
+                    # Falls Collection existiert aber leer ist
+                    collections_dict[collection_name] = client.get_collection(name=collection_name)
+                    print(f"   ♻️  Collection '{collection_name}' geladen")
     
     # Verbinde zur Content Database
     conn = sqlite3.connect(CONTENT_DB)
     
     # Initialisiere Stats und Collections
+    # NAIVE RAG: Nur eine Collection
+    if not USE_ADVANCED:
+        collection_names = ['wiso_documents']
+    else:
+        collection_names = categorizer.get_collection_names()
+    
     stats = {
         'total': 0,
         'html': 0,
         'pdf': 0,
         'chunks': 0,
         'skipped': 0,
-        'collections': {name: 0 for name in COLLECTIONS.keys()},
+        'collections': {name: 0 for name in collection_names},
         'errors': 0
     }
     
     # Sammle verarbeitete Dokumente nach Collection
-    docs_by_collection = {name: [] for name in COLLECTIONS.keys()}
+    docs_by_collection = {name: [] for name in collection_names}
     
     # Phase 1: Dokumente verarbeiten oder aus Checkpoint laden
     if phase1_checkpoint is not None:
@@ -345,39 +366,39 @@ def run_production_scraper():
         
         # Progress bar für Phase 1
         with tqdm(total=total_docs, desc="📝 Phase 1: Dokumente verarbeiten", unit="doc") as pbar:
-        for row in cursor:
-            doc_id, url, title, content, content_type = row
-            
-            # Zeige aktuell bearbeitete Datei
-            short_title = title[:40] + "..." if len(title) > 40 else title
-            pbar.set_description(f"📝 [{content_type.upper()}] {short_title}")
-            
-            result = process_document(
-                doc_id, url, title, content, content_type,
-                content_cleaner, chunker, deduplicator
-            )
-            
-            stats['total'] += 1
-            stats[content_type] += 1
-            
-            if result is None:
-                stats['skipped'] += 1
-            else:
-                collection_name = result['collection_name']
+            for row in cursor:
+                doc_id, url, title, content, content_type = row
                 
-                # Überspringe wenn Collection bereits fertig ist
-                if collection_name in completed_collections:
+                # Zeige aktuell bearbeitete Datei
+                short_title = title[:40] + "..." if len(title) > 40 else title
+                pbar.set_description(f"📝 [{content_type.upper()}] {short_title}")
+                
+                result = process_document(
+                    doc_id, url, title, content, content_type,
+                    content_cleaner, chunker, deduplicator, categorizer
+                )
+                
+                stats['total'] += 1
+                stats[content_type] += 1
+                
+                if result is None:
                     stats['skipped'] += 1
                 else:
-                    stats['chunks'] += len(result['chunks'])
-                    docs_by_collection[collection_name].append(result)
-            
-            pbar.set_postfix({
-                'Docs': sum(len(docs) for docs in docs_by_collection.values()),
-                'Chunks': f"{stats['chunks']:,}",
-                'Skip': stats['skipped']
-            })
-            pbar.update(1)
+                    collection_name = result['collection_name']
+                    
+                    # Überspringe wenn Collection bereits fertig ist
+                    if collection_name in completed_collections:
+                        stats['skipped'] += 1
+                    else:
+                        stats['chunks'] += len(result['chunks'])
+                        docs_by_collection[collection_name].append(result)
+                
+                pbar.set_postfix({
+                    'Docs': sum(len(docs) for docs in docs_by_collection.values()),
+                    'Chunks': f"{stats['chunks']:,}",
+                    'Skip': stats['skipped']
+                })
+                pbar.update(1)
     
         conn.close()
         
@@ -388,7 +409,7 @@ def run_production_scraper():
             print(f"   ♻️  {len(completed_collections)} Collections übersprungen (bereits fertig)")
         
         # Speichere Phase 1 Checkpoint
-        save_phase1_checkpoint(docs_by_collection)
+        checkpoint_mgr.save_phase1_checkpoint(docs_by_collection)
     
     # Phase 2: Batch-Embedding und Speicherung
     print("\n" + "=" * 80)
@@ -479,10 +500,10 @@ def run_production_scraper():
         print(f"   🎉 Collection '{collection_name}' abgeschlossen! (Total: {actual_count:,} Chunks)")
     
     # Lösche Phase 1 Checkpoint (alle Collections erfolgreich)
-    delete_phase1_checkpoint()
+    checkpoint_mgr.delete_phase1_checkpoint()
     
-    # Deduplication-Statistiken
-    dedup_stats = deduplicator.get_statistics()
+    # Deduplication-Statistiken (nur für Advanced RAG)
+    dedup_stats = deduplicator.get_statistics() if deduplicator else None
     
     # Finale Statistiken
     elapsed_time = time.time() - start_time
@@ -509,10 +530,14 @@ def run_production_scraper():
             actual_count = collection.count()
             print(f"   • {collection_name}: {actual_count:,} Chunks")
     
-    print(f"\n🔍 Deduplication:")
-    print(f"   • Unique Chunks: {dedup_stats['total_seen']:,}")
-    print(f"   • Similarity Threshold: {dedup_stats['similarity_threshold']}")
-    print(f"   • Duplikate entfernt: {stats['chunks'] - dedup_stats['total_seen']:,}")
+    if dedup_stats:
+        print(f"\n🔍 Deduplication:")
+        print(f"   • Unique Chunks: {dedup_stats['total_seen']:,}")
+        print(f"   • Similarity Threshold: {dedup_stats['similarity_threshold']}")
+        print(f"   • Duplikate entfernt: {stats['chunks'] - dedup_stats['total_seen']:,}")
+    else:
+        print(f"\n🔍 Deduplication:")
+        print(f"   • Naive Setup: Keine Deduplizierung")
     
     print(f"\n💾 Vektordatenbank:")
     print(f"   • Pfad: {VECTOR_DB}")
