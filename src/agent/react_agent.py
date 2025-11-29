@@ -41,16 +41,19 @@ class ReactAgent:
             print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
         
         # Initialisiere Ollama LLM (optimiert für Performance)
-        # Kleinere Context-Size für kleine Modelle
+        # Context-Size nach Modellgröße - größer für bessere Multi-Turn Gespräche
         MODEL_CTX_SIZES = {
-            "0.5b": 1024,
-            "3b": 2048,
-            "20b": 8192,
+            "0.5b": 2048,
+            "1b": 4096,
+            "3b": 8192,
+            "8b": 8192,
+            "20b": 16384,
+            "70b": 16384,
         }
         
         # Extract size from model name
         model_lower = settings.OLLAMA_MODEL.lower()
-        ctx_size = 4096  # default
+        ctx_size = 8192  # default - ausreichend für die meisten Gespräche
         for size_key, ctx_value in MODEL_CTX_SIZES.items():
             if size_key in model_lower:
                 ctx_size = ctx_value
@@ -71,14 +74,31 @@ class ReactAgent:
         self.tools = self._create_tools()
         
         # Optimierter System-Prompt für bessere Tool-Nutzung
-        system_prompt = """Du bist ein Assistent für KLIPS 2.0 (Uni Köln).
+        system_prompt = """Du bist ein hilfreicher Assistent für KLIPS 2.0 (Universität zu Köln).
 
-Bewerbung: Nutze `klips2_apply_study` (benötigt username, password, semester, degree_type, study_program, entry_semester).
-Account aktivieren: Nutze `klips2_activate_account` NUR wenn User einen Aktivierungscode hat.
-Registrierung: Nutze `klips2_register` für neue Accounts.
-Uni-Fragen: Nutze `university_knowledge_search`.
+WICHTIG: Nutze IMMER die verfügbaren Tools wenn der User eine Aktion durchführen möchte!
 
-Nutze die Daten, die der User gibt. Erfinde nichts."""
+## Tool-Nutzung:
+
+**Bewerbung/Einschreibung** → `klips2_apply_study`
+- Verwende bei: "bewirb mich", "einschreiben", "Bewerbung", "validieren", "prüfen"
+- Parameter: username, password, semester, degree_type, study_program, entry_semester
+- Setze validate_only=true wenn nur validiert/geprüft werden soll
+
+**Account aktivieren** → `klips2_activate_account`
+- Nur wenn User einen Aktivierungscode hat
+
+**Registrierung** → `klips2_register`
+- Für neue Accounts
+
+**Uni-Fragen** → `university_knowledge_search`
+- Für Informationen über Studiengänge, Fristen, etc.
+
+## Regeln:
+1. Wenn der User Credentials und Studiendaten angibt → SOFORT Tool aufrufen
+2. Nutze EXAKT die Daten vom User, erfinde nichts
+3. Bei "validieren" oder "prüfen" → validate_only=true setzen
+4. Antworte auf Deutsch"""
 
         # Erstelle React Agent mit kompaktem System-Prompt
         self.agent = create_langgraph_agent(

@@ -14,6 +14,10 @@ TEMPERATURE=0.7
 CHUNK_SIZE=500
 CHUNK_OVERLAP=50
 
+# KLIPS2 Integration (Optional)
+KLIPS_USERNAME=your_username
+KLIPS_PASSWORD=your_password
+
 # LangSmith (Optional)
 LANGSMITH_TRACING=false
 LANGSMITH_API_KEY=your_key
