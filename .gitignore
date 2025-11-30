@@ -1,0 +1,327 @@
+# ============================================================================
+# PYTHON
+# ============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Evaluation Checkpoints
+checkpoints/
+src/evaluation/checkpoints/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+# .python-version
+
+# pipenv
+#Pipfile.lock
+
+# poetry
+#poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# ============================================================================
+# ENVIRONMENTS
+# ============================================================================
+
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+Masterarbeit/
+
+# ============================================================================
+# IDE & EDITORS
+# ============================================================================
+
+# PyCharm
+.idea/
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject
+
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ============================================================================
+# TYPE CHECKERS
+# ============================================================================
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# pytype
+.pytype/
+
+# Cython
+cython_debug/
+
+# ============================================================================
+# PROJECT-SPECIFIC
+# ============================================================================
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Project notes
+hyperparameter_documentation.md
+Notizen Pascal.txt
+*.txt.bak
+TODO.md
+NOTES.md
+
+# Streamlit cache
+.streamlit/
+
+# Helper scripts
+start_streamlit.bat
+start_streamlit.ps1
+run_pipeline_*.py
+test_*.py
+!tests/**/test_*.py
+
+# ============================================================================
+# DATA & DATABASES
+# ============================================================================
+
+# Data directories (keep structure, ignore content)
+data/*
+!data/.gitkeep
+!data/README.md
+
+# Specific data subdirectories
+data/scraped/
+data/pdfs/
+data/pipeline_*/
+data/test_*/
+data/enhanced_*/
+data/wiso_*/
+data/cache/
+
+# Database files (NICHT im Repo - lokal halten, Backups in /backups/)
+*.db
+*.sqlite
+*.sqlite3
+
+# Explizit ignorieren (waren vorher in LFS - zu groß)
+data/content_database.db
+data/vector_db/chroma.sqlite3
+
+# ChromaDB (andere Orte ignorieren)
+**/vector_db/*.bin
+**/vector_db/*.pkl
+src/scraper/vector_db/*
+!src/scraper/vector_db/.gitkeep
+
+# ============================================================================
+# SCRAPER OUTPUT FILES
+# ============================================================================
+
+# JSON output files
+scraped_data.json
+discovered_urls*.json
+discovered_urls*.txt
+cached_urls*.json
+cached_urls*.txt
+pipeline_report*.json
+urls_*.json
+
+# Metrics and statistics
+*_metrics.json
+*_statistics.json
+*_report.json
+*_report.md
+*_report.html
+cache_statistics.json
+scraper_metrics.json
+deduplication_report.json
+content_changes.json
+failed_urls.json
+pdf_metadata.json
+
+# Analysis output
+src/scraper/data_analysis/scraped_data.json
+src/scraper/data_analysis/pipeline_analysis_report.json
+src/scraper/data_analysis/pipeline_analysis_report.md
+src/scraper/data_analysis/pipeline_analysis_report.html
+
+# Scraper cache and temporary files
+src/scraper/output/*
+src/scraper/*.db
+src/scraper/cache/
+
+# ============================================================================
+# DOWNLOADED & GENERATED FILES
+# ============================================================================
+
+# PDFs (keep documentation PDFs)
+*.pdf
+!docs/*.pdf
+!README*.pdf
+
+# Large model files
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.ckpt
+
+# Embeddings
+embeddings/
+*.npy
+*.npz
+
+# ============================================================================
+# LOGS & TEMPORARY FILES
+# ============================================================================
+
+# Log files
+*.log
+logs/
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================================================
+# SYSTEM FILES
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ============================================================================
+# BACKUP FILES
+# ============================================================================
+
+*.bak
+*.backup
+*.old
+*_backup
+*_old
