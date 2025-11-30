@@ -28,7 +28,6 @@ from langsmith import Client
 from config.settings import (
     OLLAMA_MODEL,
     OLLAMA_BASE_URL,
-    OLLAMA_EMBEDDING_MODEL,
     LANGSMITH_API_KEY,
     LANGSMITH_PROJECT
 )
@@ -196,19 +195,11 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     )
     print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL}")
     
-    # Ollama Embeddings für answer_relevancy (später aktivieren)
-    # embeddings = OllamaEmbeddings(
-    #     model=OLLAMA_EMBEDDING_MODEL,
-    #     base_url=OLLAMA_BASE_URL
-    # )
-    # print(f"   Embeddings: {OLLAMA_EMBEDDING_MODEL} @ {OLLAMA_BASE_URL}")
-    
     # Standard RAGAS-Metriken
     metrics = [
         faithfulness,       # Ist Antwort treu zum Kontext?
         context_recall,     # Wurden alle relevanten Infos abgerufen?
         context_precision   # Sind relevante Chunks höher gerankt?
-        # answer_relevancy  # Ist Antwort relevant zur Frage? (benötigt Embeddings)
     ]
     print(f"   Metriken: {[m.name for m in metrics]}")
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
