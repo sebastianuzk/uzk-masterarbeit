@@ -7,7 +7,7 @@ import sqlite3
 import time
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional, Dict, Set
+from typing import Optional, Dict
 import logging
 
 logger = logging.getLogger(__name__)

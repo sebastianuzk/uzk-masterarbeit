@@ -7,14 +7,11 @@ Command-line tool für die Verwaltung des HTML-Content-Cache.
 Ermöglicht Inspektion, Cleanup, Export und weitere Operationen.
 """
 
-import asyncio
 import argparse
-import json
 import logging
 from pathlib import Path
 from datetime import datetime
 import sys
-import os
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

@@ -5,13 +5,11 @@ Vollständiges Content-Storage System
 Erweitert URLCache um vollständige Content-Speicherung
 """
 
-import sqlite3
 import gzip
 import json
-import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 import logging
 
 from src.scraper.utils.url_cache import URLCache

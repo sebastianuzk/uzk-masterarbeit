@@ -9,7 +9,7 @@ Content Database.
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict
 import sys
 from tqdm import tqdm
 
@@ -17,8 +17,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.scraper.utils.content_database import ContentDatabase
-from src.scraper.utils.html_cache import HTMLContentCache
-from src.scraper.utils.pdf_extractor import PDFExtractor, sanitize_metadata
+from src.scraper.utils.pdf_extractor import PDFExtractor
 
 logging.basicConfig(
     level=logging.INFO,

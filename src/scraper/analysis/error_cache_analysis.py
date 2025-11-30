@@ -12,7 +12,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.scraper.utils.error_cache import ErrorCache
 from pathlib import Path
-import json
 
 def analyze_error_cache():
     """Analysiere Error-Cache Status."""

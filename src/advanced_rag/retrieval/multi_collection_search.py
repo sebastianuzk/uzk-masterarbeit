@@ -6,10 +6,9 @@ Durchsucht alle ChromaDB-Collections statt nur einer.
 Komplette Advanced-Retrieval-Logik inkl. Client-Management.
 """
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import chromadb
 from pathlib import Path
-from langsmith import traceable
 
 logger = logging.getLogger(__name__)
 

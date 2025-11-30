@@ -6,7 +6,6 @@ Entfernt Boilerplate-Inhalte und verbessert die Qualität extrahierter Texte.
 """
 
 import re
-from typing import List, Set
 from bs4 import BeautifulSoup, Comment
 import logging
 

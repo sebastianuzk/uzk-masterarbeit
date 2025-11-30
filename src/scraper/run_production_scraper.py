@@ -17,7 +17,6 @@ import gzip
 import re
 from pathlib import Path
 import chromadb
-from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import time
@@ -273,7 +272,7 @@ def run_production_scraper():
                     metadata={"description": "WiSo Fakultät - Alle Dokumente (Naive RAG)"}
                 )
                 print(f"   ✅ Collection '{collection_name}' erstellt (NAIVE RAG - keine Kategorisierung)")
-            except:
+            except Exception:
                 collections_dict[collection_name] = client.get_collection(name=collection_name)
                 print(f"   ♻️  Collection '{collection_name}' geladen")
     
@@ -293,7 +292,7 @@ def run_production_scraper():
                         metadata={"description": f"WiSo Fakultät - {collection_name}"}
                     )
                     print(f"   ✅ Collection '{collection_name}' erstellt")
-                except:
+                except Exception:
                     # Falls Collection existiert aber leer ist
                     collections_dict[collection_name] = client.get_collection(name=collection_name)
                     print(f"   ♻️  Collection '{collection_name}' geladen")
@@ -478,7 +477,6 @@ def run_production_scraper():
             )
         else:
             # Große Collection: In Batches speichern
-            num_batches = (len(all_chunks) + CHROMADB_BATCH_SIZE - 1) // CHROMADB_BATCH_SIZE
             with tqdm(total=len(all_chunks), desc=f"   💾 Speichern", unit="chunk") as save_pbar:
                 for i in range(0, len(all_chunks), CHROMADB_BATCH_SIZE):
                     end_idx = min(i + CHROMADB_BATCH_SIZE, len(all_chunks))

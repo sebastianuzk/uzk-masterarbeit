@@ -407,7 +407,6 @@ class WisoCrawler:
         pdf_cache_dir.mkdir(parents=True, exist_ok=True)
         
         # URL als Dateiname verwenden (für eindeutige Zuordnung)
-        import re
         # URL bereinigen: illegale Zeichen für Dateinamen entfernen/ersetzen
         safe_url = re.sub(r'[<>:"|?*\\\/]', '_', url)  # Windows/Linux-illegale Zeichen ersetzen
         safe_url = re.sub(r'https?_', '', safe_url)  # http/https Prefix entfernen
@@ -984,7 +983,6 @@ class WisoCrawler:
         Args:
             filepath: Ziel-Dateipfad
         """
-        import json
         from pathlib import Path
         
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)

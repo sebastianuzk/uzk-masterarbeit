@@ -23,7 +23,7 @@ from ragas import evaluate
 from ragas.metrics import faithfulness, context_recall, context_precision  # answer_relevancy benötigt Embeddings
 from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
 from ragas.run_config import RunConfig
-from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain_ollama import ChatOllama
 from langsmith import Client
 from config.settings import (
     OLLAMA_MODEL,

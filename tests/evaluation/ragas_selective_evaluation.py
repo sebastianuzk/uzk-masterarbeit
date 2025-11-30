@@ -14,7 +14,6 @@ import time
 
 # Fix Windows Terminal encoding für Emojis
 if os.name == 'nt':
-    import codecs
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
 

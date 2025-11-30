@@ -9,8 +9,6 @@ Verwalte und durchsuche den gespeicherten Website-Content.
 import argparse
 import json
 import sys
-from pathlib import Path
-from datetime import datetime
 
 from src.scraper.utils.full_content_cache import FullContentCache
 
@@ -209,7 +207,7 @@ def main():
     subparsers = parser.add_subparsers(dest='command', help='Verfügbare Befehle')
     
     # Stats Command
-    stats_parser = subparsers.add_parser('stats', help='Zeige Cache-Statistiken')
+    subparsers.add_parser('stats', help='Zeige Cache-Statistiken')
     
     # Search Command  
     search_parser = subparsers.add_parser('search', help='Durchsuche Content')

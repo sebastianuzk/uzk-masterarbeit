@@ -15,7 +15,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pathlib import Path
 import sqlite3
-import json
 from datetime import datetime
 from src.scraper.utils.error_cache import ErrorCache
 
@@ -88,11 +87,8 @@ def analyze_pdf_cache():
     total_size = sum(f.stat().st_size for f in pdf_files)
     
     # Letzte Aktualisierung
-    if pdf_files:
-        last_modified = max(f.stat().st_mtime for f in pdf_files)
-        last_update = datetime.fromtimestamp(last_modified).isoformat()
-    else:
-        last_update = None
+    last_modified = max(f.stat().st_mtime for f in pdf_files)
+    last_update = datetime.fromtimestamp(last_modified).isoformat()
     
     return {
         "status": "active", 
