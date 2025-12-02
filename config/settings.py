@@ -7,14 +7,27 @@ from dotenv import load_dotenv
 # Lade Umgebungsvariablen aus .env Datei
 load_dotenv()
 
+# Ollama Server-Optimierungen (werden beim Import automatisch gesetzt)
+# Diese Variablen müssen VOR dem Ollama-Server-Start gesetzt sein
+# OLLAMA_MODELS muss manuell gesetzt werden (systemabhängig)
+os.environ.setdefault("OLLAMA_FLASH_ATTENTION", "1")  # ~20% schneller, weniger VRAM
+os.environ.setdefault("OLLAMA_KEEP_ALIVE", "30m")  # Modell 30 Min im RAM halten
+os.environ.setdefault("OLLAMA_NUM_GPU", "99")  # Alle Layer auf GPU
+
 class Settings:
     """Zentrale Konfigurationsklasse"""
     
     # Ollama Konfiguration
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")  # Kleineres Modell für begrenzte RAM-Systeme
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:3b")  # Kleineres Modell für begrenzte RAM-Systeme
     OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:8b")
     OLLAMA_EVALUATION_TIMEOUT = int(os.getenv("OLLAMA_EVALUATION_TIMEOUT", "300"))  # 5 Minuten für RAGAS-Evaluationen
+    REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "120"))  # 2 Minuten Timeout für LLM-Requests
+    
+    # Ollama Server-Optimierungen (aus Umgebungsvariablen)
+    OLLAMA_FLASH_ATTENTION = os.getenv("OLLAMA_FLASH_ATTENTION", "1") == "1"
+    OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
+    OLLAMA_NUM_GPU = int(os.getenv("OLLAMA_NUM_GPU", "99"))
     
     # LLM Konfiguration
     TEMPERATURE = 0.0

@@ -119,25 +119,24 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         print(f"   ✅ Antwort: {answer[:80]}...")
         
         # Warten damit LangSmith Trace vollständig ist
-        time.sleep(3)
+        time.sleep(1)  # Reduziert von 3s auf 1s
         
-        # RAG-Kontext aus LangSmith holen - verwende session_id um exakt diesen Run zu finden
+        # RAG-Kontext aus LangSmith holen - nur den letzten Run abrufen
         print(f"   🔍 Hole RAG-Kontext aus LangSmith...")
         
-        # Hole alle Root-Runs und filtere nach session_id in Metadata
-        all_runs = list(langsmith_client.list_runs(
+        # Optimiert: Nur den letzten Run holen (statt alle)
+        recent_runs = list(langsmith_client.list_runs(
             project_name=LANGSMITH_PROJECT,
-            is_root=True
+            is_root=True,
+            limit=1  # Nur den letzten Run
         ))
         
         contexts = ["Kein RAG-Kontext gefunden"]  # Default als Liste
         matching_run = None
         
-        # Finde Run mit unserer session_id
-        for run in all_runs:
-            if run.metadata and run.metadata.get("session_id") == session_id:
-                matching_run = run
-                break
+        # Der letzte Run sollte unser Run sein
+        if recent_runs:
+            matching_run = recent_runs[0]
         
         if matching_run:
             trace_id = matching_run.trace_id
@@ -215,7 +214,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
     # RunConfig für parallele Requests an Ollama
-    run_config = RunConfig(max_workers=4)
+    run_config = RunConfig(max_workers=8)
     
     # Evaluation durchführen
     results = evaluate(
@@ -474,8 +473,8 @@ def main():
     print("🎯 RAGAS-EVALUATION - WiSo-Chatbot")
     print("=" * 80 + "\n")
     
-    # Anzahl Fragen (für Test: 3, für vollständig: 40)
-    NUM_QUESTIONS = 40  # VOLLSTÄNDIGE PRODUKTIVE EVALUATION
+    # Anzahl Fragen: None = alle Fragen aus dem Testset laden
+    NUM_QUESTIONS = None  # ALLE FRAGEN AUS DEM TESTSET
     
     # Checkpoint-Pfad
     checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
@@ -496,7 +495,7 @@ def main():
                 # Alter Checkpoint-Format (nur Dataset)
                 dataset = checkpoint_data
                 # test_df muss neu geladen werden
-                test_df = load_testset(limit=NUM_QUESTIONS)
+                test_df = load_testset()  # Alle Fragen laden
             
             print(f"   ✅ {len(dataset.samples)} Antworten aus Checkpoint geladen\n")
             
@@ -507,9 +506,9 @@ def main():
             langsmith_client = Client(api_key=LANGSMITH_API_KEY)
             print(f"   ✅ Projekt: {LANGSMITH_PROJECT}\n")
             
-            # 2. Testset laden
+            # 2. Testset laden (alle Fragen)
             print("📂 Lade Testset...")
-            test_df = load_testset(limit=NUM_QUESTIONS)
+            test_df = load_testset()  # Alle Fragen laden
             print()
             
             # 3. Chatbot initialisieren
@@ -527,7 +526,6 @@ def main():
         display_and_save_results(results_df, test_df)
         
         print("✅ Evaluation erfolgreich abgeschlossen!")
-        print(f"\n💡 Für vollständige Evaluation: NUM_QUESTIONS = 40\n")
         
     except KeyboardInterrupt:
         print("\n\n⚠️ Evaluation abgebrochen!\n")

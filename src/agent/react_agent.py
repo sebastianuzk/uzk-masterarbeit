@@ -38,6 +38,7 @@ class ReactAgent:
         MODEL_CTX_SIZES = {
             "0.5b": 1024,
             "3b": 2048,
+            "8b": 16000  # Optimiert für RTX 2060 (8GB VRAM)
         }
         
         # Extract size from model name
@@ -54,7 +55,7 @@ class ReactAgent:
             temperature=settings.TEMPERATURE,
             num_ctx=ctx_size,  # Adaptiver Context für schnellere Antworten
             timeout=settings.REQUEST_TIMEOUT,
-            keep_alive="5m",  # Modell im RAM halten für schnellere Antworten
+            keep_alive=settings.OLLAMA_KEEP_ALIVE,  # Aus Settings (default: 30m)
         )
         
         # Initialisiere Tools (einschließlich E-Mail-Tool)

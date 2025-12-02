@@ -174,22 +174,23 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         answer = agent.chat(question, session_id=session_id)
         print(f"   ✅ Antwort: {answer[:80]}...")
         
-        time.sleep(3)
+        time.sleep(1)  # Reduziert von 3s auf 1s
         
         print(f"   🔍 Hole RAG-Kontext aus LangSmith...")
         
-        all_runs = list(langsmith_client.list_runs(
+        # Optimiert: Nur den letzten Run holen (statt alle)
+        recent_runs = list(langsmith_client.list_runs(
             project_name=LANGSMITH_PROJECT,
-            is_root=True
+            is_root=True,
+            limit=1  # Nur den letzten Run
         ))
         
         contexts = ["Kein RAG-Kontext gefunden"]
         matching_run = None
         
-        for run in all_runs:
-            if run.metadata and run.metadata.get("session_id") == session_id:
-                matching_run = run
-                break
+        # Der letzte Run sollte unser Run sein
+        if recent_runs:
+            matching_run = recent_runs[0]
         
         if matching_run:
             trace_id = matching_run.trace_id
