@@ -45,21 +45,21 @@ class TestMultiTool:
 
     def test_multi_02_klips_then_email(self):
         """
-        MULTI-TOOL: Get course details and email about it.
+        MULTI-TOOL: Get course details and send summary via email.
         """
         user_prompt = """
-        Schau nach den Details zum Kurs "Datenbanken" und schicke 
-        eine E-Mail an student@uni-koeln.de mit der Zusammenfassung.
+        Schau nach den Details zum Kurs 14302.0001 und schicke 
+        mir dann eine E-Mail mit der Zusammenfassung (Betreff: Kursinfo).
         """
         
         gold = GoldStandard(
             required_tools=["klips2_get_course_details", "send_email"],
             required_arguments={
                 "klips2_get_course_details": {
-                    "course_name": "Datenbanken"
+                    "course_id": "14302.0001"
                 },
                 "send_email": {
-                    "to": "student@uni-koeln.de"
+                    "subject": "Kursinfo"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -73,14 +73,13 @@ class TestMultiTool:
         """
         user_prompt = """
         Recherchiere die aktuellen Bewerbungsfristen für die Uni Köln 
-        und schicke das Ergebnis an info@example.com mit Betreff "Fristen".
+        und schicke das Ergebnis als E-Mail mit Betreff "Fristen".
         """
         
         gold = GoldStandard(
             required_tools=["duckduckgo_search", "send_email"],
             required_arguments={
                 "send_email": {
-                    "to": "info@example.com",
                     "subject": "Fristen"
                 }
             },

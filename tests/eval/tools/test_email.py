@@ -2,16 +2,15 @@
 Email Tool - Evaluation Test Scenarios
 
 Tool: send_email
-Purpose: Send emails on behalf of the user
+Purpose: Send emails to a preconfigured default recipient
 
 Required arguments:
-- to (recipient email address)
 - subject (email subject line)
 - body (email content)
 
-Optional arguments:
-- cc (carbon copy recipients)
-- bcc (blind carbon copy recipients)
+NOTE: This tool does NOT have a 'to' parameter!
+Emails are automatically sent to the DEFAULT_RECIPIENT configured in .env
+The user doesn't need to specify a recipient.
 
 Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
 """
@@ -31,23 +30,22 @@ pytestmark = [pytest.mark.llm, pytest.mark.eval]
 
 
 class TestEmailEasy:
-    """Easy scenarios - all email information provided clearly."""
+    """Easy scenarios - clear email requests with subject and body."""
 
     def test_email_01_complete_formal(self):
         """
-        EASY: Complete formal email with all fields specified.
+        EASY: Complete email with subject and body specified.
         """
         user_prompt = """
-        Sende eine E-Mail an professor@uni-koeln.de mit dem Betreff 
-        "Frage zur Klausur" und dem Inhalt "Sehr geehrter Herr Professor, 
-        ich habe eine Frage zur kommenden Klausur. Mit freundlichen Grüßen"
+        Sende eine E-Mail mit dem Betreff "Frage zur Klausur" und dem Inhalt 
+        "Sehr geehrter Herr Professor, ich habe eine Frage zur kommenden Klausur. 
+        Mit freundlichen Grüßen"
         """
         
         gold = GoldStandard(
             required_tools=["send_email"],
             required_arguments={
                 "send_email": {
-                    "to": "professor@uni-koeln.de",
                     "subject": "Frage zur Klausur"
                 }
             },
@@ -62,7 +60,6 @@ class TestEmailEasy:
         """
         user_prompt = """
         E-Mail versenden:
-        An: sekretariat@uni-koeln.de
         Betreff: Terminanfrage
         Text: Ich möchte einen Termin für die Studienberatung vereinbaren.
         """
@@ -71,7 +68,6 @@ class TestEmailEasy:
             required_tools=["send_email"],
             required_arguments={
                 "send_email": {
-                    "to": "sekretariat@uni-koeln.de",
                     "subject": "Terminanfrage"
                 }
             },
@@ -80,28 +76,25 @@ class TestEmailEasy:
         
         assert gold.required_tools == ["send_email"]
 
-    def test_email_03_with_cc(self):
+    def test_email_03_short_message(self):
         """
-        EASY: Email with CC recipient.
+        EASY: Short email message.
         """
         user_prompt = """
-        Schicke eine Mail an team@projekt.de (CC an chef@projekt.de) 
-        mit Betreff "Projekt Update" und Inhalt "Das Projekt ist abgeschlossen."
+        Schicke eine Mail mit Betreff "Projekt Update" und Inhalt "Das Projekt ist abgeschlossen."
         """
         
         gold = GoldStandard(
             required_tools=["send_email"],
             required_arguments={
                 "send_email": {
-                    "to": "team@projekt.de",
-                    "cc": "chef@projekt.de",
                     "subject": "Projekt Update"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
         )
         
-        assert "cc" in gold.required_arguments["send_email"]
+        assert gold.required_tools == ["send_email"]
 
 
 class TestEmailMedium:
@@ -112,16 +105,16 @@ class TestEmailMedium:
         MEDIUM: Email request in conversational style.
         """
         user_prompt = """
-        Kannst du für mich eine E-Mail an meinen Betreuer schicken? 
-        Seine Adresse ist betreuer@uni-koeln.de. Es geht um meine 
-        Masterarbeit - ich möchte einen Termin vereinbaren.
+        Kannst du für mich eine E-Mail schicken? Es geht um meine 
+        Masterarbeit - ich möchte einen Termin vereinbaren. Der Betreff
+        sollte "Masterarbeit Termin" sein.
         """
         
         gold = GoldStandard(
             required_tools=["send_email"],
             required_arguments={
                 "send_email": {
-                    "to": "betreuer@uni-koeln.de"
+                    "subject": "Masterarbeit Termin"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -134,15 +127,14 @@ class TestEmailMedium:
         MEDIUM: Email request in English.
         """
         user_prompt = """
-        Please send an email to support@university.edu asking about 
-        the enrollment deadline. Subject should be "Enrollment Question".
+        Please send an email with subject "Enrollment Question" asking about 
+        the enrollment deadline.
         """
         
         gold = GoldStandard(
             required_tools=["send_email"],
             required_arguments={
                 "send_email": {
-                    "to": "support@university.edu",
                     "subject": "Enrollment Question"
                 }
             },
@@ -151,20 +143,41 @@ class TestEmailMedium:
         
         assert gold.required_tools == ["send_email"]
 
-    def test_email_06_multiple_recipients(self):
+    def test_email_06_urgent_email(self):
         """
-        MEDIUM: Email to multiple recipients.
+        MEDIUM: Urgent email request.
         """
         user_prompt = """
-        Sende eine Nachricht an team1@example.com und team2@example.com 
-        mit Betreff "Meeting morgen" und Info dass das Meeting um 14 Uhr ist.
+        Schicke dringend eine E-Mail mit Betreff "Dringende Anfrage" - 
+        es geht um mein Passwort das nicht funktioniert.
         """
         
         gold = GoldStandard(
             required_tools=["send_email"],
             required_arguments={
                 "send_email": {
-                    "subject": "Meeting morgen"
+                    "subject": "Dringende Anfrage"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["send_email"]
+
+    def test_email_07_forward_info(self):
+        """
+        MEDIUM: Request to send information.
+        """
+        user_prompt = """
+        Sende eine Nachricht: Das Meeting wurde auf 15 Uhr verschoben.
+        Betreff: Meeting Update
+        """
+        
+        gold = GoldStandard(
+            required_tools=["send_email"],
+            required_arguments={
+                "send_email": {
+                    "subject": "Meeting Update"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -176,14 +189,13 @@ class TestEmailMedium:
 class TestEmailHard:
     """Hard scenarios - missing or problematic email information."""
 
-    def test_email_07_missing_recipient(self):
+    def test_email_08_missing_subject(self):
         """
-        HARD: Email request without recipient.
-        LLM should ask for recipient, NOT call tool.
+        HARD: Email request without subject.
+        LLM should ask for subject, NOT call tool.
         """
         user_prompt = """
-        Schreibe eine E-Mail mit dem Betreff "Wichtige Anfrage" 
-        und frage nach dem Status meiner Bewerbung.
+        Schreibe eine E-Mail und frage nach dem Status meiner Bewerbung.
         """
         
         gold = GoldStandard(
@@ -194,12 +206,12 @@ class TestEmailHard:
         
         assert "send_email" in gold.forbidden_tools
 
-    def test_email_08_missing_content(self):
+    def test_email_09_missing_content(self):
         """
         HARD: Email request without clear content.
         """
         user_prompt = """
-        Sende eine E-Mail an test@example.com.
+        Sende eine E-Mail mit Betreff "Test".
         """
         
         gold = GoldStandard(
@@ -210,13 +222,12 @@ class TestEmailHard:
         
         assert "send_email" in gold.forbidden_tools
 
-    def test_email_09_invalid_email(self):
+    def test_email_10_too_vague(self):
         """
-        HARD: Email request with invalid email address.
+        HARD: Too vague email request.
         """
         user_prompt = """
-        Schicke eine Mail an "keine-email-adresse" mit Betreff "Test" 
-        und Inhalt "Test Nachricht".
+        Schick mal eine Mail.
         """
         
         gold = GoldStandard(
@@ -227,48 +238,27 @@ class TestEmailHard:
         
         assert "send_email" in gold.forbidden_tools
 
-    def test_email_10_urgent_with_priority(self):
+    def test_email_11_user_specifies_recipient(self):
         """
-        MEDIUM: Email with urgency indication.
+        MEDIUM: User specifies recipient (should work, recipient ignored).
+        Tool will send to default recipient anyway.
         """
         user_prompt = """
-        Schicke dringend eine E-Mail an admin@uni-koeln.de mit Betreff 
-        "Dringende Anfrage" - es geht um mein Passwort das nicht funktioniert.
+        Sende eine E-Mail an professor@uni-koeln.de mit Betreff 
+        "Frage zum Seminar" und Inhalt "Wann findet das nächste Seminar statt?"
         """
         
         gold = GoldStandard(
             required_tools=["send_email"],
             required_arguments={
                 "send_email": {
-                    "to": "admin@uni-koeln.de",
-                    "subject": "Dringende Anfrage"
+                    "subject": "Frage zum Seminar"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
         )
         
-        assert gold.required_tools == ["send_email"]
-
-    def test_email_11_forward_info(self):
-        """
-        MEDIUM: Forward information to someone.
-        """
-        user_prompt = """
-        Leite diese Information an kollege@firma.de weiter: 
-        Das Meeting wurde auf 15 Uhr verschoben. Betreff: Meeting Update
-        """
-        
-        gold = GoldStandard(
-            required_tools=["send_email"],
-            required_arguments={
-                "send_email": {
-                    "to": "kollege@firma.de",
-                    "subject": "Meeting Update"
-                }
-            },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
+        # Tool should still be called - it will use default recipient
         assert gold.required_tools == ["send_email"]
 
 

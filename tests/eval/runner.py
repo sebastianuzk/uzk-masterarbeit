@@ -1,0 +1,807 @@
+"""
+Evaluation Runner for Tool Usage Assessment
+
+This module executes evaluation scenarios against an LLM and collects metrics
+for scientific analysis of tool selection accuracy.
+
+Metrics collected:
+- Precision: Correct tools called / Total tools called
+- Recall: Correct tools called / Expected tools
+- F1-Score: Harmonic mean of precision and recall
+- Exact Match Rate: Scenarios with perfect tool selection
+- Argument Accuracy: Correct arguments / Expected arguments
+
+Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+"""
+
+import csv
+import json
+import re
+import time
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
+from enum import Enum
+from io import StringIO
+from pathlib import Path
+from typing import Optional
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+
+from tests.eval.evaluation import (
+    ToolCall,
+    GoldStandard,
+    EvaluationResult,
+    ArgumentMatchMode,
+    evaluate_tool_run,
+)
+
+
+class Difficulty(str, Enum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+    MULTI_STEP = "multi_step"
+
+
+@dataclass
+class EvaluationScenario:
+    """A single evaluation scenario with prompt and expected outcome."""
+    id: str
+    tool: str  # Primary tool being tested
+    difficulty: Difficulty
+    user_prompt: str
+    gold_standard: GoldStandard
+    description: str = ""
+    category: str = ""  # e.g., "registration", "application", "search"
+    short_id: str = ""  # Short ID like s1, s2, s3...
+
+
+@dataclass
+class ScenarioResult:
+    """Result of running a single scenario."""
+    scenario_id: str
+    short_id: str  # Short ID like s1, s2, s3...
+    tool: str
+    difficulty: str
+    category: str
+    user_prompt: str  # The actual question/request
+    
+    # Tool selection metrics
+    expected_tools: list[str]
+    actual_tools: list[str]
+    correct_tools: list[str]
+    forbidden_tools_called: list[str]
+    
+    # Argument metrics
+    expected_arguments: dict
+    actual_arguments: dict
+    correct_arguments: dict
+    missing_arguments: dict
+    
+    # Scores
+    tool_precision: float
+    tool_recall: float
+    tool_f1: float
+    argument_accuracy: float
+    exact_match: bool
+    
+    # Meta
+    latency_ms: float
+    error: Optional[str] = None
+    
+    # Token tracking (estimated)
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+
+
+@dataclass
+class AggregatedMetrics:
+    """Aggregated metrics across all scenarios."""
+    total_scenarios: int
+    
+    # Overall scores (required)
+    mean_precision: float
+    mean_recall: float
+    mean_f1: float
+    mean_argument_accuracy: float
+    exact_match_rate: float
+    
+    # Standard deviations (required)
+    std_precision: float
+    std_recall: float
+    std_f1: float
+    
+    # By difficulty/tool/category (required)
+    metrics_by_difficulty: dict
+    metrics_by_tool: dict
+    metrics_by_category: dict
+    
+    # Error analysis (required)
+    total_errors: int
+    forbidden_tool_violations: int
+    missing_tool_count: int
+    extra_tool_count: int
+    
+    # Token and time statistics (optional, with defaults)
+    total_tokens: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    avg_tokens_per_scenario: float = 0.0
+    total_time_seconds: float = 0.0
+    avg_latency_ms: float = 0.0
+
+
+@dataclass 
+class EvaluationReport:
+    """Complete evaluation report for scientific presentation."""
+    # Meta information
+    timestamp: str
+    model_name: str
+    model_version: str
+    total_scenarios: int
+    total_duration_seconds: float
+    
+    # Results
+    individual_results: list[ScenarioResult]
+    aggregated_metrics: AggregatedMetrics
+    
+    # Configuration
+    evaluation_config: dict = field(default_factory=dict)
+
+
+def calculate_precision_recall_f1(expected: set, actual: set) -> tuple[float, float, float]:
+    """Calculate precision, recall, and F1 score."""
+    if not actual:
+        precision = 1.0 if not expected else 0.0
+    else:
+        precision = len(expected & actual) / len(actual)
+    
+    if not expected:
+        recall = 1.0 if not actual else 0.0
+    else:
+        recall = len(expected & actual) / len(expected)
+    
+    if precision + recall == 0:
+        f1 = 0.0
+    else:
+        f1 = 2 * (precision * recall) / (precision + recall)
+    
+    return precision, recall, f1
+
+
+def calculate_argument_accuracy(expected_args: dict, actual_args: dict, 
+                                match_mode: ArgumentMatchMode) -> tuple[float, dict, dict]:
+    """
+    Calculate argument accuracy and identify correct/missing arguments.
+    
+    Returns: (accuracy, correct_args, missing_args)
+    """
+    if not expected_args:
+        return 1.0, {}, {}
+    
+    correct = {}
+    missing = {}
+    
+    for tool, args in expected_args.items():
+        correct[tool] = {}
+        missing[tool] = {}
+        actual_tool_args = actual_args.get(tool, {})
+        
+        for arg_name, expected_value in args.items():
+            actual_value = actual_tool_args.get(arg_name)
+            
+            if actual_value is None:
+                missing[tool][arg_name] = expected_value
+            elif match_mode == ArgumentMatchMode.EXACT:
+                if actual_value == expected_value:
+                    correct[tool][arg_name] = actual_value
+                else:
+                    missing[tool][arg_name] = expected_value
+            elif match_mode == ArgumentMatchMode.NORMALIZED:
+                if str(actual_value).lower().strip() == str(expected_value).lower().strip():
+                    correct[tool][arg_name] = actual_value
+                else:
+                    missing[tool][arg_name] = expected_value
+            else:  # SEMANTIC - more lenient matching
+                # For semantic, we consider it correct if there's reasonable overlap
+                if str(expected_value).lower() in str(actual_value).lower() or \
+                   str(actual_value).lower() in str(expected_value).lower():
+                    correct[tool][arg_name] = actual_value
+                else:
+                    missing[tool][arg_name] = expected_value
+    
+    total_args = sum(len(args) for args in expected_args.values())
+    correct_count = sum(len(args) for args in correct.values())
+    
+    accuracy = correct_count / total_args if total_args > 0 else 1.0
+    
+    return accuracy, correct, missing
+
+
+def evaluate_scenario(
+    scenario: EvaluationScenario,
+    actual_tool_calls: list[ToolCall],
+    latency_ms: float = 0.0
+) -> ScenarioResult:
+    """
+    Evaluate a single scenario against actual LLM tool calls.
+    
+    Args:
+        scenario: The evaluation scenario with gold standard
+        actual_tool_calls: List of ToolCall objects from the LLM
+        latency_ms: Response latency in milliseconds
+    
+    Returns:
+        ScenarioResult with all metrics
+    """
+    gold = scenario.gold_standard
+    
+    # Extract tool names
+    expected_tools = set(gold.required_tools)
+    actual_tools = set(tc.name for tc in actual_tool_calls)
+    correct_tools = expected_tools & actual_tools
+    
+    # Check forbidden tools
+    forbidden_called = []
+    if gold.forbidden_tools:
+        forbidden_called = list(gold.forbidden_tools & actual_tools)
+    
+    # Calculate tool metrics
+    precision, recall, f1 = calculate_precision_recall_f1(expected_tools, actual_tools)
+    
+    # Extract actual arguments
+    actual_arguments = {}
+    for tc in actual_tool_calls:
+        actual_arguments[tc.name] = tc.arguments
+    
+    # Calculate argument accuracy
+    arg_accuracy, correct_args, missing_args = calculate_argument_accuracy(
+        gold.required_arguments,
+        actual_arguments,
+        gold.argument_match_mode
+    )
+    
+    # Exact match: all expected tools called, no forbidden tools, all arguments correct
+    exact_match = (
+        expected_tools == actual_tools and
+        len(forbidden_called) == 0 and
+        arg_accuracy == 1.0
+    )
+    
+    return ScenarioResult(
+        scenario_id=scenario.id,
+        short_id=scenario.short_id,
+        tool=scenario.tool,
+        difficulty=scenario.difficulty.value,
+        category=scenario.category,
+        user_prompt=scenario.user_prompt,
+        expected_tools=list(expected_tools),
+        actual_tools=list(actual_tools),
+        correct_tools=list(correct_tools),
+        forbidden_tools_called=forbidden_called,
+        expected_arguments=gold.required_arguments,
+        actual_arguments=actual_arguments,
+        correct_arguments=correct_args,
+        missing_arguments=missing_args,
+        tool_precision=precision,
+        tool_recall=recall,
+        tool_f1=f1,
+        argument_accuracy=arg_accuracy,
+        exact_match=exact_match,
+        latency_ms=latency_ms
+    )
+
+
+def aggregate_results(results: list[ScenarioResult]) -> AggregatedMetrics:
+    """Aggregate individual results into summary metrics."""
+    import statistics
+    
+    if not results:
+        return AggregatedMetrics(
+            total_scenarios=0,
+            mean_precision=0, mean_recall=0, mean_f1=0,
+            mean_argument_accuracy=0, exact_match_rate=0,
+            std_precision=0, std_recall=0, std_f1=0,
+            metrics_by_difficulty={}, metrics_by_tool={}, metrics_by_category={},
+            total_errors=0, forbidden_tool_violations=0,
+            missing_tool_count=0, extra_tool_count=0
+        )
+    
+    precisions = [r.tool_precision for r in results]
+    recalls = [r.tool_recall for r in results]
+    f1s = [r.tool_f1 for r in results]
+    arg_accs = [r.argument_accuracy for r in results]
+    
+    # Group by difficulty
+    by_difficulty = {}
+    for diff in Difficulty:
+        diff_results = [r for r in results if r.difficulty == diff.value]
+        if diff_results:
+            by_difficulty[diff.value] = {
+                "count": len(diff_results),
+                "mean_f1": statistics.mean([r.tool_f1 for r in diff_results]),
+                "exact_match_rate": sum(1 for r in diff_results if r.exact_match) / len(diff_results),
+                "mean_argument_accuracy": statistics.mean([r.argument_accuracy for r in diff_results])
+            }
+    
+    # Group by tool
+    by_tool = {}
+    tools = set(r.tool for r in results)
+    for tool in tools:
+        tool_results = [r for r in results if r.tool == tool]
+        by_tool[tool] = {
+            "count": len(tool_results),
+            "mean_f1": statistics.mean([r.tool_f1 for r in tool_results]),
+            "exact_match_rate": sum(1 for r in tool_results if r.exact_match) / len(tool_results),
+            "mean_argument_accuracy": statistics.mean([r.argument_accuracy for r in tool_results])
+        }
+    
+    # Group by category
+    by_category = {}
+    categories = set(r.category for r in results if r.category)
+    for cat in categories:
+        cat_results = [r for r in results if r.category == cat]
+        by_category[cat] = {
+            "count": len(cat_results),
+            "mean_f1": statistics.mean([r.tool_f1 for r in cat_results]),
+            "exact_match_rate": sum(1 for r in cat_results if r.exact_match) / len(cat_results)
+        }
+    
+    # Error analysis
+    forbidden_violations = sum(1 for r in results if r.forbidden_tools_called)
+    missing_tools = sum(
+        len(set(r.expected_tools) - set(r.actual_tools)) 
+        for r in results
+    )
+    extra_tools = sum(
+        len(set(r.actual_tools) - set(r.expected_tools)) 
+        for r in results
+    )
+    errors = sum(1 for r in results if r.error)
+    
+    # Token and time statistics
+    total_input_tokens = sum(r.input_tokens for r in results)
+    total_output_tokens = sum(r.output_tokens for r in results)
+    total_tokens = sum(r.total_tokens for r in results)
+    total_time_ms = sum(r.latency_ms for r in results)
+    
+    return AggregatedMetrics(
+        total_scenarios=len(results),
+        # Token and time stats
+        total_tokens=total_tokens,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
+        avg_tokens_per_scenario=total_tokens / len(results) if results else 0,
+        total_time_seconds=total_time_ms / 1000,
+        avg_latency_ms=total_time_ms / len(results) if results else 0,
+        # Scores
+        mean_precision=statistics.mean(precisions),
+        mean_recall=statistics.mean(recalls),
+        mean_f1=statistics.mean(f1s),
+        mean_argument_accuracy=statistics.mean(arg_accs),
+        exact_match_rate=sum(1 for r in results if r.exact_match) / len(results),
+        std_precision=statistics.stdev(precisions) if len(precisions) > 1 else 0,
+        std_recall=statistics.stdev(recalls) if len(recalls) > 1 else 0,
+        std_f1=statistics.stdev(f1s) if len(f1s) > 1 else 0,
+        metrics_by_difficulty=by_difficulty,
+        metrics_by_tool=by_tool,
+        metrics_by_category=by_category,
+        total_errors=errors,
+        forbidden_tool_violations=forbidden_violations,
+        missing_tool_count=missing_tools,
+        extra_tool_count=extra_tools
+    )
+
+
+def generate_latex_table(metrics: AggregatedMetrics) -> str:
+    """Generate LaTeX table for the results."""
+    latex = r"""
+\begin{table}[h]
+\centering
+\caption{Tool Selection Evaluation Results}
+\label{tab:tool_eval_results}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Metric} & \textbf{Mean} & \textbf{Std Dev} \\
+\midrule
+Precision & %.3f & %.3f \\
+Recall & %.3f & %.3f \\
+F1-Score & %.3f & %.3f \\
+Argument Accuracy & %.3f & -- \\
+Exact Match Rate & %.3f & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+""" % (
+        metrics.mean_precision, metrics.std_precision,
+        metrics.mean_recall, metrics.std_recall,
+        metrics.mean_f1, metrics.std_f1,
+        metrics.mean_argument_accuracy,
+        metrics.exact_match_rate
+    )
+    
+    # Add by-difficulty table
+    latex += r"""
+\begin{table}[h]
+\centering
+\caption{Results by Difficulty Level}
+\label{tab:results_by_difficulty}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Difficulty} & \textbf{N} & \textbf{F1} & \textbf{Exact Match} \\
+\midrule
+"""
+    for diff, data in sorted(metrics.metrics_by_difficulty.items()):
+        latex += "%s & %d & %.3f & %.3f \\\\\n" % (
+            diff.capitalize(), data["count"], data["mean_f1"], data["exact_match_rate"]
+        )
+    
+    latex += r"""\bottomrule
+\end{tabular}
+\end{table}
+"""
+    
+    # Add by-tool table
+    latex += r"""
+\begin{table}[h]
+\centering
+\caption{Results by Tool}
+\label{tab:results_by_tool}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Tool} & \textbf{N} & \textbf{F1} & \textbf{Exact Match} \\
+\midrule
+"""
+    for tool, data in sorted(metrics.metrics_by_tool.items()):
+        tool_display = tool.replace("_", r"\_")
+        latex += "%s & %d & %.3f & %.3f \\\\\n" % (
+            tool_display, data["count"], data["mean_f1"], data["exact_match_rate"]
+        )
+    
+    latex += r"""\bottomrule
+\end{tabular}
+\end{table}
+"""
+    
+    return latex
+
+
+def generate_markdown_report(report: EvaluationReport) -> str:
+    """Generate a Markdown report for quick viewing."""
+    m = report.aggregated_metrics
+    
+    md = f"""# Tool Evaluation Report
+
+**Generated:** {report.timestamp}  
+**Model:** {report.model_name} ({report.model_version})  
+**Total Scenarios:** {report.total_scenarios}  
+**Duration:** {report.total_duration_seconds:.2f}s
+
+---
+
+## Overall Metrics
+
+| Metric | Value | Std Dev |
+|--------|-------|---------|
+| Precision | {m.mean_precision:.3f} | ±{m.std_precision:.3f} |
+| Recall | {m.mean_recall:.3f} | ±{m.std_recall:.3f} |
+| F1-Score | {m.mean_f1:.3f} | ±{m.std_f1:.3f} |
+| Argument Accuracy | {m.mean_argument_accuracy:.3f} | - |
+| **Exact Match Rate** | **{m.exact_match_rate:.1%}** | - |
+
+---
+
+## Results by Difficulty
+
+| Difficulty | N | F1 | Exact Match |
+|------------|---|-----|-------------|
+"""
+    
+    for diff, data in sorted(m.metrics_by_difficulty.items()):
+        md += f"| {diff.capitalize()} | {data['count']} | {data['mean_f1']:.3f} | {data['exact_match_rate']:.1%} |\n"
+    
+    md += """
+---
+
+## Results by Tool
+
+| Tool | N | F1 | Exact Match | Arg Accuracy |
+|------|---|-----|-------------|--------------|
+"""
+    
+    for tool, data in sorted(m.metrics_by_tool.items()):
+        md += f"| `{tool}` | {data['count']} | {data['mean_f1']:.3f} | {data['exact_match_rate']:.1%} | {data['mean_argument_accuracy']:.3f} |\n"
+    
+    md += f"""
+---
+
+## Error Analysis
+
+| Error Type | Count |
+|------------|-------|
+| Forbidden Tool Violations | {m.forbidden_tool_violations} |
+| Missing Tools | {m.missing_tool_count} |
+| Extra Tools Called | {m.extra_tool_count} |
+| Runtime Errors | {m.total_errors} |
+
+---
+
+## Failed Scenarios
+
+"""
+    
+    failed = [r for r in report.individual_results if not r.exact_match]
+    if failed:
+        md += "| Short ID | Scenario ID | Tool | Difficulty | Expected | Actual | Issue |\n"
+        md += "|----------|-------------|------|------------|----------|--------|-------|\n"
+        for r in failed[:20]:  # Limit to first 20
+            expected = ", ".join(r.expected_tools) or "none"
+            actual = ", ".join(r.actual_tools) or "none"
+            issue = []
+            if r.forbidden_tools_called:
+                issue.append(f"forbidden: {r.forbidden_tools_called}")
+            if set(r.expected_tools) - set(r.actual_tools):
+                issue.append("missing tools")
+            if set(r.actual_tools) - set(r.expected_tools):
+                issue.append("extra tools")
+            if r.argument_accuracy < 1.0:
+                issue.append(f"arg acc: {r.argument_accuracy:.0%}")
+            md += f"| {r.short_id} | {r.scenario_id} | {r.tool} | {r.difficulty} | {expected} | {actual} | {'; '.join(issue)} |\n"
+        
+        if len(failed) > 20:
+            md += f"\n*... and {len(failed) - 20} more failed scenarios*\n"
+    else:
+        md += "*All scenarios passed!*\n"
+    
+    return md
+
+
+def generate_csv_results(results: list[ScenarioResult]) -> str:
+    """
+    Generate CSV with individual scenario results.
+    
+    Columns optimized for statistical analysis in R/Python/SPSS.
+    """
+    output = StringIO()
+    
+    fieldnames = [
+        # Identifiers
+        "short_id",
+        "scenario_id",
+        "tool",
+        "difficulty",
+        "category",
+        "user_prompt",
+        # Tool selection metrics
+        "n_expected_tools",
+        "n_actual_tools",
+        "n_correct_tools",
+        "n_forbidden_called",
+        "tool_precision",
+        "tool_recall",
+        "tool_f1",
+        # Argument metrics
+        "argument_accuracy",
+        # Overall
+        "exact_match",
+        "latency_ms",
+        # Token usage
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        # Detailed (for debugging)
+        "expected_tools",
+        "actual_tools",
+        "error",
+    ]
+    
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    
+    for r in results:
+        # Clean prompt: collapse whitespace for CSV compatibility
+        clean_prompt = " ".join(r.user_prompt.split())
+        writer.writerow({
+            "short_id": r.short_id,
+            "scenario_id": r.scenario_id,
+            "tool": r.tool,
+            "difficulty": r.difficulty,
+            "category": r.category,
+            "user_prompt": clean_prompt,
+            "n_expected_tools": len(r.expected_tools),
+            "n_actual_tools": len(r.actual_tools),
+            "n_correct_tools": len(r.correct_tools),
+            "n_forbidden_called": len(r.forbidden_tools_called),
+            "tool_precision": round(r.tool_precision, 4),
+            "tool_recall": round(r.tool_recall, 4),
+            "tool_f1": round(r.tool_f1, 4),
+            "argument_accuracy": round(r.argument_accuracy, 4),
+            "exact_match": 1 if r.exact_match else 0,  # Binary for stats
+            "latency_ms": round(r.latency_ms, 2),
+            "input_tokens": r.input_tokens,
+            "output_tokens": r.output_tokens,
+            "total_tokens": r.total_tokens,
+            "expected_tools": ";".join(r.expected_tools),
+            "actual_tools": ";".join(r.actual_tools),
+            "error": r.error or "",
+        })
+    
+    return output.getvalue()
+
+
+def generate_csv_summary(metrics: AggregatedMetrics, model_name: str = "") -> str:
+    """
+    Generate CSV with aggregated summary metrics.
+    
+    One row per evaluation run - useful for comparing models.
+    """
+    output = StringIO()
+    
+    fieldnames = [
+        "model",
+        "timestamp",
+        "n_scenarios",
+        "precision_mean",
+        "precision_std",
+        "recall_mean", 
+        "recall_std",
+        "f1_mean",
+        "f1_std",
+        "argument_accuracy_mean",
+        "exact_match_rate",
+        "n_forbidden_violations",
+        "n_missing_tools",
+        "n_extra_tools",
+        "n_errors",
+        # Token and time statistics
+        "total_time_seconds",
+        "avg_latency_ms",
+        "total_tokens",
+        "total_input_tokens",
+        "total_output_tokens",
+        "avg_tokens_per_scenario",
+    ]
+    
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    
+    writer.writerow({
+        "model": model_name,
+        "timestamp": datetime.now().isoformat(),
+        "n_scenarios": metrics.total_scenarios,
+        "precision_mean": round(metrics.mean_precision, 4),
+        "precision_std": round(metrics.std_precision, 4),
+        "recall_mean": round(metrics.mean_recall, 4),
+        "recall_std": round(metrics.std_recall, 4),
+        "f1_mean": round(metrics.mean_f1, 4),
+        "f1_std": round(metrics.std_f1, 4),
+        "argument_accuracy_mean": round(metrics.mean_argument_accuracy, 4),
+        "exact_match_rate": round(metrics.exact_match_rate, 4),
+        "n_forbidden_violations": metrics.forbidden_tool_violations,
+        "n_missing_tools": metrics.missing_tool_count,
+        "n_extra_tools": metrics.extra_tool_count,
+        "n_errors": metrics.total_errors,
+        # Token and time statistics
+        "total_time_seconds": round(metrics.total_time_seconds, 2),
+        "avg_latency_ms": round(metrics.avg_latency_ms, 2),
+        "total_tokens": metrics.total_tokens,
+        "total_input_tokens": metrics.total_input_tokens,
+        "total_output_tokens": metrics.total_output_tokens,
+        "avg_tokens_per_scenario": round(metrics.avg_tokens_per_scenario, 1),
+    })
+    
+    return output.getvalue()
+
+
+def sanitize_model_name(model_name: str) -> str:
+    """
+    Sanitize model name for use as directory name.
+    
+    Removes/replaces characters that are problematic for file systems.
+    """
+    # Replace colons, slashes, and other problematic chars
+    sanitized = model_name.replace(":", "_").replace("/", "_").replace("\\", "_")
+    sanitized = sanitized.replace(" ", "_").replace(".", "_")
+    # Remove any remaining problematic characters
+    sanitized = re.sub(r'[<>"|?*]', '', sanitized)
+    return sanitized
+
+
+def save_report(report: EvaluationReport, output_dir: str = "data/eval_results"):
+    """
+    Save evaluation report in multiple formats.
+    
+    Directory structure:
+        {output_dir}/
+            {model_name}/
+                results.json
+                results.csv
+                summary.csv
+                report.md
+                tables.tex
+            combined_summary.csv  (one row per model, overwritten)
+    """
+    # Sanitize model name for directory
+    model_dir_name = sanitize_model_name(report.model_name)
+    
+    # Create model-specific directory (without timestamp - overwrites previous results)
+    model_path = Path(output_dir) / model_dir_name
+    model_path.mkdir(parents=True, exist_ok=True)
+    
+    # Save JSON (complete data)
+    json_path = model_path / "results.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(asdict(report), f, indent=2, ensure_ascii=False, default=str)
+    
+    # Save Markdown report
+    md_path = model_path / "report.md"
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(generate_markdown_report(report))
+    
+    # Save LaTeX tables
+    latex_path = model_path / "tables.tex"
+    with open(latex_path, "w", encoding="utf-8") as f:
+        f.write(generate_latex_table(report.aggregated_metrics))
+    
+    # Save CSV - individual results (for statistical analysis)
+    csv_results_path = model_path / "results.csv"
+    with open(csv_results_path, "w", encoding="utf-8", newline="") as f:
+        f.write(generate_csv_results(report.individual_results))
+    
+    # Save CSV - summary for this run
+    csv_summary_path = model_path / "summary.csv"
+    with open(csv_summary_path, "w", encoding="utf-8", newline="") as f:
+        f.write(generate_csv_summary(report.aggregated_metrics, report.model_name))
+    
+    # Update combined summary (overwrite with all model results)
+    combined_summary_path = Path(output_dir) / "combined_summary.csv"
+    # Write fresh - always overwrite to keep just current model results
+    with open(combined_summary_path, "w", encoding="utf-8", newline="") as f:
+        f.write(generate_csv_summary(report.aggregated_metrics, report.model_name))
+    
+    print(f"Reports saved to {model_path}/")
+    print(f"  - results.json (complete data)")
+    print(f"  - results.csv (individual results for R/Python)")
+    print(f"  - summary.csv (run summary)")
+    print(f"  - report.md (readable report)")
+    print(f"  - tables.tex (LaTeX tables)")
+    print()
+    print(f"Combined summary: {combined_summary_path}")
+    
+    return model_path
+
+
+# Example usage for running evaluation
+if __name__ == "__main__":
+    # This is a demonstration of how to use the evaluation runner
+    # In practice, you would integrate this with your agent
+    
+    print("Evaluation Runner - Demo Mode")
+    print("=" * 50)
+    print()
+    print("To run actual evaluation, integrate with your agent:")
+    print()
+    print("```python")
+    print("from tests.eval.runner import (")
+    print("    EvaluationScenario, Difficulty, evaluate_scenario,")
+    print("    aggregate_results, EvaluationReport, save_report")
+    print(")")
+    print()
+    print("# Load scenarios from test files")
+    print("scenarios = load_scenarios()")
+    print()
+    print("# Run each scenario through your agent")
+    print("results = []")
+    print("for scenario in scenarios:")
+    print("    tool_calls = agent.run(scenario.user_prompt)")
+    print("    result = evaluate_scenario(scenario, tool_calls)")
+    print("    results.append(result)")
+    print()
+    print("# Generate report")
+    print("metrics = aggregate_results(results)")
+    print("report = EvaluationReport(...)")
+    print("save_report(report)")
+    print("```")

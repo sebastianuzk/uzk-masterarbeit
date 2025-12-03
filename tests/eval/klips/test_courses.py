@@ -5,10 +5,13 @@ Tool: klips2_get_course_details
 Purpose: Retrieve detailed information about courses
 
 Required arguments:
-- course_name OR course_id (search query)
+- course_id (course ID/number, e.g., '14302.0001')
 
 Optional arguments:
-- semester (filter by semester)
+- semester (filter by semester, e.g., 'WiSe 2024/25')
+
+NOTE: This tool does NOT have a course_name parameter! 
+Users must provide the course_id to search.
 
 Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
 """
@@ -28,21 +31,21 @@ pytestmark = [pytest.mark.llm, pytest.mark.klips, pytest.mark.eval]
 
 
 class TestCoursesEasy:
-    """Easy scenarios - clear course information requests."""
+    """Easy scenarios - clear course information requests with course ID."""
 
-    def test_courses_01_by_name(self):
+    def test_courses_01_by_id(self):
         """
-        EASY: Course lookup by name.
+        EASY: Course lookup by course ID.
         """
         user_prompt = """
-        Zeige mir Details zur Vorlesung "Einführung in die Informatik".
+        Zeige mir Details zum Kurs mit der ID 14302.0001.
         """
         
         gold = GoldStandard(
             required_tools=["klips2_get_course_details"],
             required_arguments={
                 "klips2_get_course_details": {
-                    "course_name": "Einführung in die Informatik"
+                    "course_id": "14302.0001"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -50,12 +53,12 @@ class TestCoursesEasy:
         
         assert gold.required_tools == ["klips2_get_course_details"]
 
-    def test_courses_02_by_id(self):
+    def test_courses_02_by_id_numeric(self):
         """
-        EASY: Course lookup by course ID.
+        EASY: Course lookup by numeric course ID.
         """
         user_prompt = """
-        Infos zum Kurs mit der ID 12345 bitte.
+        Infos zum Kurs 12345 bitte.
         """
         
         gold = GoldStandard(
@@ -75,14 +78,14 @@ class TestCoursesEasy:
         EASY: Course lookup with semester filter.
         """
         user_prompt = """
-        Kursdetails für "Algorithmen und Datenstrukturen" im WS 2024/25.
+        Kursdetails für Kurs 14500.0002 im WS 2024/25.
         """
         
         gold = GoldStandard(
             required_tools=["klips2_get_course_details"],
             required_arguments={
                 "klips2_get_course_details": {
-                    "course_name": "Algorithmen und Datenstrukturen",
+                    "course_id": "14500.0002",
                     "semester": "WS 2024/25"
                 }
             },
@@ -93,22 +96,22 @@ class TestCoursesEasy:
 
 
 class TestCoursesMedium:
-    """Medium scenarios - course requests in natural language."""
+    """Medium scenarios - course requests that may need ID extraction."""
 
-    def test_courses_04_conversational(self):
+    def test_courses_04_conversational_with_id(self):
         """
-        MEDIUM: Course inquiry in conversational style.
+        MEDIUM: Course inquiry in conversational style with ID mentioned.
         """
         user_prompt = """
-        Ich würde gerne mehr über die Programmierung 1 Vorlesung erfahren, 
-        wann findet die statt und wer hält sie?
+        Ich würde gerne mehr über den Kurs 14302.0010 erfahren, 
+        wann findet der statt und wer hält ihn?
         """
         
         gold = GoldStandard(
             required_tools=["klips2_get_course_details"],
             required_arguments={
                 "klips2_get_course_details": {
-                    "course_name": "Programmierung 1"
+                    "course_id": "14302.0010"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -116,19 +119,19 @@ class TestCoursesMedium:
         
         assert gold.required_tools == ["klips2_get_course_details"]
 
-    def test_courses_05_abbreviated_name(self):
+    def test_courses_05_long_id(self):
         """
-        MEDIUM: Course with abbreviated name.
+        MEDIUM: Course with longer ID format.
         """
         user_prompt = """
-        Details zur VL "Info I" bitte.
+        Details zur Lehrveranstaltung 14302.0001.1 bitte.
         """
         
         gold = GoldStandard(
             required_tools=["klips2_get_course_details"],
             required_arguments={
                 "klips2_get_course_details": {
-                    "course_name": "Info I"
+                    "course_id": "14302.0001.1"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -141,14 +144,14 @@ class TestCoursesMedium:
         MEDIUM: Course details request in English.
         """
         user_prompt = """
-        Can you show me details for the "Machine Learning" course?
+        Can you show me details for course ID 14500.0001?
         """
         
         gold = GoldStandard(
             required_tools=["klips2_get_course_details"],
             required_arguments={
                 "klips2_get_course_details": {
-                    "course_name": "Machine Learning"
+                    "course_id": "14500.0001"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -158,12 +161,28 @@ class TestCoursesMedium:
 
 
 class TestCoursesHard:
-    """Hard scenarios - vague or problematic course requests."""
+    """Hard scenarios - no course ID provided or vague requests."""
 
-    def test_courses_07_too_vague(self):
+    def test_courses_07_no_id_just_name(self):
         """
-        HARD: Too vague course request.
-        LLM should ask for clarification, NOT call tool.
+        HARD: Only course name provided, no ID.
+        LLM should ask for course ID, NOT call tool (or explain limitation).
+        """
+        user_prompt = """
+        Zeig mir Details zur Vorlesung "Einführung in die Informatik".
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"klips2_get_course_details"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "klips2_get_course_details" in gold.forbidden_tools
+
+    def test_courses_08_too_vague(self):
+        """
+        HARD: Too vague course request without any ID.
         """
         user_prompt = """
         Zeig mir irgendwelche Informatik-Kurse.
@@ -178,4 +197,4 @@ class TestCoursesHard:
         assert "klips2_get_course_details" in gold.forbidden_tools
 
 
-# Total: 7 scenarios
+# Total: 8 scenarios
