@@ -50,15 +50,15 @@ class ReactAgent:
             "70b": 16384,
         }
         
-        # Extract size from model name
+        # Modellgröße aus Namen extrahieren
         model_lower = settings.OLLAMA_MODEL.lower()
-        ctx_size = 8192  # default - ausreichend für die meisten Gespräche
+        ctx_size = 8192  # Standard - ausreichend für die meisten Gespräche
         for size_key, ctx_value in MODEL_CTX_SIZES.items():
             if size_key in model_lower:
                 ctx_size = ctx_value
                 break
         
-        print(f"🤖 Initializing ChatOllama with model: {settings.OLLAMA_MODEL} (ctx_size={ctx_size})")
+        print(f"🤖 Initialisiere ChatOllama mit Modell: {settings.OLLAMA_MODEL} (ctx_size={ctx_size})")
 
         self.llm = ChatOllama(
             model=settings.OLLAMA_MODEL,

@@ -1,17 +1,17 @@
 """
-Run Evaluation Suite Against the React Agent
+Evaluierungs-Suite für den React Agent ausführen
 
-This script:
-1. Loads all evaluation scenarios from test files
-2. Runs each scenario through the React agent
-3. Extracts tool calls from the agent's response
-4. Evaluates against gold standards
-5. Generates reports (JSON, CSV, Markdown, LaTeX)
+Dieses Skript:
+1. Lädt alle Evaluierungsszenarien aus den Test-Dateien
+2. Führt jedes Szenario durch den React Agent
+3. Extrahiert Tool-Aufrufe aus der Agent-Antwort
+4. Evaluiert gegen Gold-Standards
+5. Generiert Berichte (JSON, CSV, Markdown, LaTeX)
 
-Usage:
+Verwendung:
     python -m tests.eval.run_evaluation [--model MODEL_NAME] [--output-dir DIR]
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestützter Universitätsassistent - Evaluierungsframework
 """
 
 import argparse
@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-# Add project root to path
+# Projektroot zum Pfad hinzufügen
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from tests.eval.runner import (

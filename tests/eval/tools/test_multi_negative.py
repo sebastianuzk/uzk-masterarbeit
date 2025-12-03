@@ -1,11 +1,11 @@
 """
-Multi-Tool and Negative Test Scenarios
+Multi-Tool und Negativ-Testszenarien
 
-These scenarios test:
-1. Multi-tool: Requests requiring multiple tools in combination
-2. Negative: Requests that should NOT use any tools
+Diese Szenarien testen:
+1. Multi-Tool: Anfragen, die mehrere Tools in Kombination erfordern
+2. Negativ: Anfragen, die KEINE Tools verwenden sollten
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -23,7 +23,7 @@ pytestmark = [pytest.mark.llm, pytest.mark.eval]
 
 
 class TestMultiTool:
-    """Scenarios requiring multiple tools."""
+    """Szenarien, die mehrere Tools erfordern."""
 
     def test_multi_01_search_then_scrape(self):
         """

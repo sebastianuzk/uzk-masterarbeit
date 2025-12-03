@@ -1,19 +1,19 @@
 """
-KLIPS2 Get Course Details Tool - Evaluation Test Scenarios
+KLIPS2 Get Course Details Tool - Evaluierungs-Testszenarien
 
 Tool: klips2_get_course_details
-Purpose: Retrieve detailed information about courses
+Zweck: Detaillierte Informationen zu Kursen abrufen
 
-Required arguments:
-- course_id (course ID/number, e.g., '14302.0001')
+Erforderliche Argumente:
+- course_id (Kurs-ID/Nummer, z.B. '14302.0001')
 
-Optional arguments:
-- semester (filter by semester, e.g., 'WiSe 2024/25')
+Optionale Argumente:
+- semester (Filter nach Semester, z.B. 'WiSe 2024/25')
 
-NOTE: This tool does NOT have a course_name parameter! 
-Users must provide the course_id to search.
+HINWEIS: Dieses Tool hat KEINEN course_name Parameter!
+Benutzer müssen die course_id angeben.
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -31,7 +31,7 @@ pytestmark = [pytest.mark.llm, pytest.mark.klips, pytest.mark.eval]
 
 
 class TestCoursesEasy:
-    """Easy scenarios - clear course information requests with course ID."""
+    """Einfache Szenarien - Klare Kursabfragen mit Kurs-ID."""
 
     def test_courses_01_by_id(self):
         """

@@ -1,22 +1,22 @@
 """
-KLIPS2 Register Tool - Evaluation Test Scenarios
+KLIPS2 Register Tool - Evaluierungs-Testszenarien
 
 Tool: klips2_register
-Purpose: Account registration for new KLIPS2 users
+Zweck: Account-Registrierung für neue KLIPS2-Benutzer
 
-Required arguments:
-- vorname (first name)
-- nachname (last name)
-- geschlecht (gender)
-- geburtsdatum (birth date)
+Erforderliche Argumente:
+- vorname (Vorname)
+- nachname (Nachname)
+- geschlecht (Geschlecht)
+- geburtsdatum (Geburtsdatum)
 - email
-- staatsangehoerigkeit (nationality)
+- staatsangehoerigkeit (Staatsangehörigkeit)
 
-Optional arguments:
-- geburtsname (birth name)
-- sprache (language preference)
+Optionale Argumente:
+- geburtsname (Geburtsname)
+- sprache (Sprachpräferenz)
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -34,7 +34,7 @@ pytestmark = [pytest.mark.llm, pytest.mark.klips, pytest.mark.eval]
 
 
 class TestRegisterEasy:
-    """Easy scenarios - all information provided clearly."""
+    """Einfache Szenarien - Alle Informationen klar angegeben."""
 
     def test_register_01_complete_german_male(self):
         """

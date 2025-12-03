@@ -1,18 +1,18 @@
 """
-Email Tool - Evaluation Test Scenarios
+Email Tool - Evaluierungs-Testszenarien
 
 Tool: send_email
-Purpose: Send emails to a preconfigured default recipient
+Zweck: E-Mails an einen vorkonfigurierten Standardempfänger senden
 
-Required arguments:
-- subject (email subject line)
-- body (email content)
+Erforderliche Argumente:
+- subject (E-Mail-Betreff)
+- body (E-Mail-Inhalt)
 
-NOTE: This tool does NOT have a 'to' parameter!
-Emails are automatically sent to the DEFAULT_RECIPIENT configured in .env
-The user doesn't need to specify a recipient.
+HINWEIS: Dieses Tool hat KEINEN 'to'-Parameter!
+E-Mails werden automatisch an den DEFAULT_RECIPIENT aus .env gesendet.
+Der Benutzer muss keinen Empfänger angeben.
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -30,7 +30,7 @@ pytestmark = [pytest.mark.llm, pytest.mark.eval]
 
 
 class TestEmailEasy:
-    """Easy scenarios - clear email requests with subject and body."""
+    """Einfache Szenarien - Klare E-Mail-Anfragen mit Betreff und Inhalt."""
 
     def test_email_01_complete_formal(self):
         """

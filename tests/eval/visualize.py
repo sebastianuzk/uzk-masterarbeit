@@ -1,10 +1,10 @@
 """
-Visualization Module for Tool Evaluation Results
+Visualisierungsmodul für Tool-Evaluierungsergebnisse
 
-Generates publication-quality figures for scientific papers.
-Uses matplotlib with academic styling.
+Generiert publikationsreife Grafiken für wissenschaftliche Arbeiten.
+Verwendet matplotlib mit akademischem Styling.
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import json
@@ -13,7 +13,7 @@ from typing import Optional
 import sys
 import os
 
-# Check for matplotlib availability
+# Prüfe matplotlib-Verfügbarkeit
 try:
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
@@ -21,25 +21,25 @@ try:
     HAS_MATPLOTLIB = True
 except ImportError:
     HAS_MATPLOTLIB = False
-    print("Warning: matplotlib not installed. Install with: pip install matplotlib")
+    print("Warnung: matplotlib nicht installiert. Installieren mit: pip install matplotlib")
 
 
-# Academic color palette (colorblind-friendly)
+# Akademische Farbpalette (farbenblindfreundlich)
 COLORS = {
-    "primary": "#2E86AB",      # Blue
-    "secondary": "#A23B72",    # Purple/Pink
+    "primary": "#2E86AB",      # Blau
+    "secondary": "#A23B72",    # Lila/Pink
     "tertiary": "#F18F01",     # Orange
-    "success": "#C73E1D",      # Red
-    "neutral": "#6C757D",      # Gray
+    "success": "#C73E1D",      # Rot
+    "neutral": "#6C757D",      # Grau
     
-    # Difficulty colors
-    "easy": "#28A745",         # Green
-    "medium": "#FFC107",       # Yellow
-    "hard": "#DC3545",         # Red
-    "multi_step": "#6F42C1",   # Purple
+    # Schwierigkeitsfarben
+    "easy": "#28A745",         # Grün
+    "medium": "#FFC107",       # Gelb
+    "hard": "#DC3545",         # Rot
+    "multi_step": "#6F42C1",   # Lila
 }
 
-# Academic style settings
+# Akademische Stileinstellungen
 STYLE_SETTINGS = {
     "font.family": "serif",
     "font.size": 10,
@@ -58,7 +58,7 @@ STYLE_SETTINGS = {
 
 
 def apply_style():
-    """Apply academic styling to matplotlib."""
+    """Wendet akademisches Styling auf matplotlib an."""
     if not HAS_MATPLOTLIB:
         return
     plt.rcParams.update(STYLE_SETTINGS)
@@ -66,17 +66,17 @@ def apply_style():
 
 def plot_overall_metrics(metrics: dict, save_path: Optional[str] = None) -> Optional[plt.Figure]:
     """
-    Create a bar chart of overall evaluation metrics.
+    Erstellt ein Balkendiagramm der Gesamt-Evaluierungsmetriken.
     
     Args:
-        metrics: AggregatedMetrics as dict
-        save_path: Optional path to save figure
+        metrics: AggregatedMetrics als dict
+        save_path: Optionaler Pfad zum Speichern der Grafik
     
     Returns:
-        matplotlib Figure object
+        matplotlib Figure-Objekt
     """
     if not HAS_MATPLOTLIB:
-        print("matplotlib required for plotting")
+        print("matplotlib erforderlich für Plots")
         return None
     
     apply_style()
@@ -95,8 +95,8 @@ def plot_overall_metrics(metrics: dict, save_path: Optional[str] = None) -> Opti
         metrics["std_precision"],
         metrics["std_recall"],
         metrics["std_f1"],
-        0,  # No std for arg accuracy
-        0   # No std for exact match
+        0,  # Keine Standardabweichung für arg accuracy
+        0   # Keine Standardabweichung für exact match
     ]
     
     x = np.arange(len(metric_names))
@@ -104,7 +104,7 @@ def plot_overall_metrics(metrics: dict, save_path: Optional[str] = None) -> Opti
                   color=COLORS["primary"], edgecolor="black", linewidth=0.5,
                   error_kw={"elinewidth": 1, "capthick": 1})
     
-    # Add value labels on bars
+    # Wertbeschriftungen auf Balken
     for bar, val in zip(bars, values):
         height = bar.get_height()
         ax.annotate(f'{val:.2f}',
@@ -114,7 +114,7 @@ def plot_overall_metrics(metrics: dict, save_path: Optional[str] = None) -> Opti
                     ha='center', va='bottom', fontsize=9)
     
     ax.set_ylabel("Score")
-    ax.set_title("Overall Tool Evaluation Metrics")
+    ax.set_title("Gesamt Tool-Evaluierungsmetriken")
     ax.set_xticks(x)
     ax.set_xticklabels(metric_names, rotation=15, ha="right")
     ax.set_ylim(0, 1.15)
@@ -124,24 +124,24 @@ def plot_overall_metrics(metrics: dict, save_path: Optional[str] = None) -> Opti
     
     if save_path:
         plt.savefig(save_path)
-        print(f"Saved: {save_path}")
+        print(f"Gespeichert: {save_path}")
     
     return fig
 
 
 def plot_by_difficulty(metrics: dict, save_path: Optional[str] = None) -> Optional[plt.Figure]:
     """
-    Create grouped bar chart comparing metrics across difficulty levels.
+    Erstellt gruppiertes Balkendiagramm für Metriken nach Schwierigkeitsgrad.
     
     Args:
-        metrics: AggregatedMetrics as dict
-        save_path: Optional path to save figure
+        metrics: AggregatedMetrics als dict
+        save_path: Optionaler Pfad zum Speichern der Grafik
     
     Returns:
-        matplotlib Figure object
+        matplotlib Figure-Objekt
     """
     if not HAS_MATPLOTLIB:
-        print("matplotlib required for plotting")
+        print("matplotlib erforderlich für Plots")
         return None
     
     apply_style()
@@ -151,7 +151,7 @@ def plot_by_difficulty(metrics: dict, save_path: Optional[str] = None) -> Option
     difficulties = [d for d in difficulties if d in by_diff]
     
     if not difficulties:
-        print("No difficulty data available")
+        print("Keine Schwierigkeitsgrad-Daten verfügbar")
         return None
     
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -168,12 +168,12 @@ def plot_by_difficulty(metrics: dict, save_path: Optional[str] = None) -> Option
     bars2 = ax.bar(x + width/2, exact_match, width, label="Exact Match Rate",
                    color=COLORS["secondary"], edgecolor="black", linewidth=0.5)
     
-    # Add count annotations
+    # Anzahl-Annotationen hinzufügen
     for i, (xi, count) in enumerate(zip(x, counts)):
         ax.annotate(f'n={count}', xy=(xi, 0.02), ha='center', fontsize=8, color='gray')
     
     ax.set_ylabel("Score")
-    ax.set_title("Performance by Difficulty Level")
+    ax.set_title("Leistung nach Schwierigkeitsgrad")
     ax.set_xticks(x)
     ax.set_xticklabels([d.replace("_", " ").title() for d in difficulties])
     ax.set_ylim(0, 1.1)
@@ -184,31 +184,31 @@ def plot_by_difficulty(metrics: dict, save_path: Optional[str] = None) -> Option
     
     if save_path:
         plt.savefig(save_path)
-        print(f"Saved: {save_path}")
+        print(f"Gespeichert: {save_path}")
     
     return fig
 
 
 def plot_by_tool(metrics: dict, save_path: Optional[str] = None) -> Optional[plt.Figure]:
     """
-    Create horizontal bar chart showing performance by tool.
+    Erstellt horizontales Balkendiagramm für Leistung nach Tool.
     
     Args:
-        metrics: AggregatedMetrics as dict
-        save_path: Optional path to save figure
+        metrics: AggregatedMetrics als dict
+        save_path: Optionaler Pfad zum Speichern der Grafik
     
     Returns:
-        matplotlib Figure object
+        matplotlib Figure-Objekt
     """
     if not HAS_MATPLOTLIB:
-        print("matplotlib required for plotting")
+        print("matplotlib erforderlich für Plots")
         return None
     
     apply_style()
     
     by_tool = metrics["metrics_by_tool"]
     
-    # Sort by F1 score
+    # Nach F1-Score sortieren
     tools = sorted(by_tool.keys(), key=lambda t: by_tool[t]["mean_f1"], reverse=True)
     
     fig, ax = plt.subplots(figsize=(10, max(6, len(tools) * 0.5)))
@@ -224,13 +224,13 @@ def plot_by_tool(metrics: dict, save_path: Optional[str] = None) -> Optional[plt
     bars2 = ax.barh(y - height/2, exact_match, height, label="Exact Match Rate",
                     color=COLORS["secondary"], edgecolor="black", linewidth=0.5)
     
-    # Add count annotations
+    # Anzahl-Annotationen hinzufügen
     for i, tool in enumerate(tools):
         count = by_tool[tool]["count"]
         ax.annotate(f'n={count}', xy=(0.02, i), va='center', fontsize=8, color='white')
     
     ax.set_xlabel("Score")
-    ax.set_title("Performance by Tool")
+    ax.set_title("Leistung nach Tool")
     ax.set_yticks(y)
     ax.set_yticklabels([t.replace("klips2_", "").replace("_", " ").title() for t in tools])
     ax.set_xlim(0, 1.1)
@@ -241,29 +241,29 @@ def plot_by_tool(metrics: dict, save_path: Optional[str] = None) -> Optional[plt
     
     if save_path:
         plt.savefig(save_path)
-        print(f"Saved: {save_path}")
+        print(f"Gespeichert: {save_path}")
     
     return fig
 
 
 def plot_confusion_matrix(results: list, save_path: Optional[str] = None) -> Optional[plt.Figure]:
     """
-    Create a confusion matrix showing expected vs actual tool selection.
+    Erstellt Konfusionsmatrix für erwartete vs. tatsächliche Tool-Auswahl.
     
     Args:
-        results: List of ScenarioResult dicts
-        save_path: Optional path to save figure
+        results: Liste von ScenarioResult-Dicts
+        save_path: Optionaler Pfad zum Speichern der Grafik
     
     Returns:
-        matplotlib Figure object
+        matplotlib Figure-Objekt
     """
     if not HAS_MATPLOTLIB:
-        print("matplotlib required for plotting")
+        print("matplotlib erforderlich für Plots")
         return None
     
     apply_style()
     
-    # Collect all tools
+    # Alle Tools sammeln
     all_tools = set()
     for r in results:
         all_tools.update(r.get("expected_tools", []))
@@ -273,10 +273,10 @@ def plot_confusion_matrix(results: list, save_path: Optional[str] = None) -> Opt
     n_tools = len(all_tools)
     
     if n_tools == 0:
-        print("No tool data available")
+        print("Keine Tool-Daten verfügbar")
         return None
     
-    # Build confusion matrix
+    # Konfusionsmatrix erstellen
     matrix = np.zeros((n_tools, n_tools))
     tool_to_idx = {t: i for i, t in enumerate(all_tools)}
     
@@ -293,9 +293,9 @@ def plot_confusion_matrix(results: list, save_path: Optional[str] = None) -> Opt
     
     im = ax.imshow(matrix, cmap="Blues")
     
-    # Add colorbar
+    # Farblegende hinzufügen
     cbar = ax.figure.colorbar(im, ax=ax)
-    cbar.ax.set_ylabel("Count", rotation=-90, va="bottom")
+    cbar.ax.set_ylabel("Anzahl", rotation=-90, va="bottom")
     
     # Labels
     ax.set_xticks(np.arange(n_tools))
@@ -304,11 +304,11 @@ def plot_confusion_matrix(results: list, save_path: Optional[str] = None) -> Opt
     ax.set_xticklabels(tool_labels, rotation=45, ha="right")
     ax.set_yticklabels(tool_labels)
     
-    ax.set_xlabel("Actual Tool")
-    ax.set_ylabel("Expected Tool")
-    ax.set_title("Tool Selection Confusion Matrix")
+    ax.set_xlabel("Tatsächliches Tool")
+    ax.set_ylabel("Erwartetes Tool")
+    ax.set_title("Tool-Auswahl Konfusionsmatrix")
     
-    # Add text annotations
+    # Text-Annotationen hinzufügen
     for i in range(n_tools):
         for j in range(n_tools):
             val = int(matrix[i, j])
@@ -320,29 +320,29 @@ def plot_confusion_matrix(results: list, save_path: Optional[str] = None) -> Opt
     
     if save_path:
         plt.savefig(save_path)
-        print(f"Saved: {save_path}")
+        print(f"Gespeichert: {save_path}")
     
     return fig
 
 
 def plot_error_analysis(metrics: dict, save_path: Optional[str] = None) -> Optional[plt.Figure]:
     """
-    Create pie chart of error types.
+    Erstellt Kreisdiagramm der Fehlertypen.
     
     Args:
-        metrics: AggregatedMetrics as dict
-        save_path: Optional path to save figure
+        metrics: AggregatedMetrics als dict
+        save_path: Optionaler Pfad zum Speichern der Grafik
     
     Returns:
-        matplotlib Figure object
+        matplotlib Figure-Objekt
     """
     if not HAS_MATPLOTLIB:
-        print("matplotlib required for plotting")
+        print("matplotlib erforderlich für Plots")
         return None
     
     apply_style()
     
-    # Calculate correct scenarios
+    # Korrekte Szenarien berechnen
     total = metrics["total_scenarios"]
     exact_matches = int(metrics["exact_match_rate"] * total)
     
@@ -351,37 +351,37 @@ def plot_error_analysis(metrics: dict, save_path: Optional[str] = None) -> Optio
     colors = []
     
     if exact_matches > 0:
-        labels.append(f"Correct ({exact_matches})")
+        labels.append(f"Korrekt ({exact_matches})")
         sizes.append(exact_matches)
         colors.append(COLORS["easy"])
     
     forbidden = metrics.get("forbidden_tool_violations", 0)
     if forbidden > 0:
-        labels.append(f"Forbidden Tool ({forbidden})")
+        labels.append(f"Verbotenes Tool ({forbidden})")
         sizes.append(forbidden)
         colors.append(COLORS["hard"])
     
     missing = metrics.get("missing_tool_count", 0)
     if missing > 0:
-        labels.append(f"Missing Tool ({missing})")
+        labels.append(f"Fehlendes Tool ({missing})")
         sizes.append(missing)
         colors.append(COLORS["medium"])
     
     extra = metrics.get("extra_tool_count", 0)
     if extra > 0:
-        labels.append(f"Extra Tool ({extra})")
+        labels.append(f"Zusätzliches Tool ({extra})")
         sizes.append(extra)
         colors.append(COLORS["tertiary"])
     
-    # Account for remaining errors (argument errors)
+    # Restliche Fehler berücksichtigen (Argument-Fehler)
     other_errors = total - exact_matches - forbidden - missing - extra
     if other_errors > 0:
-        labels.append(f"Argument Errors ({other_errors})")
+        labels.append(f"Argument-Fehler ({other_errors})")
         sizes.append(other_errors)
         colors.append(COLORS["neutral"])
     
     if not sizes:
-        print("No error data available")
+        print("Keine Fehlerdaten verfügbar")
         return None
     
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -392,47 +392,47 @@ def plot_error_analysis(metrics: dict, save_path: Optional[str] = None) -> Optio
         wedgeprops={"edgecolor": "white", "linewidth": 1}
     )
     
-    ax.set_title("Error Distribution")
+    ax.set_title("Fehlerverteilung")
     
     plt.tight_layout()
     
     if save_path:
         plt.savefig(save_path)
-        print(f"Saved: {save_path}")
+        print(f"Gespeichert: {save_path}")
     
     return fig
 
 
 def generate_all_figures(report_path: str, output_dir: str = "data/eval_figures"):
     """
-    Generate all figures from a saved evaluation report.
+    Generiert alle Grafiken aus einem gespeicherten Evaluierungsbericht.
     
     Args:
-        report_path: Path to JSON evaluation report
-        output_dir: Directory to save figures
+        report_path: Pfad zur JSON-Evaluierungsbericht-Datei
+        output_dir: Verzeichnis zum Speichern der Grafiken
     """
     if not HAS_MATPLOTLIB:
-        print("matplotlib required for generating figures")
-        print("Install with: pip install matplotlib")
+        print("matplotlib erforderlich für die Grafikerstellung")
+        print("Installieren mit: pip install matplotlib")
         return
     
-    # Load report
+    # Bericht laden
     with open(report_path, "r", encoding="utf-8") as f:
         report = json.load(f)
     
     metrics = report["aggregated_metrics"]
     results = report.get("individual_results", [])
     
-    # Create output directory
+    # Ausgabeverzeichnis erstellen
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
     base_name = Path(report_path).stem
     
-    print(f"Generating figures for: {base_name}")
+    print(f"Generiere Grafiken für: {base_name}")
     print("-" * 50)
     
-    # Generate all figures
+    # Alle Grafiken generieren
     plot_overall_metrics(metrics, output_path / f"{base_name}_overall.pdf")
     plot_overall_metrics(metrics, output_path / f"{base_name}_overall.png")
     
@@ -450,7 +450,7 @@ def generate_all_figures(report_path: str, output_dir: str = "data/eval_figures"
     plot_error_analysis(metrics, output_path / f"{base_name}_errors.png")
     
     print("-" * 50)
-    print(f"All figures saved to: {output_path}/")
+    print(f"Alle Grafiken gespeichert unter: {output_path}/")
 
 
 if __name__ == "__main__":
@@ -459,13 +459,13 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         generate_all_figures(sys.argv[1])
     else:
-        print("Usage: python visualize.py <path_to_evaluation_report.json>")
+        print("Verwendung: python visualize.py <pfad_zum_evaluierungsbericht.json>")
         print()
-        print("This script generates publication-quality figures from evaluation results.")
+        print("Dieses Skript generiert publikationsreife Grafiken aus Evaluierungsergebnissen.")
         print()
-        print("Available figure types:")
-        print("  - Overall metrics bar chart")
-        print("  - Performance by difficulty level")
-        print("  - Performance by tool")
-        print("  - Confusion matrix")
-        print("  - Error distribution pie chart")
+        print("Verfügbare Grafiktypen:")
+        print("  - Gesamt-Metriken Balkendiagramm")
+        print("  - Leistung nach Schwierigkeitsgrad")
+        print("  - Leistung nach Tool")
+        print("  - Konfusionsmatrix")
+        print("  - Fehlerverteilung Kreisdiagramm")

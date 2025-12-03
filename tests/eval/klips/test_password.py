@@ -1,15 +1,15 @@
 """
-KLIPS2 Change Password Tool - Evaluation Test Scenarios
+KLIPS2 Change Password Tool - Evaluierungs-Testszenarien
 
 Tool: klips2_change_password
-Purpose: Change KLIPS2 account password
+Zweck: KLIPS2 Account-Passwort ändern
 
-Required arguments (from KLIPS2AuthenticatedInput + KLIPS2ChangePasswordInput):
-- username (KLIPS2 username for login)
-- password (current KLIPS2 password for login)
-- new_password (the new password to set)
+Erforderliche Argumente (aus KLIPS2AuthenticatedInput + KLIPS2ChangePasswordInput):
+- username (KLIPS2 Benutzername für Login)
+- password (aktuelles KLIPS2 Passwort für Login)
+- new_password (das neue Passwort)
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.llm, pytest.mark.klips, pytest.mark.eval]
 
 
 class TestPasswordEasy:
-    """Easy scenarios - all password information provided."""
+    """Einfache Szenarien - Alle Passwort-Informationen angegeben."""
 
     def test_password_01_complete_request(self):
         """

@@ -1,30 +1,30 @@
-<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
+<!-- Diese Datei enthält workspace-spezifische Anweisungen für Copilot. Weitere Infos: https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
 
-- [x] Verify that the copilot-instructions.md file in the .github directory is created.
+- [x] Copilot-Instructions-Datei im .github-Verzeichnis erstellt
 
-- [x] Clarify Project Requirements
+- [x] Projektanforderungen geklärt
 <!-- Python-Projekt für autonomen Chatbot-Agenten mit LangChain und LangGraph erstellt -->
 
-- [x] Scaffold the Project
+- [x] Projektstruktur aufgesetzt
 <!-- Vollständige Projektstruktur mit allen notwendigen Dateien und Modulen erstellt -->
 
-- [x] Customize the Project
+- [x] Projekt angepasst
 <!-- Agent mit create_react_agent von LangGraph implementiert, Tools für Web-Scraping, DuckDuckGo-Suche, Camunda Process Automation und erweiterte KLIPS2-Funktionalität hinzugefügt -->
 
-- [x] Install Required Extensions
+- [x] Erforderliche Extensions installiert
 <!-- Keine spezifischen Extensions erforderlich -->
 
-- [x] Compile the Project
+- [x] Projekt kompiliert
 <!-- Python-Umgebung konfiguriert und alle Abhängigkeiten erfolgreich installiert -->
 
-- [x] Create and Run Task
+- [x] Tasks erstellt und ausgeführt
 <!-- Tasks für Streamlit App, Main Script und Tests erstellt -->
 
-- [ ] Launch the Project
+- [ ] Projekt starten
 <!--
-Verify that all previous steps have been completed.
-Prompt user for debug mode, launch only if confirmed.
- -->
+Überprüfe, dass alle vorherigen Schritte abgeschlossen sind.
+Frage den Benutzer nach Debug-Modus, starte nur nach Bestätigung.
+-->
 
-- [x] Ensure Documentation is Complete
+- [x] Dokumentation vollständig
 <!-- README.md und copilot-instructions.md sind vollständig und aktuell -->

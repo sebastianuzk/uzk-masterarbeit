@@ -1,18 +1,18 @@
 """
-Tool Evaluation Logic
+Tool-Evaluierungslogik
 
-This module implements the core evaluation logic for determining task success
-based on tool call sequences and gold standard comparisons.
+Dieses Modul implementiert die Kernlogik zur Bewertung des Aufgabenerfolgs
+basierend auf Tool-Aufrufsequenzen und Gold-Standard-Vergleichen.
 
-The evaluation framework supports:
-- Single tool scenarios with exact argument matching
-- Multi-tool scenarios with sequence validation  
-- Flexible argument matching with normalization options
-- Detailed failure reason reporting
+Das Evaluierungsframework unterstützt:
+- Einzelne Tool-Szenarien mit exaktem Argument-Matching
+- Multi-Tool-Szenarien mit Sequenzvalidierung  
+- Flexibles Argument-Matching mit Normalisierungsoptionen
+- Detaillierte Fehlerursachen-Berichterstattung
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
-Author: Sebastian
-Date: 2024
+Teil der Masterarbeit: KI-gestützter Universitätsassistent - Evaluierungsframework
+Autor: Sebastian
+Datum: 2024
 """
 
 from dataclasses import dataclass, field
@@ -23,11 +23,11 @@ import re
 
 class ArgumentMatchMode(Enum):
     """
-    Defines how strictly arguments should be matched.
+    Definiert, wie strikt Argumente abgeglichen werden sollen.
     
-    - EXACT: Arguments must match exactly (case-sensitive, whitespace matters)
-    - NORMALIZED: Minor formatting differences allowed (whitespace, case)
-    - SEMANTIC: Value meaning must match (e.g., "WiSe 2025" == "Wintersemester 2025")
+    - EXACT: Argumente müssen exakt übereinstimmen (Groß-/Kleinschreibung, Leerzeichen relevant)
+    - NORMALIZED: Kleine Formatierungsunterschiede erlaubt (Leerzeichen, Groß-/Kleinschreibung)
+    - SEMANTIC: Bedeutung muss übereinstimmen (z.B. "WiSe 2025" == "Wintersemester 2025")
     """
     EXACT = "exact"
     NORMALIZED = "normalized"
@@ -37,13 +37,13 @@ class ArgumentMatchMode(Enum):
 @dataclass
 class ToolCall:
     """
-    Represents a single tool call made by the AI agent.
+    Repräsentiert einen einzelnen Tool-Aufruf des KI-Agenten.
     
-    Attributes:
-        name: The name of the tool that was called
-        arguments: Dictionary mapping argument names to their values
-        timestamp: Optional timestamp of when the call was made
-        result: Optional result returned by the tool
+    Attribute:
+        name: Name des aufgerufenen Tools
+        arguments: Dictionary mit Argumentnamen und deren Werten
+        timestamp: Optionaler Zeitstempel des Aufrufs
+        result: Optionales Ergebnis des Tools
     """
     name: str
     arguments: Dict[str, Any]
@@ -51,9 +51,9 @@ class ToolCall:
     result: Optional[str] = None
     
     def __post_init__(self):
-        """Validate tool call after initialization."""
+        """Validiere Tool-Aufruf nach Initialisierung."""
         if not self.name:
-            raise ValueError("Tool name cannot be empty")
+            raise ValueError("Tool-Name darf nicht leer sein")
         if self.arguments is None:
             self.arguments = {}
 
@@ -61,16 +61,16 @@ class ToolCall:
 @dataclass  
 class GoldStandard:
     """
-    Defines the expected correct tool usage for a scenario.
+    Definiert die erwartete korrekte Tool-Nutzung für ein Szenario.
     
-    Attributes:
-        required_tools: List of tool names that MUST be called (in order if ordered=True)
-        required_arguments: Dict mapping tool names to required arguments
-        forbidden_tools: Set of tool names that must NOT be called
-        optional_tools: Set of tools that may be called but are not required
-        ordered: Whether the required tools must be called in exact order
-        allow_extra_tools: Whether additional (non-forbidden) tools are allowed
-        argument_match_mode: How strictly to match argument values
+    Attribute:
+        required_tools: Liste der Tools, die aufgerufen werden MÜSSEN (in Reihenfolge wenn ordered=True)
+        required_arguments: Dict mit Tool-Namen und erforderlichen Argumenten
+        forbidden_tools: Set von Tool-Namen, die NICHT aufgerufen werden dürfen
+        optional_tools: Set von Tools, die aufgerufen werden können, aber nicht müssen
+        ordered: Ob die erforderlichen Tools in exakter Reihenfolge aufgerufen werden müssen
+        allow_extra_tools: Ob zusätzliche (nicht verbotene) Tools erlaubt sind
+        argument_match_mode: Wie strikt Argumentwerte abgeglichen werden
     """
     required_tools: List[str]
     required_arguments: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -81,11 +81,11 @@ class GoldStandard:
     argument_match_mode: ArgumentMatchMode = ArgumentMatchMode.NORMALIZED
 
     def __post_init__(self):
-        """Validate gold standard after initialization."""
-        # Allow empty required_tools if forbidden_tools is specified (negative test cases)
+        """Validiere Gold-Standard nach Initialisierung."""
+        # Erlaube leere required_tools wenn forbidden_tools angegeben (negative Testfälle)
         if not self.required_tools and not self.forbidden_tools:
-            raise ValueError("At least one required tool or forbidden tool must be specified")
-        # Convert to set for forbidden_tools if list was provided
+            raise ValueError("Mindestens ein erforderliches oder verbotenes Tool muss angegeben werden")
+        # Konvertiere zu Set für forbidden_tools falls Liste übergeben
         if isinstance(self.forbidden_tools, list):
             self.forbidden_tools = set(self.forbidden_tools)
         if isinstance(self.optional_tools, list):

@@ -1,17 +1,17 @@
 """
-DuckDuckGo Search Tool - Evaluation Test Scenarios
+DuckDuckGo Such-Tool - Evaluierungs-Testszenarien
 
 Tool: duckduckgo_search
-Purpose: Search the web for information using DuckDuckGo
+Zweck: Websuche mit DuckDuckGo durchführen
 
-Required arguments:
-- query (search query string)
+Erforderliche Argumente:
+- query (Suchanfrage als String)
 
-Optional arguments:
-- num_results (number of results to return)
-- region (geographic region for results)
+Optionale Argumente:
+- num_results (Anzahl der zurückzugebenden Ergebnisse)
+- region (Geografische Region für Ergebnisse)
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -29,7 +29,7 @@ pytestmark = [pytest.mark.llm, pytest.mark.eval]
 
 
 class TestSearchEasy:
-    """Easy scenarios - clear search requests."""
+    """Einfache Szenarien - Klare Suchanfragen."""
 
     def test_search_01_simple_query(self):
         """

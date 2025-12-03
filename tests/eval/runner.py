@@ -1,17 +1,17 @@
 """
-Evaluation Runner for Tool Usage Assessment
+Evaluierungs-Runner für Tool-Nutzungsanalyse
 
-This module executes evaluation scenarios against an LLM and collects metrics
-for scientific analysis of tool selection accuracy.
+Dieses Modul führt Evaluierungsszenarien gegen ein LLM aus und sammelt Metriken
+für die wissenschaftliche Analyse der Tool-Auswahlgenauigkeit.
 
-Metrics collected:
-- Precision: Correct tools called / Total tools called
-- Recall: Correct tools called / Expected tools
-- F1-Score: Harmonic mean of precision and recall
-- Exact Match Rate: Scenarios with perfect tool selection
-- Argument Accuracy: Correct arguments / Expected arguments
+Gesammelte Metriken:
+- Precision: Korrekt aufgerufene Tools / Gesamt aufgerufene Tools
+- Recall: Korrekt aufgerufene Tools / Erwartete Tools
+- F1-Score: Harmonisches Mittel aus Precision und Recall
+- Exact Match Rate: Szenarien mit perfekter Tool-Auswahl
+- Argument Accuracy: Korrekte Argumente / Erwartete Argumente
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestützter Universitätsassistent - Evaluierungsframework
 """
 
 import csv
@@ -47,40 +47,40 @@ class Difficulty(str, Enum):
 
 @dataclass
 class EvaluationScenario:
-    """A single evaluation scenario with prompt and expected outcome."""
+    """Ein einzelnes Evaluierungsszenario mit Prompt und erwartetem Ergebnis."""
     id: str
-    tool: str  # Primary tool being tested
+    tool: str  # Primäres Tool, das getestet wird
     difficulty: Difficulty
     user_prompt: str
     gold_standard: GoldStandard
     description: str = ""
-    category: str = ""  # e.g., "registration", "application", "search"
-    short_id: str = ""  # Short ID like s1, s2, s3...
+    category: str = ""  # z.B. "registration", "application", "search"
+    short_id: str = ""  # Kurz-ID wie s1, s2, s3...
 
 
 @dataclass
 class ScenarioResult:
-    """Result of running a single scenario."""
+    """Ergebnis eines einzelnen Szenario-Durchlaufs."""
     scenario_id: str
-    short_id: str  # Short ID like s1, s2, s3...
+    short_id: str  # Kurz-ID wie s1, s2, s3...
     tool: str
     difficulty: str
     category: str
-    user_prompt: str  # The actual question/request
+    user_prompt: str  # Die tatsächliche Frage/Anfrage
     
-    # Tool selection metrics
+    # Tool-Auswahlmetriken
     expected_tools: list[str]
     actual_tools: list[str]
     correct_tools: list[str]
     forbidden_tools_called: list[str]
     
-    # Argument metrics
+    # Argument-Metriken
     expected_arguments: dict
     actual_arguments: dict
     correct_arguments: dict
     missing_arguments: dict
     
-    # Scores
+    # Bewertungen
     tool_precision: float
     tool_recall: float
     tool_f1: float
@@ -91,7 +91,7 @@ class ScenarioResult:
     latency_ms: float
     error: Optional[str] = None
     
-    # Token tracking (estimated)
+    # Token-Tracking (geschätzt)
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
@@ -99,33 +99,33 @@ class ScenarioResult:
 
 @dataclass
 class AggregatedMetrics:
-    """Aggregated metrics across all scenarios."""
+    """Aggregierte Metriken über alle Szenarien."""
     total_scenarios: int
     
-    # Overall scores (required)
+    # Gesamtbewertungen (erforderlich)
     mean_precision: float
     mean_recall: float
     mean_f1: float
     mean_argument_accuracy: float
     exact_match_rate: float
     
-    # Standard deviations (required)
+    # Standardabweichungen (erforderlich)
     std_precision: float
     std_recall: float
     std_f1: float
     
-    # By difficulty/tool/category (required)
+    # Nach Schwierigkeit/Tool/Kategorie (erforderlich)
     metrics_by_difficulty: dict
     metrics_by_tool: dict
     metrics_by_category: dict
     
-    # Error analysis (required)
+    # Fehleranalyse (erforderlich)
     total_errors: int
     forbidden_tool_violations: int
     missing_tool_count: int
     extra_tool_count: int
     
-    # Token and time statistics (optional, with defaults)
+    # Token- und Zeitstatistiken (optional, mit Standardwerten)
     total_tokens: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
@@ -136,15 +136,15 @@ class AggregatedMetrics:
 
 @dataclass 
 class EvaluationReport:
-    """Complete evaluation report for scientific presentation."""
-    # Meta information
+    """Vollständiger Evaluierungsbericht für wissenschaftliche Präsentation."""
+    # Meta-Informationen
     timestamp: str
     model_name: str
     model_version: str
     total_scenarios: int
     total_duration_seconds: float
     
-    # Results
+    # Ergebnisse
     individual_results: list[ScenarioResult]
     aggregated_metrics: AggregatedMetrics
     

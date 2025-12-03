@@ -1,20 +1,20 @@
 """
-KLIPS2 Change Address Tool - Evaluation Test Scenarios
+KLIPS2 Change Address Tool - Evaluierungs-Testszenarien
 
 Tool: klips2_change_address
-Purpose: Update student address in KLIPS2 system
+Zweck: Studierenden-Adresse im KLIPS2-System aktualisieren
 
-Required arguments (from KLIPS2AuthenticatedInput + KLIPS2ChangeAddressInput):
-- username (KLIPS2 username for login)
-- password (KLIPS2 password for login)
-- street (street name and house number)
-- zip_code (postal code)
-- city (city/town)
+Erforderliche Argumente (aus KLIPS2AuthenticatedInput + KLIPS2ChangeAddressInput):
+- username (KLIPS2 Benutzername für Login)
+- password (KLIPS2 Passwort für Login)
+- street (Straße und Hausnummer)
+- zip_code (Postleitzahl)
+- city (Stadt)
 
-Optional arguments:
-- country (defaults to "Deutschland")
+Optionale Argumente:
+- country (Standard: "Deutschland")
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -32,7 +32,7 @@ pytestmark = [pytest.mark.llm, pytest.mark.klips, pytest.mark.eval]
 
 
 class TestAddressEasy:
-    """Easy scenarios - all address information provided clearly."""
+    """Einfache Szenarien - Alle Adressinformationen klar angegeben."""
 
     def test_address_01_complete_german(self):
         """

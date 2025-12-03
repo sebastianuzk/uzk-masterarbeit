@@ -1,16 +1,16 @@
 """
-Web Scraper Tool - Evaluation Test Scenarios
+Web Scraper Tool - Evaluierungs-Testszenarien
 
 Tool: web_scraper
-Purpose: Extract content from specific web pages
+Zweck: Inhalte von spezifischen Webseiten extrahieren
 
-Required arguments:
-- url (the URL to scrape)
+Erforderliche Argumente:
+- url (die zu scrapende URL)
 
-Optional arguments:
-- extract_type (type of content to extract: text, links, tables, etc.)
+Optionale Argumente:
+- extract_type (Art des zu extrahierenden Inhalts: text, links, tables, etc.)
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -28,7 +28,7 @@ pytestmark = [pytest.mark.llm, pytest.mark.eval]
 
 
 class TestScraperEasy:
-    """Easy scenarios - clear URL scraping requests."""
+    """Einfache Szenarien - Klare URL-Scraping-Anfragen."""
 
     def test_scraper_01_direct_url(self):
         """

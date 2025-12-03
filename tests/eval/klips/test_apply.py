@@ -1,40 +1,40 @@
 """
-KLIPS2 Apply Study Tool - Evaluation Test Scenarios
+KLIPS2 Apply Study Tool - Evaluierungs-Testszenarien
 
 Tool: klips2_apply_study
-Purpose: Apply for a course of study at the University of Cologne
+Zweck: Bewerbung für einen Studiengang an der Universität zu Köln
 
-Required arguments (Basis):
-- username (KLIPS2 username)
-- password (KLIPS2 password)
-- semester (e.g., "Wintersemester 2025/26")
+Erforderliche Argumente (Basis):
+- username (KLIPS2 Benutzername)
+- password (KLIPS2 Passwort)
+- semester (z.B. "Wintersemester 2025/26")
 - degree_type (Bachelor/Master/Promotionsstudium)
-- study_program (name of study program)
-- entry_semester (e.g., "1")
+- study_program (Name des Studiengangs)
+- entry_semester (z.B. "1")
 - study_form (Erststudium/Zweitstudium)
 
-Required arguments (Personal Data):
+Erforderliche Argumente (Persönliche Daten):
 - gender (Männlich/Weiblich/Divers)
-- birth_place (city of birth)
-- birth_country (country of birth)
-- nationality (e.g., "deutsch")
+- birth_place (Geburtsort)
+- birth_country (Geburtsland)
+- nationality (z.B. "deutsch")
 
-Required arguments (HZB - Hochschulzugangsberechtigung):
-- hzb_date (date of HZB, format: DD.MM.YYYY)
-- hzb_type (type of HZB, e.g., "Allgemeine Hochschulreife")
-- hzb_name (name of certificate, e.g., "Abitur")
-- hzb_grade (grade, e.g., "2,3")
-- hzb_school (name of school)
-- hzb_country (country of HZB)
-- hzb_place (city/district of HZB)
+Erforderliche Argumente (HZB - Hochschulzugangsberechtigung):
+- hzb_date (Datum der HZB, Format: TT.MM.JJJJ)
+- hzb_type (Art der HZB, z.B. "Allgemeine Hochschulreife")
+- hzb_name (Name des Zeugnisses, z.B. "Abitur")
+- hzb_grade (Note, z.B. "2,3")
+- hzb_school (Name der Schule)
+- hzb_country (Land der HZB)
+- hzb_place (Ort/Kreis der HZB)
 
-Additional required for Zweitstudium:
-- prev_uni (previous university)
-- prev_program (previous study program)
-- prev_degree (previous degree)
-- prev_semesters (number of semesters)
+Zusätzlich erforderlich für Zweitstudium:
+- prev_uni (vorherige Universität)
+- prev_program (vorheriger Studiengang)
+- prev_degree (vorheriger Abschluss)
+- prev_semesters (Anzahl der Semester)
 
-Part of Master's Thesis: AI-Powered University Assistant Evaluation Framework
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
 """
 
 import pytest
@@ -53,8 +53,8 @@ pytestmark = [pytest.mark.llm, pytest.mark.klips, pytest.mark.eval]
 
 class TestApplyEasy:
     """
-    Easy scenarios - user provides ALL required information in one message.
-    These are comprehensive requests with all mandatory data.
+    Einfache Szenarien - Benutzer liefert ALLE erforderlichen Informationen in einer Nachricht.
+    Dies sind umfassende Anfragen mit allen Pflichtdaten.
     """
 
     def test_apply_01_complete_erststudium(self):
