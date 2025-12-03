@@ -4,6 +4,12 @@ Systemtests für den Autonomen Chatbot-Agenten
 import os
 import sys
 import unittest
+import sys
+import os
+import pytest
+
+# Markiere alle Tests in dieser Datei als slow und integration
+pytestmark = [pytest.mark.slow, pytest.mark.integration]
 
 # Füge das Projekt-Root-Verzeichnis zum Python-Pfad hinzu
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

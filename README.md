@@ -17,8 +17,12 @@ Dieses Projekt bietet einen intelligenten Chatbot, der:
 - **Autonomer Agent**: LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
 - **Ollama Integration**: Vollständig Open-Source LLM (llama3.1) ohne API-Kosten
 - **Universitäts-RAG**: Durchsucht 329 kategorisierte Dokumente der WiSo-Fakultät
-- **Multiple Tools**: Web-Scraping, DuckDuckGo-Suche, KLIPS2-Registrierung, E-Mail-Eskalation
-- **KLIPS2-Integration** (NEU): Unterstützt Benutzer bei der Erstellung von Basis-Accounts
+- **Multiple Tools**: Web-Scraping, DuckDuckGo-Suche, E-Mail-Eskalation
+- **KLIPS2-Integration** (ERWEITERT): 
+  - Account-Erstellung & Aktivierung
+  - Studienbewerbung (Wizard-Automatisierung)
+  - Kurs-Details abrufen
+  - Adressänderung & Passwort-Management
 - **Streamlit UI**: Moderne, benutzerfreundliche Chat-Oberfläche
 - **Konversations-Memory**: Persistente Chat-Historie
 
@@ -67,8 +71,13 @@ uzk-masterarbeit/
 │   │   ├── rag_tool.py                 # RAG für WiSo-Fakultät ⭐
 │   │   ├── web_scraper_tool.py         # Web-Scraping Tool
 │   │   ├── duckduckgo_tool.py          # DuckDuckGo-Suche
-│   │   ├── klips2_register_tool.py     # KLIPS2-Registrierung ⭐
-│   │   └── email_tool.py               # E-Mail Support-Eskalation
+│   │   ├── email_tool.py               # E-Mail Support-Eskalation
+│   │   └── klips/                      # KLIPS2 Integration Package ⭐
+│   │       ├── apply.py                # Studienbewerbung
+│   │       ├── register.py             # Account-Erstellung
+│   │       ├── courses.py              # Kurs-Details
+│   │       ├── address.py              # Adressänderung
+│   │       └── ...
 │   ├── scraper/                        # Erweiterte Web Scraper Pipeline ⭐
 │   │   ├── core/                       # Kern-Komponenten
 │   │   │   ├── batch_scraper.py        # Batch-Verarbeitung

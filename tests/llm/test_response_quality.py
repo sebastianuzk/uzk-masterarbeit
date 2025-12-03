@@ -3,7 +3,7 @@ LLM Response Quality Tests - Testet die Qualität und Korrektheit der Modellantw
 """
 import pytest
 
-pytestmark = pytest.mark.llm  # Markiere alle Tests in dieser Datei als LLM-Tests
+pytestmark = [pytest.mark.llm, pytest.mark.slow]  # Markiere alle Tests in dieser Datei als LLM-Tests und slow
 import sys
 import os
 from typing import List, Dict
