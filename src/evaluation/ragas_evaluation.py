@@ -473,9 +473,6 @@ def main():
     print("🎯 RAGAS-EVALUATION - WiSo-Chatbot")
     print("=" * 80 + "\n")
     
-    # Anzahl Fragen: None = alle Fragen aus dem Testset laden
-    NUM_QUESTIONS = None  # ALLE FRAGEN AUS DEM TESTSET
-    
     # Checkpoint-Pfad
     checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
     
