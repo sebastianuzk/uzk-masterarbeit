@@ -1,16 +1,16 @@
 """
 Tests für den React Agent
 """
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 # Füge das Projekt-Root-Verzeichnis zum Python-Pfad hinzu
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from src.agent.react_agent import ReactAgent
 from config.settings import settings
+from src.agent.react_agent import ReactAgent
 
 
 class TestReactAgent(unittest.TestCase):

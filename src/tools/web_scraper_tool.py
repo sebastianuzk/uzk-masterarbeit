@@ -1,10 +1,11 @@
 """
 Web Scraper Tool für den Autonomen Chatbot-Agenten
 """
+from typing import Type
+
 import requests
 from bs4 import BeautifulSoup
 from langchain_core.tools import BaseTool
-from typing import Type
 from pydantic import BaseModel, Field
 
 

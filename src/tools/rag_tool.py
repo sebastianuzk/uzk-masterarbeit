@@ -8,12 +8,12 @@ Modular erweiterbar mit Advanced RAG Techniken aus src.advanced_rag.
 Die Techniken werden optional geladen, basierend auf RAGConfig.
 """
 
-import os
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from langchain.tools import BaseTool
-from pydantic import Field
 from langsmith import traceable
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 

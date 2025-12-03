@@ -7,21 +7,16 @@ Command-line tool für die Verwaltung des HTML-Content-Cache.
 Ermöglicht Inspektion, Cleanup, Export und weitere Operationen.
 """
 
-import asyncio
 import argparse
-import json
 import logging
-from pathlib import Path
+import sqlite3
 from datetime import datetime
-import sys
-import os
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from pathlib import Path
 
 from src.scraper.utils.html_cache import HTMLContentCache
 
-def setup_logging(level='INFO'):
+
+def setup_logging(level: str = 'INFO') -> None:
     """Setup basic logging configuration."""
     logging.basicConfig(
         level=getattr(logging, level),
@@ -29,7 +24,8 @@ def setup_logging(level='INFO'):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-def format_size(bytes_size):
+
+def format_size(bytes_size: float) -> str:
     """Format bytes to human readable size."""
     for unit in ['B', 'KB', 'MB', 'GB']:
         if bytes_size < 1024.0:
@@ -37,7 +33,8 @@ def format_size(bytes_size):
         bytes_size /= 1024.0
     return f"{bytes_size:.1f} TB"
 
-def print_cache_info(cache_dir: Path):
+
+def print_cache_info(cache_dir: Path) -> None:
     """Print detailed cache information."""
     if not cache_dir.exists():
         print(f"❌ Cache directory does not exist: {cache_dir}")
@@ -60,15 +57,14 @@ def print_cache_info(cache_dir: Path):
     print(f"Saves: {stats['saves']:,}")
     print(f"Deduplicated: {stats['deduplicated']:,}")
 
-def list_cached_urls(cache_dir: Path, pattern: str = None, limit: int = 50):
+
+def list_cached_urls(cache_dir: Path, pattern: str = None, limit: int = 50) -> None:
     """List cached URLs with optional filtering."""
     if not cache_dir.exists():
         print(f"❌ Cache directory does not exist: {cache_dir}")
         return
     
     cache = HTMLContentCache(cache_dir)
-    
-    import sqlite3
     db_path = cache_dir / "html_cache.db"
     
     if not db_path.exists():
@@ -100,7 +96,8 @@ def list_cached_urls(cache_dir: Path, pattern: str = None, limit: int = 50):
             cached_date = datetime.fromtimestamp(timestamp)
             print(f"{cached_date.strftime('%Y-%m-%d %H:%M')} | {format_size(content_length):>8} | {url}")
 
-def export_cache(cache_dir: Path, output_file: Path):
+
+def export_cache(cache_dir: Path, output_file: Path) -> None:
     """Export entire cache to JSON file."""
     if not cache_dir.exists():
         print(f"❌ Cache directory does not exist: {cache_dir}")
@@ -117,7 +114,8 @@ def export_cache(cache_dir: Path, output_file: Path):
     else:
         print("❌ Export failed or no entries found")
 
-def cleanup_cache(cache_dir: Path, max_age_days: int = None):
+
+def cleanup_cache(cache_dir: Path, max_age_days: int = None) -> None:
     """Clean up old cache entries."""
     if not cache_dir.exists():
         print(f"❌ Cache directory does not exist: {cache_dir}")
@@ -133,7 +131,8 @@ def cleanup_cache(cache_dir: Path, max_age_days: int = None):
     else:
         print("✅ No old entries found to clean up")
 
-def clear_cache(cache_dir: Path, confirm: bool = False):
+
+def clear_cache(cache_dir: Path, confirm: bool = False) -> None:
     """Clear entire cache."""
     if not cache_dir.exists():
         print(f"❌ Cache directory does not exist: {cache_dir}")
@@ -155,7 +154,8 @@ def clear_cache(cache_dir: Path, confirm: bool = False):
     
     print(f"✅ Cleared {deleted_count:,} entries from cache")
 
-def get_url_content(cache_dir: Path, url: str):
+
+def get_url_content(cache_dir: Path, url: str) -> None:
     """Get cached content for a specific URL."""
     if not cache_dir.exists():
         print(f"❌ Cache directory does not exist: {cache_dir}")
@@ -188,7 +188,8 @@ def get_url_content(cache_dir: Path, url: str):
     
     print(content_preview)
 
-def main():
+
+def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description="HTML Cache Management Tool",
@@ -264,6 +265,7 @@ def main():
         if args.log_level == 'DEBUG':
             import traceback
             traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()
