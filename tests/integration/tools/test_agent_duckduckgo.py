@@ -5,21 +5,30 @@ Testet ob der Agent das DuckDuckGo-Tool korrekt nutzt.
 
 HINWEIS: Diese Tests verwenden das gpt-oss:20b Modell für bessere Ergebnisse.
 """
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 # Setze das Modell für alle Integration Tests auf gpt-oss:20b
 os.environ["OLLAMA_MODEL"] = "gpt-oss:20b"
 
-from src.agent.react_agent import ReactAgent
+from tests.integration.tools.conftest import ollama_available
+
+
+# Überspringe alle Tests wenn Ollama nicht verfügbar ist
+pytestmark = pytest.mark.skipif(
+    not ollama_available(),
+    reason="Ollama-Server nicht erreichbar"
+)
 
 
 @pytest.fixture(scope="module")
 def agent():
     """Erstellt einen Agent für die Tests"""
+    from src.agent.react_agent import ReactAgent
     return ReactAgent()
 
 
@@ -40,6 +49,7 @@ class TestAgentDuckDuckGoSearch:
     
     def test_agent_searches_for_klips(self, agent):
         """Test: Agent sucht nach KLIPS"""
+        from src.agent.react_agent import ReactAgent
         test_agent = ReactAgent()
         response = test_agent.chat("Was findest du im Internet über KLIPS an der Uni Köln?")
         
@@ -48,6 +58,7 @@ class TestAgentDuckDuckGoSearch:
     
     def test_agent_searches_bewerbungsfristen(self, agent):
         """Test: Agent sucht nach Bewerbungsfristen"""
+        from src.agent.react_agent import ReactAgent
         test_agent = ReactAgent()
         response = test_agent.chat("Suche online nach den aktuellen Bewerbungsfristen für die Uni Köln")
         
@@ -63,6 +74,7 @@ class TestAgentWebScraper:
     
     def test_agent_scrapes_uni_homepage(self, agent):
         """Test: Agent scraped Uni-Homepage"""
+        from src.agent.react_agent import ReactAgent
         test_agent = ReactAgent()
         response = test_agent.chat("Hole mir den Inhalt von der Webseite https://www.uni-koeln.de")
         
@@ -71,6 +83,7 @@ class TestAgentWebScraper:
     
     def test_agent_scrapes_wiso_page(self, agent):
         """Test: Agent scraped WiSo-Seite"""
+        from src.agent.react_agent import ReactAgent
         test_agent = ReactAgent()
         response = test_agent.chat("Was steht auf der Webseite https://wiso.uni-koeln.de?")
         

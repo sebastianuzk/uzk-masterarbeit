@@ -29,9 +29,8 @@ from src.scraper.utils.pdf_extractor import PDFExtractor, PDFContent
 
 # Enhancement-Module
 from src.scraper.utils.url_cache import URLCache
-from src.scraper.utils.content_deduplicator import ContentDeduplicator
-from src.scraper.utils.content_cleaner import ContentCleaner
-from src.scraper.utils.semantic_chunker import SemanticChunker
+from src.scraper.utils.html_cache import HTMLContentCache
+from src.advanced_rag.pre_retrieval import ContentDeduplicator, ContentCleaner, SemanticChunker
 from src.scraper.analysis.scraper_metrics import ScraperMetrics
 from src.scraper.core.resilient_scraper import ResilientScraper, RetryConfig
 from src.scraper.core.incremental_scraper import IncrementalScraper
@@ -166,6 +165,7 @@ async def run_crawler_scraper_pipeline(
     
     # Initialisiere Enhancement-Module
     url_cache = URLCache(str(output_dir / "url_cache.db")) if enable_caching else None
+    html_cache = HTMLContentCache(output_dir / "html_cache", max_age_days=30) if enable_caching else None
     deduplicator = ContentDeduplicator() if enable_deduplication else None
     content_cleaner = ContentCleaner() if enable_content_cleaning else None
     semantic_chunker = SemanticChunker()
@@ -185,6 +185,8 @@ async def run_crawler_scraper_pipeline(
     
     logger.info(f"📦 Enhancement-Module aktiv:")
     logger.info(f"   • Intelligentes Caching: {enable_caching}")
+    if html_cache:
+        logger.info(f"   • HTML Content Cache: {html_cache.cache_dir}")
     logger.info(f"   • Content-Deduplizierung: {enable_deduplication}")
     logger.info(f"   • Content-Bereinigung: {enable_content_cleaning}")
     logger.info(f"   • Semantisches Chunking: Aktiviert")
@@ -198,21 +200,54 @@ async def run_crawler_scraper_pipeline(
         crawl_delay=crawl_delay,
         concurrent_requests=concurrent_requests
     )
+    # Add the new log_url_max_length attribute
+    crawler_config.log_url_max_length = 80
     
-    crawler = WisoCrawler(crawler_config)
+    crawler = WisoCrawler(crawler_config, html_cache=html_cache)
     discovered_urls = await crawler.crawl()
     
+    # 🔥 SICHERHEITS-CHECK: PDF-URLs aus discovered_urls entfernen (falls trotzdem welche durchkommen)
+    html_only_urls = [url for url in discovered_urls if not url.lower().endswith('.pdf')]
+    pdf_count = len(discovered_urls) - len(html_only_urls)
+    
+    if pdf_count > 0:
+        logger.warning(f"🚨 GEFILTERT: {pdf_count} PDF-URLs aus discovered_urls entfernt")
+        discovered_urls = html_only_urls
+
+    # 🔥 WICHTIG: PDF-URLs aus HTML-Cache extrahieren (für URLs aus vorherigen Crawls)
+    cached_pdf_urls = set()
+    if html_cache:
+        try:
+            import sqlite3
+            with sqlite3.connect(html_cache.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT url FROM html_cache WHERE url LIKE '%.pdf'")
+                cached_pdfs = cursor.fetchall()
+                cached_pdf_urls = {url for (url,) in cached_pdfs}
+                
+                if cached_pdf_urls:
+                    logger.info(f"🔄 CACHE-RECOVERY: {len(cached_pdf_urls)} PDF-URLs aus HTML-Cache extrahiert")
+                    # Füge cached PDFs zu crawler.pdf_urls hinzu
+                    original_pdf_count = len(crawler.pdf_urls)
+                    crawler.pdf_urls.update(cached_pdf_urls)
+                    new_pdfs = len(crawler.pdf_urls) - original_pdf_count
+                    if new_pdfs > 0:
+                        logger.info(f"   📄 {new_pdfs} neue PDFs aus Cache hinzugefügt")
+        except Exception as e:
+            logger.warning(f"Fehler beim Extrahieren von PDF-URLs aus Cache: {e}")
+
     # Save discovered URLs
     urls_file = Path(__file__).parent / "data_analysis" / "discovered_urls.json"
     with urls_file.open('w', encoding='utf-8') as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),
             "total_urls": len(discovered_urls),
-            "urls": discovered_urls
+            "urls": discovered_urls,
+            "cached_pdf_urls": list(cached_pdf_urls)
         }, f, indent=2, ensure_ascii=False)
         
     logger.info(f"✓ Discovered {len(discovered_urls)} URLs")
-    logger.info(f"✓ Found {len(crawler.pdf_urls)} PDF documents")
+    logger.info(f"✓ Found {len(crawler.pdf_urls)} PDF documents (inkl. {len(cached_pdf_urls)} aus Cache)")
     
     # Stage 2: Scraping HTML Content
     logger.info(f"\n[Stage 2/5] Scraping HTML Content from {len(discovered_urls)} URLs...")
@@ -365,11 +400,40 @@ async def run_crawler_scraper_pipeline(
         
         pdf_extractor = PDFExtractor(download_dir=str(output_dir / "pdfs"))
         
-        # Process PDFs with progress tracking
+        # Process PDFs with progress tracking and rate limiting
         import aiohttp
-        async with aiohttp.ClientSession() as session:
-            pdf_tasks = [pdf_extractor.extract_from_url(session, pdf_url) for pdf_url in crawler.pdf_urls]
-            pdf_contents = await asyncio.gather(*pdf_tasks)
+        
+        # Create connector with connection limits
+        connector = aiohttp.TCPConnector(
+            limit=5,  # Maximum 5 connections total
+            limit_per_host=3  # Maximum 3 connections per host
+        )
+        
+        timeout = aiohttp.ClientTimeout(total=120, connect=30)  # 2min total, 30s connect
+        
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            # Process PDFs in smaller batches to avoid rate limiting
+            batch_size = 10  # Process 10 PDFs at a time
+            pdf_urls = list(crawler.pdf_urls)
+            pdf_contents = []
+            
+            for i in range(0, len(pdf_urls), batch_size):
+                batch = pdf_urls[i:i + batch_size]
+                logger.info(f"Processing PDF batch {i//batch_size + 1}/{(len(pdf_urls) + batch_size - 1)//batch_size}: {len(batch)} PDFs")
+                
+                batch_tasks = [pdf_extractor.extract_from_url(session, pdf_url) for pdf_url in batch]
+                batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+                
+                # Filter out exceptions and add successful results
+                for result in batch_results:
+                    if isinstance(result, Exception):
+                        logger.warning(f"PDF extraction failed: {result}")
+                    else:
+                        pdf_contents.append(result)
+                
+                # Add delay between batches to respect rate limits
+                if i + batch_size < len(pdf_urls):
+                    await asyncio.sleep(2)  # 2 second delay between batches
         
         successful_pdfs = [pdf for pdf in pdf_contents if pdf.success]
         logger.info(f"✓ Successfully extracted {len(successful_pdfs)}/{len(pdf_contents)} PDFs")
@@ -538,6 +602,22 @@ async def run_crawler_scraper_pipeline(
             json.dump(cache_stats, f, indent=2, ensure_ascii=False)
         logger.info(f"  ✓ Cache-Statistiken exportiert nach {cache_file}")
     
+    # HTML-Cache-Statistiken
+    if html_cache:
+        html_cache_stats = html_cache.get_statistics()
+        html_cache_file = output_dir / "html_cache_statistics.json"
+        with html_cache_file.open('w', encoding='utf-8') as f:
+            json.dump(html_cache_stats, f, indent=2, ensure_ascii=False)
+        logger.info(f"  ✓ HTML-Cache-Statistiken exportiert nach {html_cache_file}")
+        
+        # Cleanup alte HTML-Cache Einträge
+        cleaned_count = html_cache.cleanup_old_entries()
+        if cleaned_count > 0:
+            logger.info(f"  ✓ HTML-Cache cleanup: {cleaned_count} veraltete Einträge entfernt")
+        with cache_file.open('w', encoding='utf-8') as f:
+            json.dump(cache_stats, f, indent=2, ensure_ascii=False)
+        logger.info(f"  ✓ Cache-Statistiken exportiert nach {cache_file}")
+    
     # Incremental Scraping Report
     if incremental_scraper:
         changes_file = output_dir / "content_changes.json"
@@ -550,6 +630,14 @@ async def run_crawler_scraper_pipeline(
         failed_file = output_dir / "failed_urls.json"
         resilient_scraper.export_failed_urls(failed_file)
         logger.info(f"  ✓ Fehlgeschlagene URLs exportiert nach {failed_file}")
+    
+    # Crawler Failed URLs Report
+    if hasattr(crawler, 'get_failed_urls'):
+        crawler_failed_urls = crawler.get_failed_urls()
+        if crawler_failed_urls:
+            crawler_failed_file = output_dir / "crawler_failed_urls.json"
+            crawler.export_failed_urls(crawler_failed_file)
+            logger.info(f"  ✓ Crawler-fehlgeschlagene URLs exportiert nach {crawler_failed_file}")
     
     # Deduplication Report
     if deduplicator:
@@ -601,6 +689,7 @@ async def run_crawler_scraper_pipeline(
             "error_summary": metrics_stats.get('error_summary', {})
         },
         "cache_stats": url_cache.get_statistics() if url_cache else {},
+        "html_cache_stats": html_cache.get_statistics() if html_cache else {},
         "changes_detected": incremental_scraper.get_statistics() if incremental_scraper else {}
     }
     
@@ -617,6 +706,12 @@ async def run_crawler_scraper_pipeline(
     logger.info(f"   • URLs Scraped: {len(urls_to_scrape) if 'urls_to_scrape' in locals() else len(discovered_urls)}")
     if enable_caching and 'urls_to_scrape' in locals():
         logger.info(f"   • URLs Skipped (Cache): {len(discovered_urls) - len(urls_to_scrape)}")
+    if html_cache:
+        html_stats = html_cache.get_statistics()
+        logger.info(f"   • HTML Cache Hits: {html_stats['hits']}")
+        logger.info(f"   • HTML Cache Hit Rate: {html_stats['hit_rate']}")
+        logger.info(f"   • HTML Cached Entries: {html_stats['total_entries']}")
+        logger.info(f"   • HTML Compression Ratio: {html_stats['compression_ratio']}")
     logger.info(f"   • PDFs Found: {len(crawler.pdf_urls)}")
     logger.info(f"   • HTML Pages Scraped: {len(successful_scrapes)}/{len(scraped_data)}")
     if deduplicator:
@@ -735,14 +830,14 @@ Examples:
             enable_content_cleaning=not args.no_cleaning
         ))
         
-        print("\n✅ Pipeline completed successfully!")
-        print(f"📁 Results saved to: {args.output_dir}")
+        print("\n[SUCCESS] Pipeline completed successfully!")
+        print(f"Results saved to: {args.output_dir}")
         
     except KeyboardInterrupt:
-        print("\n⚠️  Pipeline interrupted by user")
+        print("\n[WARNING] Pipeline interrupted by user")
     except Exception as e:
         logger.error(f"Pipeline failed: {e}", exc_info=True)
-        print(f"\n❌ Pipeline failed: {e}")
+        print(f"\n[ERROR] Pipeline failed: {e}")
         return 1
     
     return 0

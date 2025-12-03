@@ -1,14 +1,15 @@
 """
 E-Mail-Tool für autonomen Chatbot-Agenten
 """
-import os
-import smtplib
 import re
-from email.mime.text import MIMEText
+import smtplib
 from email.mime.multipart import MIMEMultipart
-from typing import Optional, Dict, Any
+from email.mime.text import MIMEText
+from typing import Any, Dict, Optional
+
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
+
 from config.settings import settings
 
 class EmailInput(BaseModel):
@@ -41,7 +42,7 @@ class EmailTool(BaseTool):
         """Sende E-Mail über SMTP - Verwendet konfigurierte Umgebungsvariablen"""
         try:
             # Standard-E-Mail aus Konfiguration verwenden
-            actual_recipient = settings.DEFAULT_RECIPIENT if settings and settings.DEFAULT_RECIPIENT else None
+            actual_recipient = settings.DEFAULT_RECIPIENT or None
             
             if not actual_recipient:
                 return "❌ Keine Standard-E-Mail-Adresse konfiguriert (DEFAULT_RECIPIENT in .env)."
@@ -93,11 +94,10 @@ Diese E-Mail wurde automatisch vom Chatbot-System gesendet."""
     
     def _get_smtp_config(self) -> Optional[Dict[str, Any]]:
         """Lade SMTP-Konfiguration aus Settings"""
-        # Verwende Settings statt Umgebungsvariablen
-        smtp_server = settings.SMTP_SERVER if settings else os.getenv("SMTP_SERVER")
-        smtp_port = settings.SMTP_PORT if settings else os.getenv("SMTP_PORT")
-        smtp_username = settings.SMTP_USERNAME if settings else os.getenv("SMTP_USERNAME")
-        smtp_password = settings.SMTP_PASSWORD if settings else os.getenv("SMTP_PASSWORD")
+        smtp_server = settings.SMTP_SERVER
+        smtp_port = settings.SMTP_PORT
+        smtp_username = settings.SMTP_USERNAME
+        smtp_password = settings.SMTP_PASSWORD
         
         # Validiere erforderliche Konfiguration
         if not all([smtp_server, smtp_port, smtp_username, smtp_password]):

@@ -1,18 +1,19 @@
 """
 Tests für die Tools
 """
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 # Füge das Projekt-Root-Verzeichnis zum Python-Pfad hinzu
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from src.tools.web_scraper_tool import create_web_scraper_tool
+from config.settings import settings
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
-from src.tools.rag_tool import create_university_rag_tool
 from src.tools.email_tool import create_email_tool
+from src.tools.rag_tool import create_university_rag_tool
+from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.klips import create_klips2_register_tool
 from config.settings import settings
 

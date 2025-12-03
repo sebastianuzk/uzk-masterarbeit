@@ -111,23 +111,19 @@ uzk-masterarbeit/
 │   ├── pdfs/                           # Heruntergeladene PDFs
 │   └── *.json                          # Metrics & Reports
 ├── tests/
-│   ├── unit/                           # Unit-Tests
-│   ├── integration/                    # Integration-Tests
-│   │   ├── klips2/                     # KLIPS2-spezifische Tests
-│   │   ├── test_agent.py               # Agent-Tests
-│   │   └── test_enhanced_pipeline.py   # Pipeline-Tests
-│   ├── llm/                            # LLM-Tests
-│   └── __init__.py
-├── scripts/
-│   ├── deployment/                     # Deployment-Skripte
-│   └── ci/                             # CI/CD-Skripte
+│   ├── __init__.py
+│   ├── test_agent.py                   # Agent-Tests
+│   ├── test_tools.py                   # Tool-Tests
+│   ├── test_scraper.py                 # Scraper-Tests
+│   ├── test_scraper_components.py      # Komponenten-Tests
+│   └── test_enhanced_pipeline.py       # Pipeline-Tests
 ├── .github/
-│   └── copilot-instructions.md
-├── Dockerfile                          # Docker-Image
-├── docker-compose.yml                  # Docker Compose
+│   └── copilot-instructions.md         # GitHub Copilot Instruktionen
+├── .venv/                              # Virtual Environment
 ├── .env                                # Umgebungsvariablen (lokal)
-├── requirements.txt
-├── Makefile
+├── .gitignore
+├── requirements.txt                    # Python Dependencies
+├── setup.py                            # Package Setup
 └── README.md
 ```
 
@@ -362,70 +358,6 @@ pip install -r requirements.txt
 - Weniger concurrent requests: `--concurrent-requests 5`
 - Größere Delays: `--crawl-delay 2.0`
 
-## 🐳 Docker Deployment
-
-### Lokale Entwicklung
-```bash
-# Mit Docker Compose starten
-docker-compose up -d
-
-# Logs anzeigen
-docker-compose logs -f
-
-# Stoppen
-docker-compose down
-```
-
-### Production Deployment
-```bash
-# Production Deployment mit Docker Compose
-docker-compose up -d
-
-# Optional: Set environment variables for production
-# e.g. export ENV=production
-```
-
-### Environment-Variablen
-
-Erstellen Sie eine `.env` Datei im Root:
-```bash
-# Ollama
-OLLAMA_MODEL=llama3.1:8b
-OLLAMA_BASE_URL=http://localhost:11434
-
-# LangSmith (Optional)
-LANGSMITH_TRACING=false
-LANGSMITH_API_KEY=your_key_here
-LANGSMITH_PROJECT=uzk-masterarbeit
-
-# RAG
-CHUNK_SIZE=500
-CHUNK_OVERLAP=50
-```
-
-Für Production verwenden Sie `.env.production.example` als Vorlage.
-
-## 🔍 LangSmith Monitoring (Optional)
-
-LangSmith ermöglicht Tracing aller Agent-Interaktionen:
-
-1. Account erstellen: [smith.langchain.com](https://smith.langchain.com/)
-2. API-Key generieren
-3. In `.env` konfigurieren:
-   ```bash
-   LANGSMITH_TRACING=true
-   LANGSMITH_API_KEY=your_key
-   LANGSMITH_PROJECT=uzk-masterarbeit
-   ```
-
-**Was wird getrackt:**
-- Agent-Entscheidungen und Tool-Calls
-- LLM-Prompts und Responses
-- RAG-Retrieval Ergebnisse
-- Performance-Metriken
-
-**Datenschutz:** Keine User-Daten, nur technische Logs.
-
 ## 📈 Performance-Metriken
 
 | Metrik | Wert |
@@ -437,18 +369,6 @@ LangSmith ermöglicht Tracing aller Agent-Interaktionen:
 | Durchschn. Antwortzeit | < 1 Sekunde |
 | Embedding-Dimensionen | 384 |
 | Pipeline-Laufzeit | ~30 Sekunden |
-
-## 🛠️ Makefile Commands
-
-```bash
-make test          # Tests ausführen
-make build         # Build verifizieren
-make deploy-local  # Lokal deployen
-make pipeline      # CI/CD Pipeline lokal
-make clean         # Temporäre Dateien löschen
-make install       # Dependencies installieren
-make setup         # Komplettes Projekt-Setup
-```
 
 ## 🔐 Datenschutz
 

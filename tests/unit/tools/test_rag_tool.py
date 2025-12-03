@@ -3,10 +3,11 @@ Unit Tests für das RAG Tool
 ===========================
 Testet die RAG-Funktionalität mit gemockter ChromaDB.
 """
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-import sys
 import os
+import sys
+
+import pytest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
@@ -40,14 +41,14 @@ class TestUniversityRAGTool:
         matches = sum(1 for kw in keywords if kw in description)
         assert matches >= 2, "Beschreibung sollte typische Anwendungsfälle erwähnen"
     
-    def test_get_client_lazy_loading(self):
-        """Test: Client wird erst bei Bedarf erstellt (lazy loading)"""
+    def test_tool_initialization(self):
+        """Test: Tool wird korrekt initialisiert"""
         tool = UniversityRAGTool()
-        # Client sollte initial None sein
-        assert tool._client is None
-        assert tool._collections_cache is None
+        # Tool sollte initialisiert werden ohne Fehler
+        assert tool.name == "university_knowledge_search"
+        assert hasattr(tool, '_use_advanced')
     
-    @patch.object(UniversityRAGTool, '_get_client')
+    @patch.object(UniversityRAGTool, '_get_chromadb_client')
     def test_run_returns_string(self, mock_get_client):
         """Test: _run gibt einen String zurück"""
         mock_collection = MagicMock()
@@ -56,14 +57,16 @@ class TestUniversityRAGTool:
             'metadatas': [[{'source': 'test.html'}]],
             'distances': [[0.5]]
         }
-        mock_get_client.return_value = (MagicMock(), {'main': mock_collection})
+        mock_client = MagicMock()
+        mock_client.get_collection.return_value = mock_collection
+        mock_get_client.return_value = mock_client
         
         tool = UniversityRAGTool()
         result = tool._run("Bewerbungsfristen")
         
         assert isinstance(result, str)
     
-    @patch.object(UniversityRAGTool, '_get_client')
+    @patch.object(UniversityRAGTool, '_get_chromadb_client')
     def test_run_handles_empty_results(self, mock_get_client):
         """Test: Leere Ergebnisse werden behandelt"""
         mock_collection = MagicMock()
@@ -72,7 +75,9 @@ class TestUniversityRAGTool:
             'metadatas': [[]],
             'distances': [[]]
         }
-        mock_get_client.return_value = (MagicMock(), {'main': mock_collection})
+        mock_client = MagicMock()
+        mock_client.get_collection.return_value = mock_collection
+        mock_get_client.return_value = mock_client
         
         tool = UniversityRAGTool()
         result = tool._run("xyznonexistent12345")
@@ -81,25 +86,25 @@ class TestUniversityRAGTool:
         # Sollte eine Nachricht über keine Ergebnisse enthalten
         assert len(result) > 0
     
-    @patch.object(UniversityRAGTool, '_get_client')
-    def test_run_handles_no_collections(self, mock_client):
-        """Test: Fehler wenn keine Collections vorhanden"""
-        tool = UniversityRAGTool()
-        tool._collections_cache = {}
+    @patch.object(UniversityRAGTool, '_get_chromadb_client')
+    def test_run_handles_no_collection(self, mock_get_client):
+        """Test: Fehler wenn keine Collection vorhanden"""
+        mock_client = MagicMock()
+        mock_client.get_collection.side_effect = Exception("Collection not found")
+        mock_get_client.return_value = mock_client
         
+        tool = UniversityRAGTool()
         result = tool._run("Test Query")
         
+        # Tool sollte nicht crashen
         assert isinstance(result, str)
     
-    @patch.object(UniversityRAGTool, '_get_client')
-    def test_run_handles_exception(self, mock_client):
+    @patch.object(UniversityRAGTool, '_get_chromadb_client')
+    def test_run_handles_exception(self, mock_get_client):
         """Test: Exceptions werden behandelt"""
-        mock_client.side_effect = Exception("Database error")
+        mock_get_client.side_effect = FileNotFoundError("Vector DB nicht gefunden")
         
         tool = UniversityRAGTool()
-        tool._client = None
-        tool._collections_cache = None
-        
         # Tool sollte nicht crashen
         result = tool._run("Test Query")
         assert isinstance(result, str)

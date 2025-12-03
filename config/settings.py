@@ -7,19 +7,37 @@ from dotenv import load_dotenv
 # Lade Umgebungsvariablen aus .env Datei
 load_dotenv()
 
+# Ollama Server-Optimierungen (werden beim Import automatisch gesetzt)
+# Diese Variablen müssen VOR dem Ollama-Server-Start gesetzt sein
+# OLLAMA_MODELS muss manuell gesetzt werden (systemabhängig)
+os.environ.setdefault("OLLAMA_FLASH_ATTENTION", "1")  # ~20% schneller, weniger VRAM
+os.environ.setdefault("OLLAMA_KEEP_ALIVE", "30m")  # Modell 30 Min im RAM halten
+os.environ.setdefault("OLLAMA_NUM_GPU", "99")  # Alle Layer auf GPU
+
 class Settings:
     """Zentrale Konfigurationsklasse"""
     
     # Ollama Konfiguration
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")  # Kleines, schnelles Modell (neigt zu mehrsprachiger Ausgabe)
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:3b")  # Kleineres Modell für begrenzte RAM-Systeme
+    OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:8b")
+    OLLAMA_EVALUATION_TIMEOUT = int(os.getenv("OLLAMA_EVALUATION_TIMEOUT", "300"))  # 5 Minuten für RAGAS-Evaluationen
+    REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "120"))  # 2 Minuten Timeout für LLM-Requests
+    
+    # Ollama Server-Optimierungen (aus Umgebungsvariablen)
+    OLLAMA_FLASH_ATTENTION = os.getenv("OLLAMA_FLASH_ATTENTION", "1") == "1"
+    OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
+    OLLAMA_NUM_GPU = int(os.getenv("OLLAMA_NUM_GPU", "99"))
+    
+    # SentenceTransformer Embedding-Modell (für Vektordatenbank & Semantic Chunking)
+    # paraphrase-multilingual-MiniLM-L12-v2 für DE+EN Texte (384 Dimensionen)
+    SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
     
     # LLM Konfiguration
-    TEMPERATURE = 0.7
-    REQUEST_TIMEOUT = 30  # Sekunden für Ollama-Anfragen
+    TEMPERATURE = 0.0
     
     # Agent Konfiguration
-    MAX_ITERATIONS = 5  # Balance zwischen Funktionalität und Geschwindigkeit
+    MAX_ITERATIONS = 10
     MEMORY_SIZE = 100
     
     # Tool Konfiguration
@@ -65,12 +83,17 @@ class Settings:
             print("⚠️ Warnung: DEFAULT_RECIPIENT nicht konfiguriert.")
             print("   E-Mails können nicht gesendet werden ohne Empfänger-Adresse.")
 
-# Globale Instanz
+# Exportiere Settings-Instanz
 settings = Settings()
 
-# Module-Level Exports für einfachen Import
-OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+# Exportiere wichtige Variablen auch direkt
 OLLAMA_MODEL = settings.OLLAMA_MODEL
+OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+OLLAMA_EMBEDDING_MODEL = settings.OLLAMA_EMBEDDING_MODEL
+OLLAMA_EVALUATION_TIMEOUT = settings.OLLAMA_EVALUATION_TIMEOUT
+SENTENCE_TRANSFORMER_MODEL = settings.SENTENCE_TRANSFORMER_MODEL
+LANGSMITH_API_KEY = settings.LANGSMITH_API_KEY
+LANGSMITH_PROJECT = settings.LANGSMITH_PROJECT
 TEMPERATURE = settings.TEMPERATURE
 MAX_ITERATIONS = settings.MAX_ITERATIONS
 MEMORY_SIZE = settings.MEMORY_SIZE

@@ -1,15 +1,13 @@
 """
 DuckDuckGo Search Tool für den Autonomen Chatbot-Agenten
 """
-try:
-    from ddgs import DDGS  # Neuer Package-Name
-except ImportError:
-    from duckduckgo_search import DDGS  # Fallback auf alten Namen
-from langchain_core.tools import BaseTool
-from typing import Type, List
-from pydantic import BaseModel, Field
-from urllib.parse import urlparse
 import re
+from typing import List, Type
+from urllib.parse import urlparse
+
+from duckduckgo_search import DDGS
+from langchain_core.tools import BaseTool
+from pydantic import BaseModel, Field
 
 search_max_k: int = 10  # Maximale Anzahl der Suchergebnisse des DuckDuckGo-Tools
 search_max_len: int = 300  # Maximale Länge des Snippets pro Suchergebnis
@@ -69,14 +67,12 @@ class DuckDuckGoTool(BaseTool):
                     else:
                         domain = "Externe Quelle: " + parsed_url.netloc
                 except Exception:
-                    domain = 'Unknown Domain'
+                    domain = 'Unbekannte Domain'
                 
-
                 # Begrenze Snippet-Länge
                 if len(snippet) > search_max_len:
                     snippet = trim_snippet(snippet)
-
-                                                    
+                
                 # Erstelle WebSearchResult-Objekt
                 search_result = WebSearchResult(
                     titel=titel,

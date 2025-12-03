@@ -8,18 +8,26 @@ WARNUNG: Diese Tests können mit dem echten KLIPS-System interagieren!
 
 HINWEIS: Diese Tests verwenden das gpt-oss:20b Modell für bessere Ergebnisse.
 """
-import pytest
-import sys
 import os
-from unittest.mock import patch, MagicMock, call
-from typing import Dict, Any, List
+import sys
+from typing import Any, Dict, List
+from unittest.mock import MagicMock, call, patch
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 # Setze das Modell für alle Integration Tests auf gpt-oss:20b
 os.environ["OLLAMA_MODEL"] = "gpt-oss:20b"
 
-from src.agent.react_agent import ReactAgent
+from tests.integration.tools.conftest import ollama_available
+
+
+# Überspringe alle Tests wenn Ollama nicht verfügbar ist
+pytestmark = pytest.mark.skipif(
+    not ollama_available(),
+    reason="Ollama-Server nicht erreichbar"
+)
 
 
 def has_klips_credentials():
@@ -30,8 +38,9 @@ def has_klips_credentials():
 class ToolCallTracker:
     """Helper-Klasse um Tool-Aufrufe zu tracken"""
     
-    def __init__(self, agent: ReactAgent):
-        self.agent = agent
+    def __init__(self, agent):
+        from src.agent.react_agent import ReactAgent
+        self.agent: ReactAgent = agent
         self.tool_calls: List[Dict] = []
         self._original_invoke = agent.agent.invoke
         
@@ -66,6 +75,8 @@ def agent():
     from config.settings import Settings, settings
     from langchain_ollama import ChatOllama
     from langgraph.prebuilt import create_react_agent as create_langgraph_agent
+    
+    from src.agent.react_agent import ReactAgent
     
     # Überschreibe das Modell für bessere Test-Ergebnisse - BEVOR Agent erstellt wird
     Settings.OLLAMA_MODEL = "gpt-oss:20b"

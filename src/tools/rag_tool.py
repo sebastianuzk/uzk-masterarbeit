@@ -1,14 +1,30 @@
 """
 RAG Tool für den Chatbot-Agent
 
-Einfaches und robustes Tool für Retrieval-Augmented Generation.
+Naives RAG-Tool für Retrieval-Augmented Generation.
 Greift auf die vom Web-Scraper erstellte ChromaDB-Vectordatenbank zu.
+
+Modular erweiterbar mit Advanced RAG Techniken aus src.advanced_rag.
+Die Techniken werden optional geladen, basierend auf RAGConfig.
 """
 
-import os
-from typing import Optional, Any
+import logging
+from typing import Any, Dict, List, Optional
+
 from langchain.tools import BaseTool
+from langsmith import traceable
 from pydantic import Field
+
+logger = logging.getLogger(__name__)
+
+# Import RAG Configuration
+try:
+    from src.advanced_rag.rag_config import RAGConfig
+    CONFIG_AVAILABLE = True
+except ImportError:
+    logger.warning("RAGConfig nicht gefunden - verwende naive RAG")
+    CONFIG_AVAILABLE = False
+    RAGConfig = None
 
 # Import hyperparameters
 try:
@@ -23,6 +39,8 @@ class UniversityRAGTool(BaseTool):
     
     Durchsucht die lokale ChromaDB nach relevanten Informationen
     zu Fragen rund um die Universität zu Köln.
+    
+    Naives RAG standardmäßig, optional erweiterbar mit Advanced-Techniken.
     """
     
     name: str = "university_knowledge_search"
@@ -33,41 +51,147 @@ class UniversityRAGTool(BaseTool):
         "Nutze dieses Tool für spezifische Uni-Fragen."
     )
     
-    # Cache für ChromaDB Client und Collections
-    _client: Optional[Any] = None
-    _collections_cache: Optional[dict] = None
+    # Configuration (optional)
+    config: Optional[Any] = None
     
-    def _get_client(self):
-        """Hole oder erstelle ChromaDB Client (cached)"""
-        if self._client is None:
-            import chromadb
-            from pathlib import Path
+    # Advanced technique flags
+    _use_advanced: bool = False
+    _advanced_available: bool = False
+    
+    # Embedding model (lazy loaded)
+    _embedding_model: Optional[Any] = None
+    
+    def __init__(self, **data):
+        """Initialize RAG tool with optional advanced techniques."""
+        super().__init__(**data)
+        
+        # Wenn config übergeben wurde, nutze es
+        if self.config is not None:
+            self._use_advanced = self._should_use_advanced()
+            logger.info(f"RAG-Tool initialisiert mit übergebener Config (Advanced: {self._use_advanced})")
+        # Sonst: Load configuration from env
+        elif CONFIG_AVAILABLE and RAGConfig is not None:
+            try:
+                self.config = RAGConfig.load_from_env()
+                self._use_advanced = self._should_use_advanced()
+                logger.info(f"RAG-Tool initialisiert (Advanced: {self._use_advanced})")
+            except Exception as e:
+                logger.warning(f"Fehler beim Laden der RAG-Config: {e}")
+                self.config = None
+                self._use_advanced = False
+        else:
+            logger.info("RAG-Tool initialisiert (Naive RAG)")
+    
+    def _get_embedding_model(self):
+        """Lazy-load des Embedding-Modells für Query-Encoding."""
+        if self._embedding_model is None:
+            from sentence_transformers import SentenceTransformer
+            from config.settings import SENTENCE_TRANSFORMER_MODEL
+            self._embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+            logger.info(f"Embedding-Modell geladen: {SENTENCE_TRANSFORMER_MODEL}")
+        return self._embedding_model
+    
+    def _should_use_advanced(self) -> bool:
+        """Prüfe ob Advanced-Techniken aktiviert sind."""
+        if not self.config:
+            return False
+        
+        # Baseline-Modus = Naive = Kein Advanced
+        return not self.config.baseline_enabled
+    
+    def _get_chromadb_client(self):
+        """Hole ChromaDB Client (Shared Helper)."""
+        import chromadb
+        from pathlib import Path
+        
+        # WICHTIG: Relative Paths benutzen! ChromaDB hat Bug mit absoluten Windows-Pfaden
+        vector_db_paths = [
+            "data/vector_db",
+            "src/scraper/vector_db"
+        ]
+        
+        for path_str in vector_db_paths:
+            if Path(path_str).exists():
+                return chromadb.PersistentClient(path=path_str)
+        
+        raise FileNotFoundError("Vector DB nicht gefunden")
+    
+    @traceable(run_type="retriever")
+    def _naive_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Naives RAG: Einfache Vektorsuche in Single Collection.
+        
+        Args:
+            query: Die Suchanfrage
+            k: Anzahl der Ergebnisse
             
-            # Verbindung zur ChromaDB mit absolutem Pfad
-            vector_db_paths = [
-                Path("data/vector_db").resolve(),
-                Path("src/scraper/vector_db").resolve()
-            ]
+        Returns:
+            Liste von Dokumenten mit Metadaten (simples Format)
+        """
+        try:
+            client = self._get_chromadb_client()
+        except FileNotFoundError:
+            return []
+        
+        # NAIVE: Nur eine Collection - wiso_documents
+        try:
+            collection = client.get_collection('wiso_documents')
+        except Exception as e:
+            logger.warning(f"Collection 'wiso_documents' nicht gefunden: {e}")
+            return []
+        
+        # Einfache Vektorsuche mit dem korrekten Embedding-Modell
+        try:
+            # Erstelle Query-Embedding mit dem gleichen Modell wie beim Scraping
+            embedding_model = self._get_embedding_model()
+            query_embedding = embedding_model.encode([query]).tolist()
             
-            vector_db_path = None
-            for path in vector_db_paths:
-                if path.exists():
-                    vector_db_path = path
-                    break
+            results = collection.query(
+                query_embeddings=query_embedding,
+                n_results=k
+            )
+        except Exception as e:
+            logger.error(f"Fehler bei Vektorsuche: {e}")
+            return []
+        
+        # Simples Document-Format (nur für Naive)
+        documents = []
+        if results and results['documents'] and results['documents'][0]:
+            for i, doc in enumerate(results['documents'][0]):
+                doc_dict = {
+                    'page_content': doc,
+                    'type': 'Document',
+                    'metadata': {}
+                }
+                
+                # Füge Metadaten hinzu
+                if results.get('metadatas') and results['metadatas'][0]:
+                    doc_dict['metadata'] = results['metadatas'][0][i] or {}
+                
+                documents.append(doc_dict)
+        
+        return documents
+    
+    @traceable(run_type="retriever")
+    def _advanced_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Advanced RAG: Importiert komplette Logik aus multi_collection_search.
+        
+        Args:
+            query: Die Suchanfrage
+            k: Anzahl der Ergebnisse (wird für k_per_collection verwendet)
             
-            if vector_db_path is None:
-                raise FileNotFoundError(
-                    f"Universitäts-Wissensdatenbank nicht gefunden. "
-                    f"Gesucht in: {', '.join(str(p) for p in vector_db_paths)}. "
-                )
-            
-            self._client = chromadb.PersistentClient(path=str(vector_db_path))
-            
-            # Collections cachen
-            collections = self._client.list_collections()
-            self._collections_cache = {c.name: self._client.get_collection(c.name) for c in collections}
-            
-        return self._client, self._collections_cache
+        Returns:
+            Liste von Dokumenten mit erweiterten Metadaten
+        """
+        from src.advanced_rag.retrieval.multi_collection_search import advanced_retrieve
+        
+        # Nutze k_per_collection aus Config
+        k_per_collection = self.config.multi_collection_k_per_collection if self.config else 3
+        
+        # Alle Advanced-Logik ist in multi_collection_search.py
+        return advanced_retrieve(query, k_per_collection=k_per_collection)
+
     
     def _run(self, query: str) -> str:
         """
@@ -80,132 +204,29 @@ class UniversityRAGTool(BaseTool):
             Relevante Informationen aus der Wissensdatenbank
         """
         try:
-            # Hole gecachte Client und Collections
-            client, collections_cache = self._get_client()
+            # Bestimme k basierend auf Config oder Default
+            k = self.config.top_k if self.config else RAG_SEARCH_RESULTS
             
-            if not collections_cache:
+            # Retrieval basierend auf Modus
+            if self._use_advanced and self.config:
+                # Advanced: Multi-Collection Search
+                documents = self._advanced_retrieve(query, k=k)
+            else:
+                # Naive: Single Collection Search
+                documents = self._naive_retrieve(query, k=k)
+            
+            if not documents:
                 return (
-                    f"❌ Keine Universitäts-Wissensdatenbank gefunden. "
-                    f"Bitte stellen Sie sicher, dass die Daten vorher mit dem "
-                    f"Web-Scraper erfasst wurden."
+                    "ℹ️ Keine relevanten Informationen in der Universitäts-Wissensdatenbank gefunden. "
+                    "Möglicherweise ist die Datenbank leer oder Ihre Anfrage konnte nicht zugeordnet werden."
                 )
             
-            available_collections = list(collections_cache.keys())
+            # Post-Retrieval Processing
+            if self._use_advanced and self.config:
+                return self._advanced_process(query, documents)
             
-            if not available_collections:
-                return (
-                    f"❌ Keine Universitäts-Wissensdatenbank gefunden. "
-                    f"Bitte stellen Sie sicher, dass die Daten vorher mit dem "
-                    f"Web-Scraper erfasst wurden."
-                )
-            
-            # Durchsuche alle verfügbaren Collections
-            all_results = []
-            searched_collections = []
-            
-            for collection_name in available_collections:
-                try:
-                    collection = collections_cache[collection_name]
-                    
-                    # Suche in dieser Collection durchführen
-                    results = collection.query(
-                        query_texts=[query],
-                        n_results=3
-                    )
-                    
-                    if results['documents'] and results['documents'][0]:
-                        # Ergebnisse mit Collection-Info erweitern
-                        documents = results['documents'][0]
-                        metadatas = results['metadatas'][0] if results['metadatas'] else [{}] * len(documents)
-                        distances = results['distances'][0] if results['distances'] else [0] * len(documents)
-                        
-                        for doc, metadata, distance in zip(documents, metadatas, distances):
-                            # Erweitere Metadaten um Collection-Info
-                            enhanced_metadata = metadata.copy() if metadata else {}
-                            enhanced_metadata['collection'] = collection_name
-                            
-                            all_results.append({
-                                'document': doc,
-                                'metadata': enhanced_metadata,
-                                'distance': distance
-                            })
-                    
-                    searched_collections.append(collection_name)
-                    
-                except Exception as e:
-                    print(f"Warnung: Fehler beim Zugriff auf Collection '{collection_name}': {str(e)}")
-                    continue
-            
-            if not all_results:
-                return (
-                    f"❌ Keine relevanten Informationen zu '{query}' gefunden. "
-                    f"Durchsuchte Collections: {searched_collections}. "
-                    f"Möglicherweise sind noch keine Daten zu diesem Thema "
-                    f"in der Universitäts-Wissensdatenbank verfügbar."
-                )
-            
-            # Sortiere alle Ergebnisse nach Relevanz (niedrigere Distance = höhere Relevanz)
-            all_results.sort(key=lambda x: x['distance'])
-            
-            # Nehme die besten Ergebnisse (maximal aus Hyperparametern)
-            best_results = all_results[:RAG_SEARCH_RESULTS]
-            
-            # Ergebnisse formatieren
-            formatted_results = []
-            
-            for i, result in enumerate(best_results, 1):
-                doc = result['document']
-                metadata = result['metadata']
-                distance = result['distance']
-                
-                # Relevanz-Score (niedrigere Distance = höhere Relevanz)
-                relevance = max(0, 1 - distance)
-                
-                # Nur Ergebnisse mit ausreichender Relevanz
-                # Niedrigerer Schwellwert für bessere Recall mit sentence-transformers
-                if relevance > 0.1:  # Angepasster Schwellwert
-                    source_info = ""
-                    collection_info = f" [aus: {metadata.get('collection', 'unbekannt')}]"
-                    
-                    if metadata:
-                        title = metadata.get('title', '')
-                        source_url = metadata.get('source_url', '')
-                        if title:
-                            source_info = f" (Quelle: {title})"
-                        elif source_url:
-                            source_info = f" (Quelle: {source_url})"
-                    
-                    # Sicherstellen dass doc nicht None ist
-                    doc_text = doc.strip() if doc and isinstance(doc, str) else ""
-                    if doc_text:  # Nur hinzufügen wenn Text vorhanden
-                        formatted_results.append(
-                            f"📄 **Information {i}**{source_info}{collection_info}:\n{doc_text}"
-                        )
-            
-            if not formatted_results:
-                return (
-                    f"❌ Die gefundenen Informationen zu '{query}' sind nicht "
-                    f"relevant genug. Versuchen Sie eine andere Formulierung "
-                    f"oder allgemeinere Begriffe."
-                )
-            
-            # Antwort zusammenstellen
-            response = (
-                f"🎓 **Informationen aus der Universitäts-Wissensdatenbank** "
-                f"(durchsuchte Collections: {', '.join(searched_collections)}):\n\n"
-                + "\n\n".join(formatted_results)
-            )
-            
-            # Spezielle Hinweise für häufige Themen
-            query_lower = query.lower()
-            if any(keyword in query_lower for keyword in ['bewerbung', 'fachsemester', 'höher']):
-                response += (
-                    "\n\n💡 **Wichtiger Hinweis**: Bei Bewerbungen für höhere "
-                    "Fachsemester sind oft spezielle Bescheinigungen vom "
-                    "Prüfungsamt der WiSo-Fakultät erforderlich."
-                )
-            
-            return response
+            # Naive Ausgabe: Einfache Formatierung
+            return self._format_naive_results(documents)
             
         except ImportError:
             return (
@@ -213,9 +234,122 @@ class UniversityRAGTool(BaseTool):
                 "pip install chromadb"
             )
         except Exception as e:
+            logger.error(f"Fehler beim RAG-Tool: {e}", exc_info=True)
             return (
                 f"❌ Fehler beim Zugriff auf die Universitäts-Wissensdatenbank: {e}"
             )
+    
+    def _format_naive_results(self, documents: List[Dict[str, Any]]) -> str:
+        """
+        Naive Formatierung der Ergebnisse.
+        
+        Args:
+            documents: Liste von Dokumenten
+            
+        Returns:
+            Formatierter String
+        """
+        if not documents:
+            return "Keine Ergebnisse gefunden."
+        
+        response_parts = ["📚 Informationen aus der Universitäts-Wissensdatenbank:\n"]
+        
+        for i, doc in enumerate(documents, 1):
+            content = doc.get('page_content', '')
+            metadata = doc.get('metadata', {})
+            
+            response_parts.append(f"\n{i}. {content[:500]}...")
+            
+            # Füge Quelle hinzu wenn vorhanden
+            if 'source' in metadata:
+                response_parts.append(f"   (Quelle: {metadata['source']})")
+        
+        return "\n".join(response_parts)
+    
+    def _advanced_process(self, query: str, documents: List[Dict[str, Any]]) -> str:
+        """
+        Verarbeite Ergebnisse mit Advanced-Techniken.
+        
+        Args:
+            query: Die ursprüngliche Anfrage
+            documents: Liste von Dokumenten (von _naive_retrieve)
+            
+        Returns:
+            Verarbeiteter Response-String mit allen Advanced-Techniken
+        """
+        from src.advanced_rag.retrieval import (
+            DistanceConverter,
+            ResultAggregator,
+            GlobalReranker
+        )
+        from src.advanced_rag.post_retrieval import (
+            RelevanceFilter,
+            ResultFormatter,
+            ContextHintProvider,
+            EmptyResultHandler
+        )
+        
+        logger.info("Verwende Advanced RAG-Techniken")
+        
+        # Merke ob wir Ergebnisse vor Filterung hatten
+        had_results = len(documents) > 0
+        
+        # 1. Distance → Relevance Conversion
+        if self.config.use_distance_conversion:
+            converter = DistanceConverter()
+            documents = converter.convert(documents)
+            logger.debug("✓ Distance Conversion angewendet")
+        
+        # 2. Result Aggregation (deduplizieren + sortieren)
+        if self.config.use_result_aggregation:
+            aggregator = ResultAggregator(top_k=self.config.top_k)
+            documents = aggregator.deduplicate(documents)
+            documents = aggregator.aggregate(documents, sort_by='relevance')
+            logger.debug("✓ Result Aggregation angewendet")
+        
+        # 3. Global Re-Ranking
+        if self.config.use_global_reranking:
+            reranker = GlobalReranker(use_relevance=True)
+            documents = reranker.rerank(documents)
+            # Optional: Diversity-Penalty
+            documents = reranker.apply_diversity_penalty(documents, max_per_source=2)
+            logger.debug("✓ Global Re-Ranking angewendet")
+        
+        # 4. Relevance Filtering
+        if self.config.use_relevance_filtering:
+            relevance_filter = RelevanceFilter(threshold=self.config.relevance_threshold)
+            documents = relevance_filter.filter(documents)
+            logger.debug(f"✓ Relevance Filtering angewendet (Threshold: {self.config.relevance_threshold})")
+        
+        # 5. Prüfe ob noch Ergebnisse vorhanden
+        if not documents:
+            if self.config.use_empty_result_handling:
+                handler = EmptyResultHandler()
+                return handler.handle_empty_results(
+                    query=query,
+                    had_results_before_filtering=had_results,
+                    relevance_threshold=self.config.relevance_threshold
+                )
+            else:
+                return "ℹ️ Keine relevanten Informationen gefunden."
+        
+        # 6. Result Formatting
+        if self.config.use_result_formatting:
+            formatter = ResultFormatter(include_metadata=True, include_sources=True)
+            formatted = formatter.format(documents, query=query)
+            logger.debug("✓ Result Formatting angewendet")
+        else:
+            # Fallback: Kompakte Formatierung
+            formatted = "\n\n".join([doc.get('document', '') for doc in documents])
+        
+        # 7. Context Hints
+        if self.config.use_context_hints:
+            hint_provider = ContextHintProvider()
+            formatted = hint_provider.add_hints(formatted, query=query, results=documents)
+            logger.debug("✓ Context Hints hinzugefügt")
+        
+        logger.info("Advanced RAG-Pipeline abgeschlossen")
+        return formatted
     
     async def _arun(self, query: str) -> str:
         """Asynchrone Version - ruft die synchrone Version auf."""

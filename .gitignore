@@ -73,15 +73,16 @@ instance/
 # Sphinx documentation
 docs/_build/
 
-# MkDocs
-site/
-
 # PyBuilder
 .pybuilder/
 target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Evaluation Checkpoints
+checkpoints/
+src/evaluation/checkpoints/
 
 # IPython
 profile_default/
@@ -198,7 +199,6 @@ data/*
 # Specific data subdirectories
 data/scraped/
 data/pdfs/
-data/vector_db/
 data/pipeline_*/
 data/test_*/
 data/enhanced_*/
@@ -210,14 +210,16 @@ data/cache/
 *.sqlite
 *.sqlite3
 url_cache.db
-chroma.sqlite3
+
+# Vector DB - alle ignorieren
+**/vector_db/
+data/vector_db/
 
 # ChromaDB
-**/chroma.sqlite3
 **/vector_db/*.bin
 **/vector_db/*.pkl
+*.pickle
 src/scraper/vector_db/*
-!src/scraper/vector_db/.gitkeep
 
 # ============================================================================
 # SCRAPER OUTPUT FILES

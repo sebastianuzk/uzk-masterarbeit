@@ -1,6 +1,8 @@
 """
 Systemtests für den Autonomen Chatbot-Agenten
 """
+import os
+import sys
 import unittest
 import sys
 import os
@@ -13,9 +15,9 @@ pytestmark = [pytest.mark.slow, pytest.mark.integration]
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
+from config.settings import settings
 from src.agent.react_agent import create_react_agent
 from src.tools.email_tool import create_email_tool
-from config.settings import settings
 
 
 class TestSystemIntegration(unittest.TestCase):
