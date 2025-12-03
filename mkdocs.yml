@@ -48,9 +48,11 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Configuration: getting-started/configuration.md
+  - Features:
+      - KLIPS Integration: features/klips.md
   - Architecture:
       - Overview: architecture/overview.md
+  - Development:
+      - Structure: development/structure.md
   - Deployment:
       - Docker: deployment/docker.md
-  - Development:
-      - Project Structure: development/structure.md

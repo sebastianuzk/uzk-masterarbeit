@@ -13,7 +13,7 @@ from src.tools.web_scraper_tool import create_web_scraper_tool
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
 from src.tools.email_tool import create_email_tool
-from src.tools.klips2_register_tool import create_klips2_register_tool
+from src.tools.klips import create_klips2_register_tool
 from config.settings import settings
 
 

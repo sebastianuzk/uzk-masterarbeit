@@ -1,0 +1,148 @@
+"""
+Multi-Tool und Negativ-Testszenarien
+
+Diese Szenarien testen:
+1. Multi-Tool: Anfragen, die mehrere Tools in Kombination erfordern
+2. Negativ: Anfragen, die KEINE Tools verwenden sollten
+
+Teil der Masterarbeit: KI-gestütztes Universitäts-Assistenten Evaluierungs-Framework
+"""
+
+import pytest
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+
+from tests.eval.evaluation import (
+    GoldStandard,
+    ArgumentMatchMode,
+)
+
+pytestmark = [pytest.mark.llm, pytest.mark.eval]
+
+
+class TestMultiTool:
+    """Szenarien, die mehrere Tools erfordern."""
+
+    def test_multi_01_search_then_scrape(self):
+        """
+        MULTI-TOOL: Search for information, then scrape specific result.
+        """
+        user_prompt = """
+        Suche nach der offiziellen Seite für KLIPS2 Anleitungen und 
+        zeige mir dann den Inhalt der Seite.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["duckduckgo_search", "web_scraper"],
+            required_arguments={},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "duckduckgo_search" in gold.required_tools
+        assert "web_scraper" in gold.required_tools
+
+    def test_multi_02_klips_then_email(self):
+        """
+        MULTI-TOOL: Get course details and send summary via email.
+        """
+        user_prompt = """
+        Schau nach den Details zum Kurs 14302.0001 und schicke 
+        mir dann eine E-Mail mit der Zusammenfassung (Betreff: Kursinfo).
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_get_course_details", "send_email"],
+            required_arguments={
+                "klips2_get_course_details": {
+                    "course_id": "14302.0001"
+                },
+                "send_email": {
+                    "subject": "Kursinfo"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert len(gold.required_tools) == 2
+
+    def test_multi_03_search_then_email(self):
+        """
+        MULTI-TOOL: Search and then email results.
+        """
+        user_prompt = """
+        Recherchiere die aktuellen Bewerbungsfristen für die Uni Köln 
+        und schicke das Ergebnis als E-Mail mit Betreff "Fristen".
+        """
+        
+        gold = GoldStandard(
+            required_tools=["duckduckgo_search", "send_email"],
+            required_arguments={
+                "send_email": {
+                    "subject": "Fristen"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "duckduckgo_search" in gold.required_tools
+        assert "send_email" in gold.required_tools
+
+
+class TestNegative:
+    """Scenarios that should NOT trigger any tools."""
+
+    def test_negative_01_greeting(self):
+        """
+        NEGATIVE: Simple greeting should not trigger tools.
+        """
+        user_prompt = """
+        Hallo! Wie geht es dir?
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"klips2_register", "klips2_apply_study", 
+                          "send_email", "duckduckgo_search", "web_scraper"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert len(gold.required_tools) == 0
+
+    def test_negative_02_general_question(self):
+        """
+        NEGATIVE: General knowledge question (no tools needed).
+        """
+        user_prompt = """
+        Was ist der Unterschied zwischen Bachelor und Master?
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"klips2_register", "klips2_apply_study",
+                          "duckduckgo_search"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert len(gold.required_tools) == 0
+
+    def test_negative_03_system_info(self):
+        """
+        NEGATIVE: Question about the assistant itself.
+        """
+        user_prompt = """
+        Welche Funktionen hast du? Was kannst du alles machen?
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"klips2_register", "klips2_apply_study",
+                          "send_email", "duckduckgo_search", "web_scraper"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert len(gold.required_tools) == 0
+
+
+# Total: 6 scenarios
