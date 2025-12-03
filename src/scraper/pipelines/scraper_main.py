@@ -28,6 +28,9 @@ from src.scraper.core.batch_scraper import BatchScraper, ScrapingConfig, Scraped
 from src.scraper.core.vector_store import VectorStore, VectorStoreConfig
 from src.scraper.data_analysis.data_structure_analyzer import DataStructureAnalyzer
 
+# Zentrale Konfiguration
+from config.settings import SENTENCE_TRANSFORMER_MODEL
+
 
 def setup_logging(level: str = "INFO") -> None:
     """Setup logging configuration."""
@@ -464,8 +467,8 @@ Examples:
                                  help='Text chunk size')
     vectorize_parser.add_argument('--chunk-overlap', type=int, default=200,
                                  help='Text chunk overlap')
-    vectorize_parser.add_argument('--embedding-model', default='all-MiniLM-L6-v2',
-                                 help='Embedding model name')
+    vectorize_parser.add_argument('--embedding-model', default=SENTENCE_TRANSFORMER_MODEL,
+                                 help='Embedding model name (default from .env)')
     vectorize_parser.add_argument('--embedding-provider', choices=['sentence_transformers'],
                                  default='sentence_transformers', help='Embedding provider (open source only)')
     
@@ -504,8 +507,8 @@ Examples:
                                 help='Text chunk size')
     pipeline_parser.add_argument('--chunk-overlap', type=int, default=200,
                                 help='Text chunk overlap')
-    pipeline_parser.add_argument('--embedding-model', default='all-MiniLM-L6-v2',
-                                help='Embedding model name')
+    pipeline_parser.add_argument('--embedding-model', default=SENTENCE_TRANSFORMER_MODEL,
+                                help='Embedding model name (default from .env)')
     pipeline_parser.add_argument('--embedding-provider', choices=['sentence_transformers'],
                                 default='sentence_transformers', help='Embedding provider (open source only)')
     pipeline_parser.add_argument('--save-scraped', action='store_true',

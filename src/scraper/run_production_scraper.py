@@ -26,6 +26,9 @@ from datetime import datetime
 # Scraper Utils
 from src.scraper.utils.checkpoint_manager import CheckpointManager
 
+# Zentrale Konfiguration
+from config.settings import SENTENCE_TRANSFORMER_MODEL
+
 # Lade RAG Configuration
 try:
     from src.advanced_rag.rag_config import RAGConfig
@@ -110,21 +113,130 @@ def decompress_content(compressed_data: bytes) -> str:
     """Dekomprimiere gzip-Content."""
     return gzip.decompress(compressed_data).decode('utf-8')
 
+def naive_extract_text_from_html(html: str) -> str:
+    """
+    Naive HTML-zu-Text Extraktion mit Strukturerhaltung.
+    Konvertiert HTML zu Markdown-ähnlichem Text.
+    
+    Erhaltene Strukturen:
+    - Überschriften (h1-h6) → # Markdown-Überschriften
+    - Listen (ul/ol) → - oder 1. Listenelemente
+    - Blockquotes → > Zitate
+    - Absätze/Divs → Zeilenumbrüche
+    
+    Entfernt:
+    - Script, Style, Head, Meta Tags
+    - Navigation, Footer, Aside (Layout-Elemente)
+    - Elemente mit menu/nav/sidebar/breadcrumb Klassen
+    - UI-Texte wie "Menü schließen"
+    - HTML-Tags selbst
+    - Übermäßige Whitespaces
+    """
+    from bs4 import BeautifulSoup
+    
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    # 1. Entferne unsichtbare Elemente komplett
+    for element in soup(['script', 'style', 'head', 'meta', 'link', 'noscript', 'iframe']):
+        element.decompose()
+    
+    # 2. Entferne Layout-Elemente ohne semantischen Inhalt
+    for element in soup(['nav', 'footer', 'aside']):
+        element.decompose()
+    
+    # 3. Entferne Elemente mit bestimmten Klassen/IDs (Navigation, Menüs, Sidebars)
+    boilerplate_patterns = re.compile(r'menu|nav|sidebar|breadcrumb|cookie|banner|popup|modal', re.IGNORECASE)
+    for element in soup.find_all(class_=boilerplate_patterns):
+        element.decompose()
+    for element in soup.find_all(id=boilerplate_patterns):
+        element.decompose()
+    
+    # 4. Überschriften → Markdown
+    for i, tag in enumerate(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+        for h in soup.find_all(tag):
+            prefix = '#' * (i + 1) + ' '
+            h.insert_before('\n\n')
+            h.insert_after('\n')
+            if h.string:
+                h.string = prefix + h.get_text().strip()
+            else:
+                h.insert_before(prefix)
+    
+    # 5. Listen → Markdown
+    # Nummerierte Listen
+    for ol in soup.find_all('ol'):
+        ol.insert_before('\n')
+        ol.insert_after('\n')
+        for i, li in enumerate(ol.find_all('li', recursive=False), 1):
+            li.insert_before(f'\n{i}. ')
+    
+    # Unnummerierte Listen
+    for ul in soup.find_all('ul'):
+        ul.insert_before('\n')
+        ul.insert_after('\n')
+        for li in ul.find_all('li', recursive=False):
+            li.insert_before('\n- ')
+    
+    # 6. Blockquotes → Markdown
+    for bq in soup.find_all('blockquote'):
+        bq.insert_before('\n')
+        bq.insert_after('\n')
+        # Füge > vor dem Text ein
+        text = bq.get_text().strip()
+        quoted_lines = '\n'.join('> ' + line for line in text.split('\n'))
+        bq.string = quoted_lines
+    
+    # 7. Block-Elemente → Zeilenumbrüche
+    for tag in soup.find_all(['p', 'div', 'br', 'tr', 'article', 'section']):
+        tag.insert_before('\n')
+        if tag.name != 'br':
+            tag.insert_after('\n')
+    
+    # 8. Tabellenzellen → Tab-getrennt
+    for td in soup.find_all(['td', 'th']):
+        td.insert_after('\t')
+    
+    # 9. Extrahiere Text
+    text = soup.get_text()
+    
+    # 10. Entferne typische UI-Texte
+    ui_patterns = [
+        r'Menü schließen',
+        r'Zur Übersichtsseite\s+\w+',
+        r'zum Inhalt springen',
+        r'Sprache wechseln',
+        r'Suchbegriff eingeben',
+        r'Abschicken',
+        r'Finden',
+        r'EnglishEnglish',
+        r'Hauptnavigation\..*?anzuspringen\.',
+    ]
+    for pattern in ui_patterns:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    
+    # 11. Bereinige Whitespace
+    text = re.sub(r'[ \t]+', ' ', text)  # Mehrere Spaces/Tabs zu einem Space
+    text = re.sub(r'\n[ \t]+', '\n', text)  # Spaces am Zeilenanfang entfernen
+    text = re.sub(r'[ \t]+\n', '\n', text)  # Spaces am Zeilenende entfernen
+    text = re.sub(r'\n{3,}', '\n\n', text)  # Max 2 Zeilenumbrüche
+    
+    return text.strip()
+
 def naive_clean_text(text: str) -> str:
-    """Naive Text-Bereinigung ohne Advanced-Techniken."""
+    """Naive Text-Bereinigung für bereits extrahierten Text (z.B. PDFs)."""
     # Nur grundlegende Bereinigung
     text = re.sub(r'\s+', ' ', text)  # Normalisiere Leerzeichen
     text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Entferne mehrfache Zeilenumbrüche
     return text.strip()
 
-def naive_chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list:
+def naive_chunk_text(text: str, chunk_size: int = 1250, overlap: int = 300) -> list:
     """
     Naive Chunking: Einfaches Character-basiertes Chunking mit Overlap.
     
     Args:
         text: Eingabetext
-        chunk_size: Chunk-Größe in Zeichen (Standard: 1000)
-        overlap: Überlappung zwischen Chunks (Standard: 200)
+        chunk_size: Chunk-Größe in Zeichen (Standard: 1250)
+        overlap: Überlappung zwischen Chunks (Standard: 300)
     
     Returns:
         Liste von Text-Chunks
@@ -161,12 +273,19 @@ def process_document(doc_id, url, title, content, content_type,
         # Dekomprimiere
         raw_content = decompress_content(content)
         
+        # Basis-Cleaning für alle Modi: HTML → Markdown-ähnlicher Text
+        if content_type == 'html':
+            cleaned_text = naive_extract_text_from_html(raw_content)
+        else:  # pdf
+            cleaned_text = naive_clean_text(raw_content)
+        
         if USE_ADVANCED:
             # ADVANCED: Mit Pre-Retrieval Techniken
+            # Zusätzliches Cleaning durch ContentCleaner (Boilerplate-Entfernung etc.)
             if content_type == 'html':
-                cleaned_text = content_cleaner.clean_html(raw_content)
+                cleaned_text = content_cleaner._clean_text(cleaned_text)
             else:  # pdf
-                cleaned_text = content_cleaner._clean_text(raw_content)
+                cleaned_text = content_cleaner._clean_text(cleaned_text)
             
             chunks = chunker.chunk_by_paragraphs(cleaned_text)
             
@@ -176,9 +295,8 @@ def process_document(doc_id, url, title, content, content_type,
                 unique_chunks, _ = deduplicator.deduplicate_batch(chunk_docs)
                 chunks = [doc["content"] for doc in unique_chunks]
         else:
-            # NAIVE: Ohne Advanced-Techniken
-            cleaned_text = naive_clean_text(raw_content)
-            chunks = naive_chunk_text(cleaned_text, chunk_size=1000, overlap=200)
+            # NAIVE: Nur Basis-Cleaning (bereits oben durchgeführt)
+            chunks = naive_chunk_text(cleaned_text)  # Verwendet Standardwerte: chunk_size=1250, overlap=300
         
         if len(chunks) == 0:
             return None
@@ -250,8 +368,8 @@ def run_production_scraper():
         print("   ✅ Naive Chunking (einfache Zeichenzahl-basiert)")
     
     print("\n🤖 Lade Embedding-Modell...")
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    print("   ✅ all-MiniLM-L6-v2 (384 Dimensionen)")
+    embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+    print(f"   ✅ {SENTENCE_TRANSFORMER_MODEL}")
     
     # Verbinde zu ChromaDB
     print("\n💾 Initialisiere ChromaDB...")
@@ -542,7 +660,7 @@ def run_production_scraper():
     print(f"\n💾 Vektordatenbank:")
     print(f"   • Pfad: {VECTOR_DB}")
     print(f"   • Collections: {len([c for c, count in stats['collections'].items() if count > 0])}")
-    print(f"   • Embedding-Modell: all-MiniLM-L6-v2 (384D)")
+    print(f"   • Embedding-Modell: {SENTENCE_TRANSFORMER_MODEL}")
     
     # Verifikation: Zeige Beispiele aus beiden Content-Types
     print("\n" + "=" * 80)

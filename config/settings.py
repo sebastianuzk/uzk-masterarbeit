@@ -29,6 +29,10 @@ class Settings:
     OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
     OLLAMA_NUM_GPU = int(os.getenv("OLLAMA_NUM_GPU", "99"))
     
+    # SentenceTransformer Embedding-Modell (für Vektordatenbank & Semantic Chunking)
+    # paraphrase-multilingual-MiniLM-L12-v2 für DE+EN Texte (384 Dimensionen)
+    SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+    
     # LLM Konfiguration
     TEMPERATURE = 0.0
     
@@ -87,6 +91,9 @@ OLLAMA_MODEL = settings.OLLAMA_MODEL
 OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
 OLLAMA_EMBEDDING_MODEL = settings.OLLAMA_EMBEDDING_MODEL
 OLLAMA_EVALUATION_TIMEOUT = settings.OLLAMA_EVALUATION_TIMEOUT
+SENTENCE_TRANSFORMER_MODEL = settings.SENTENCE_TRANSFORMER_MODEL
+LANGSMITH_API_KEY = settings.LANGSMITH_API_KEY
+LANGSMITH_PROJECT = settings.LANGSMITH_PROJECT
 TEMPERATURE = settings.TEMPERATURE
 MAX_ITERATIONS = settings.MAX_ITERATIONS
 MEMORY_SIZE = settings.MEMORY_SIZE

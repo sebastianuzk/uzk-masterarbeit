@@ -30,6 +30,12 @@ try:
 except ImportError:
     CHROMADB_AVAILABLE = False
 
+# Zentrale Konfiguration
+try:
+    from config.settings import SENTENCE_TRANSFORMER_MODEL
+except ImportError:
+    SENTENCE_TRANSFORMER_MODEL = "all-MiniLM-L6-v2"
+
 # Embedding dependencies
 try:
     from sentence_transformers import SentenceTransformer
@@ -114,8 +120,8 @@ class VectorStoreConfig:
     chunk_size: int = 1500  # Larger chunks for better context
     chunk_overlap: int = 300  # More overlap
     
-    # Embedding settings
-    embedding_model: str = "all-MiniLM-L6-v2"
+    # Embedding settings - verwendet zentrale Konfiguration
+    embedding_model: str = None  # Wird in __post_init__ aus Settings geladen
     embedding_provider: str = "sentence_transformers"  # Only sentence_transformers (open source)
     
     # Search settings
@@ -124,6 +130,10 @@ class VectorStoreConfig:
     
     def __post_init__(self):
         """Stelle absolute Pfade sicher und verhindere veraltete Pfade."""
+        # Setze embedding_model aus zentraler Konfiguration falls nicht gesetzt
+        if self.embedding_model is None:
+            self.embedding_model = SENTENCE_TRANSFORMER_MODEL
+        
         # Check for deprecated paths
         if "output/vector_db" in self.persist_directory:
             raise ValueError(
@@ -156,10 +166,12 @@ class EmbeddingProvider(ABC):
 class SentenceTransformerProvider(EmbeddingProvider):
     """Sentence Transformers Embedding-Provider."""
     
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = None):
         if not SENTENCE_TRANSFORMERS_AVAILABLE:
             raise ImportError("sentence-transformers is required but not installed")
         
+        # Verwende zentrale Konfiguration als Default
+        model_name = model_name or SENTENCE_TRANSFORMER_MODEL
         self.model = SentenceTransformer(model_name)
         self.dimension = self.model.get_sentence_embedding_dimension()
     

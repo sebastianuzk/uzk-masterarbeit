@@ -43,8 +43,9 @@ VECTOR_PERSIST_DIRECTORY = "src/scraper/vector_db"  # Genutzt in: vector_store.p
 VECTOR_CHUNK_SIZE = 1500              # Genutzt in: vector_store.py
 VECTOR_CHUNK_OVERLAP = 300            # Genutzt in: vector_store.py
 
-# Embeddings
-VECTOR_EMBEDDING_MODEL = "all-MiniLM-L6-v2"        # Genutzt in: vector_store.py
+# Embeddings - Zentral in config/settings.py verwaltet
+from config.settings import SENTENCE_TRANSFORMER_MODEL
+VECTOR_EMBEDDING_MODEL = SENTENCE_TRANSFORMER_MODEL
 VECTOR_EMBEDDING_PROVIDER = "sentence_transformers" # Genutzt in: vector_store.py
 
 # Search

@@ -58,6 +58,9 @@ class UniversityRAGTool(BaseTool):
     _use_advanced: bool = False
     _advanced_available: bool = False
     
+    # Embedding model (lazy loaded)
+    _embedding_model: Optional[Any] = None
+    
     def __init__(self, **data):
         """Initialize RAG tool with optional advanced techniques."""
         super().__init__(**data)
@@ -78,6 +81,15 @@ class UniversityRAGTool(BaseTool):
                 self._use_advanced = False
         else:
             logger.info("RAG-Tool initialisiert (Naive RAG)")
+    
+    def _get_embedding_model(self):
+        """Lazy-load des Embedding-Modells für Query-Encoding."""
+        if self._embedding_model is None:
+            from sentence_transformers import SentenceTransformer
+            from config.settings import SENTENCE_TRANSFORMER_MODEL
+            self._embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+            logger.info(f"Embedding-Modell geladen: {SENTENCE_TRANSFORMER_MODEL}")
+        return self._embedding_model
     
     def _should_use_advanced(self) -> bool:
         """Prüfe ob Advanced-Techniken aktiviert sind."""
@@ -128,10 +140,14 @@ class UniversityRAGTool(BaseTool):
             logger.warning(f"Collection 'wiso_documents' nicht gefunden: {e}")
             return []
         
-        # Einfache Vektorsuche
+        # Einfache Vektorsuche mit dem korrekten Embedding-Modell
         try:
+            # Erstelle Query-Embedding mit dem gleichen Modell wie beim Scraping
+            embedding_model = self._get_embedding_model()
+            query_embedding = embedding_model.encode([query]).tolist()
+            
             results = collection.query(
-                query_texts=[query],
+                query_embeddings=query_embedding,
                 n_results=k
             )
         except Exception as e:

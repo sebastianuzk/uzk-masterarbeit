@@ -132,14 +132,20 @@ def advanced_retrieve(query: str, k_per_collection: int = 3) -> List[Dict[str, A
         logger.warning("Vector DB nicht gefunden")
         return []
     
+    # Lade Embedding-Modell für Query-Encoding
+    from sentence_transformers import SentenceTransformer
+    from config.settings import SENTENCE_TRANSFORMER_MODEL
+    embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+    query_embedding = embedding_model.encode([query]).tolist()[0]
+    
     # Multi-Collection Searcher
     searcher = MultiCollectionSearcher(
         client=client,
         k_per_collection=k_per_collection
     )
     
-    # Durchsuche alle Collections
-    documents = searcher.search_all_collections(query)
+    # Durchsuche alle Collections mit dem korrekten Embedding
+    documents = searcher.search_all_collections(query, query_embedding=query_embedding)
     
     # Konvertiere Format für Advanced-Pipeline
     # Füge page_content und type für Backward-Compatibility hinzu
