@@ -45,7 +45,7 @@ class ReactAgent:
             "0.5b": 2048,
             "1b": 4096,
             "3b": 8192,
-            "8b": 8192,
+            "8b": 12288,
             "20b": 16384,
             "70b": 16384,
         }
@@ -65,8 +65,6 @@ class ReactAgent:
             base_url=settings.OLLAMA_BASE_URL,
             temperature=settings.TEMPERATURE,
             num_ctx=ctx_size,  # Adaptiver Context für schnellere Antworten
-            timeout=settings.REQUEST_TIMEOUT,
-            keep_alive=settings.OLLAMA_KEEP_ALIVE,  # Aus Settings (default: 30m)
         )
         
         # Initialisiere Tools (einschließlich E-Mail-Tool)
@@ -87,6 +85,10 @@ class ReactAgent:
    - URL: Muss mit http:// oder https:// beginnen
 
 3. **SPRACHANPASSUNG**: Antworte in der Sprache des Nutzers.
+
+4. **KEINE ERFUNDENEN DATEN**: Wenn Daten fehlen oder ungültig sind, erkläre das Problem und bitte um Korrektur.
+
+
 
 ## VERFÜGBARE TOOLS MIT PARAMETERN
 
@@ -161,7 +163,7 @@ class ReactAgent:
   - `semester`: Semester (z.B. "WiSe 2024/25")
 
 ### 6. university_knowledge_search
-**Zweck**: Universitäts-Wissensdatenbank durchsuchen für Infos zu Fristen, Studiengängen, Verfahren.
+**Zweck**: Universitäts-Wissensdatenbank durchsuchen für Infos zu Fristen, Studiengängen, Verfahren und allgemeinen Fragen über die WiSo Köln.
 **Pflichtparameter**:
   - `query`: Suchanfrage
 

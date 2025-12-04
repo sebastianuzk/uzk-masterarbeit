@@ -28,7 +28,6 @@ from langsmith import Client
 from config.settings import (
     OLLAMA_MODEL,
     OLLAMA_BASE_URL,
-    OLLAMA_EMBEDDING_MODEL,
     LANGSMITH_API_KEY,
     LANGSMITH_PROJECT
 )
@@ -187,13 +186,14 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
-    # Ollama LLM konfigurieren
+    # Ollama LLM konfigurieren mit reduziertem Context für GPU-Optimierung
     llm = ChatOllama(
         model=OLLAMA_MODEL,
         base_url=OLLAMA_BASE_URL,
-        temperature=0.0
+        temperature=0.0,
+        num_ctx=12288  # Kompromiss für 8GB VRAM (Modell ~5GB + KV-Cache ~1.5GB)
     )
-    print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL}")
+    print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL} (num_ctx=12288)")
     
     # Ollama Embeddings für answer_relevancy (später aktivieren)
     # embeddings = OllamaEmbeddings(
@@ -214,7 +214,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
     # RunConfig für parallele Requests an Ollama
-    run_config = RunConfig(max_workers=8)
+    run_config = RunConfig(max_workers=4)
     
     # Evaluation durchführen
     results = evaluate(

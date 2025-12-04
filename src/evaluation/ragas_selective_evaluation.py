@@ -42,6 +42,7 @@ from src.agent.react_agent import create_react_agent
 SPECIFIC_INDICES = []  # Leer lassen für Auto-Detect (fehlgeschlagen + fehlend)
 AUTO_DETECT_FAILED = True  # Automatisch fehlgeschlagene IDs aus ragas_results.csv erkennen
 AUTO_DETECT_MISSING = True  # Automatisch noch nicht evaluierte IDs erkennen
+REUSE_EXISTING_RESPONSES = True  # Antworten und Kontexte aus ragas_results.csv laden (statt neu generieren)
 
 
 def detect_failed_and_missing_indices(results_path: Path, testset_path: Path) -> tuple:
@@ -101,6 +102,36 @@ def detect_failed_and_missing_indices(results_path: Path, testset_path: Path) ->
     return failed_ids, missing_ids
 
 
+def detect_missing_metrics_per_id(results_path: Path) -> dict:
+    """
+    Erkennt welche Metriken pro ID noch fehlen (NaN).
+    
+    Returns:
+        Dict mit {id: [liste_fehlender_metriken]}
+    """
+    if not results_path.exists():
+        return {}
+    
+    df = pd.read_csv(results_path, encoding='utf-8')
+    
+    if 'id' not in df.columns:
+        return {}
+    
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+    missing_metrics = {}
+    
+    for _, row in df.iterrows():
+        row_id = int(row['id'])
+        missing = []
+        for metric in metric_cols:
+            if pd.isna(row.get(metric)):
+                missing.append(metric)
+        if missing:
+            missing_metrics[row_id] = missing
+    
+    return missing_metrics
+
+
 def load_testset_filtered(csv_path: str = "data/Testset.CSV", indices: List[int] = None) -> pd.DataFrame:
     """Lädt nur spezifische Fragen aus Testset.CSV"""
     full_path = Path(__file__).parent / csv_path
@@ -121,6 +152,72 @@ def load_testset_filtered(csv_path: str = "data/Testset.CSV", indices: List[int]
     print(f"   Schwierigkeiten: easy={len(df[df['difficulty']=='easy'])}, medium={len(df[df['difficulty']=='medium'])}, hard={len(df[df['difficulty']=='hard'])}")
     
     return df
+
+
+def load_existing_responses(indices: List[int]) -> EvaluationDataset:
+    """
+    Lädt bereits generierte Antworten und Kontexte aus ragas_results.csv.
+    
+    Args:
+        indices: Liste der zu ladenden IDs
+        
+    Returns:
+        EvaluationDataset mit den geladenen Samples
+    """
+    results_path = Path(__file__).parent / "data" / "ragas_results.csv"
+    
+    if not results_path.exists():
+        raise FileNotFoundError(f"ragas_results.csv nicht gefunden: {results_path}")
+    
+    print("\n📂 Lade existierende Antworten aus ragas_results.csv...")
+    print("=" * 80)
+    
+    df = pd.read_csv(results_path, encoding='utf-8')
+    
+    # Filtere nach IDs
+    df = df[df['id'].isin(indices)]
+    
+    if len(df) == 0:
+        raise ValueError(f"Keine Einträge für IDs {indices} in ragas_results.csv gefunden")
+    
+    samples = []
+    
+    for _, row in df.iterrows():
+        question_id = int(row['id'])
+        question = row['user_input']
+        answer = row['response']
+        reference = row['reference']
+        
+        # Konvertiere retrieved_contexts von String zurück zu Liste
+        contexts_str = row['retrieved_contexts']
+        if isinstance(contexts_str, str):
+            try:
+                # Versuche als Python-Liste zu parsen
+                import ast
+                contexts = ast.literal_eval(contexts_str)
+            except (ValueError, SyntaxError):
+                # Falls das nicht klappt, als einzelnen String behandeln
+                contexts = [contexts_str]
+        elif isinstance(contexts_str, list):
+            contexts = contexts_str
+        else:
+            contexts = ["Kein RAG-Kontext gefunden"]
+        
+        print(f"   ID {question_id}: {question[:60]}...")
+        print(f"      📄 Kontext: {len(contexts)} chunks, {sum(len(c) for c in contexts)} Zeichen")
+        
+        sample = SingleTurnSample(
+            user_input=question,
+            response=answer,
+            retrieved_contexts=contexts,
+            reference=reference
+        )
+        samples.append(sample)
+    
+    print("\n" + "=" * 80)
+    print(f"✅ {len(samples)} Samples aus CSV geladen\n")
+    
+    return EvaluationDataset(samples=samples), df
 
 
 def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
@@ -216,29 +313,51 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     return EvaluationDataset(samples=samples)
 
 
-def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
-    """Führt RAGAS-Evaluation durch"""
+def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[str] = None) -> pd.DataFrame:
+    """
+    Führt RAGAS-Evaluation durch.
+    
+    Args:
+        dataset: Das EvaluationDataset mit den Samples
+        metrics_to_compute: Optional - Liste der zu berechnenden Metriken.
+                           Falls None, werden alle berechnet.
+                           Mögliche Werte: 'faithfulness', 'context_recall', 'context_precision'
+    """
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
     llm = ChatOllama(
         model=OLLAMA_MODEL,
         base_url=OLLAMA_BASE_URL,
-        temperature=0.0
+        temperature=0.0,
+        num_ctx=12288  # Reduziert für 8GB VRAM (Modell ~5GB + KV-Cache ~1.5GB)
     )
-    print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL}")
+    print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL} (num_ctx=12288)")
     
-    metrics = [
-        faithfulness,
-        context_recall,
-        context_precision
-    ]
+    # Alle verfügbaren Metriken
+    all_metrics = {
+        'faithfulness': faithfulness,
+        'context_recall': context_recall,
+        'context_precision': context_precision
+    }
+    
+    # Wähle nur die gewünschten Metriken
+    if metrics_to_compute:
+        metrics = [all_metrics[m] for m in metrics_to_compute if m in all_metrics]
+    else:
+        metrics = list(all_metrics.values())
+    
     print(f"   Metriken: {[m.name for m in metrics]}")
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
-    # RunConfig für parallele Requests an Ollama
-    run_config = RunConfig(max_workers=4)
+    # RunConfig mit erhöhtem Timeout für Ollama (lokale GPU kann langsam sein)
+    run_config = RunConfig(
+        max_workers=1,  # Reduziert von 4 auf 2 für weniger GPU-Last
+        timeout=300,  # 5 Minuten Timeout pro Request
+        max_retries=3,
+        max_wait=30  # Max 30 Sekunden warten zwischen Retries
+    )
     
     # Evaluation durchführen
     results = evaluate(
@@ -256,11 +375,15 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     return results_df
 
 
-def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFrame) -> pd.DataFrame:
+def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFrame, only_fill_nan: bool = False) -> pd.DataFrame:
     """
     Merged neue Ergebnisse mit bestehenden ragas_results.csv.
     Wenn ragas_results.csv nicht existiert, wird sie neu erstellt.
-    Die neuen Ergebnisse überschreiben bestehende Einträge mit gleicher ID.
+    
+    Args:
+        new_results_df: Neue Evaluationsergebnisse
+        test_df: Testset DataFrame mit IDs
+        only_fill_nan: Wenn True, werden nur NaN-Werte in bestehenden Einträgen überschrieben
     """
     results_path = Path(__file__).parent / "data" / "ragas_results.csv"
     
@@ -274,6 +397,8 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
         lambda x: len(x) if isinstance(x, list) else 0
     )
     
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+    
     if results_path.exists():
         print("📂 Lade bestehende Ergebnisse...")
         existing_df = pd.read_csv(results_path, encoding='utf-8')
@@ -286,19 +411,40 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
                     lambda x: eval(x) if isinstance(x, str) and x.startswith('[') else x
                 )
             
-            # Entferne alte Einträge für diese IDs (sie werden überschrieben)
             updated_ids = new_results_df['id'].tolist()
-            existing_df = existing_df[~existing_df['id'].isin(updated_ids)]
             
-            print(f"   🔄 Ersetze {len(updated_ids)} alte Einträge für IDs: {updated_ids}")
+            if only_fill_nan:
+                # Nur NaN-Werte überschreiben (Metriken einzeln aktualisieren)
+                print(f"   🔧 Aktualisiere nur fehlende Metriken für IDs: {updated_ids}")
+                
+                for _, new_row in new_results_df.iterrows():
+                    row_id = new_row['id']
+                    mask = existing_df['id'] == row_id
+                    
+                    if mask.any():
+                        # Für jede Metrik: nur überschreiben wenn alter Wert NaN und neuer Wert nicht NaN
+                        for metric in metric_cols:
+                            if metric in new_row and not pd.isna(new_row[metric]):
+                                old_val = existing_df.loc[mask, metric].values[0]
+                                if pd.isna(old_val):
+                                    existing_df.loc[mask, metric] = new_row[metric]
+                                    print(f"      ID {row_id}: {metric} = {new_row[metric]:.3f} (war NaN)")
+                    else:
+                        # ID existiert noch nicht - komplett hinzufügen
+                        existing_df = pd.concat([existing_df, new_row.to_frame().T], ignore_index=True)
+                        print(f"      ID {row_id}: Neu hinzugefügt")
+                
+                merged_df = existing_df
+            else:
+                # Alte Einträge komplett ersetzen
+                existing_df = existing_df[~existing_df['id'].isin(updated_ids)]
+                print(f"   🔄 Ersetze {len(updated_ids)} alte Einträge für IDs: {updated_ids}")
+                merged_df = pd.concat([existing_df, new_results_df], ignore_index=True)
             
-            # Stelle sicher, dass beide DataFrames die gleichen Spalten haben
+            # Stelle sicher, dass alle Spalten vorhanden sind
             for col in new_results_df.columns:
-                if col not in existing_df.columns:
-                    existing_df[col] = None
-            
-            # Füge neue Ergebnisse hinzu
-            merged_df = pd.concat([existing_df, new_results_df], ignore_index=True)
+                if col not in merged_df.columns:
+                    merged_df[col] = None
             
             # Sortiere nach ID und wähle nur die relevanten Spalten
             merged_df = merged_df[['id', 'category', 'difficulty', 'user_input', 'response', 
@@ -386,24 +532,58 @@ def main():
         langsmith_client = Client(api_key=LANGSMITH_API_KEY)
         print(f"   ✅ Projekt: {LANGSMITH_PROJECT}\n")
         
-        # 2. Testset laden (nur spezifische Indizes)
+        # 2. Ermittle fehlende Metriken pro ID
+        results_path = Path(__file__).parent / "data" / "ragas_results.csv"
+        missing_metrics_per_id = detect_missing_metrics_per_id(results_path)
+        
+        # Bestimme welche Metriken insgesamt berechnet werden müssen
+        all_missing_metrics = set()
+        for metrics_list in missing_metrics_per_id.values():
+            all_missing_metrics.update(metrics_list)
+        
+        if all_missing_metrics:
+            print(f"📊 Fehlende Metriken pro ID:")
+            for id_, metrics in sorted(missing_metrics_per_id.items()):
+                if id_ in indices_to_eval:
+                    print(f"   ID {id_}: {metrics}")
+            print(f"\n   → Zu berechnende Metriken: {sorted(all_missing_metrics)}\n")
+        else:
+            print("📊 Alle Metriken werden berechnet (Standard)\n")
+            all_missing_metrics = None  # None = alle Metriken
+        
+        # 3. Testset laden (nur spezifische Indizes)
         print("📂 Lade Testset (gefiltert)...")
         test_df = load_testset_filtered(indices=indices_to_eval)
         print()
         
-        # 3. Chatbot initialisieren
-        print("🤖 Initialisiere Chatbot...")
-        agent = create_react_agent()
-        print()
+        # 4. Entweder bestehende Responses wiederverwenden oder neu generieren
+        if REUSE_EXISTING_RESPONSES:
+            print("♻️  REUSE_EXISTING_RESPONSES aktiviert - Lade bestehende Antworten...")
+            dataset, loaded_df = load_existing_responses(indices_to_eval)
+            
+            if dataset is None:
+                print("❌ Konnte keine bestehenden Responses laden!")
+                print("   Setze REUSE_EXISTING_RESPONSES = False und starte neu.")
+                sys.exit(1)
+            
+            # Verwende loaded_df als test_df für konsistente IDs
+            test_df = loaded_df
+        else:
+            # Chatbot initialisieren
+            print("🤖 Initialisiere Chatbot...")
+            agent = create_react_agent()
+            print()
+            
+            # Antworten generieren
+            dataset = generate_chatbot_responses(test_df, agent, langsmith_client)
         
-        # 4. Antworten generieren
-        dataset = generate_chatbot_responses(test_df, agent, langsmith_client)
+        # 5. RAGAS-Evaluation (nur fehlende Metriken wenn REUSE aktiv)
+        metrics_to_compute = list(all_missing_metrics) if all_missing_metrics else None
+        results_df = run_ragas_evaluation(dataset, metrics_to_compute=metrics_to_compute)
         
-        # 5. RAGAS-Evaluation
-        results_df = run_ragas_evaluation(dataset)
-        
-        # 6. Mit bestehenden Ergebnissen mergen
-        merged_df = merge_results_with_existing(results_df, test_df)
+        # 6. Mit bestehenden Ergebnissen mergen (nur NaN-Werte überschreiben wenn REUSE aktiv)
+        only_fill_nan = REUSE_EXISTING_RESPONSES and all_missing_metrics is not None
+        merged_df = merge_results_with_existing(results_df, test_df, only_fill_nan=only_fill_nan)
         
         # 7. Ergebnisse anzeigen
         display_results(results_df, test_df)

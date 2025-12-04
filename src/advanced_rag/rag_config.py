@@ -32,12 +32,30 @@ class RAGConfig:
     naive_setup: bool = False  # False = Advanced RAG, True = Naive Baseline
     
     # ============================================================================
+    # INDIVIDUAL FEATURE FLAGS (ermöglichen granulare Kontrolle)
+    # Wenn naive_setup=True, sind alle deaktiviert.
+    # Wenn naive_setup=False, können einzelne Features hier deaktiviert werden.
+    # ============================================================================
+    enable_semantic_chunking: bool = True
+    enable_content_cleaning: bool = False
+    enable_deduplication: bool = False
+    enable_multi_collection: bool = False
+    enable_result_aggregation: bool = False
+    enable_distance_conversion: bool = False
+    enable_global_reranking: bool = False
+    enable_relevance_filtering: bool = False
+    enable_result_formatting: bool = False
+    enable_context_hints: bool = False
+    enable_empty_result_handling: bool = False
+    
+    # ============================================================================
     # PRE-RETRIEVAL HYPERPARAMETER
     # ============================================================================
     # Semantic Chunking
     semantic_chunking_max_size: int = 1500
     semantic_chunking_min_size: int = 200
     semantic_chunking_overlap: int = 300
+    semantic_chunking_similarity_threshold: float = 0.5  # Schwellwert für Themenwechsel
     
     # Content Cleaning
     content_cleaning_min_length: int = 50
@@ -104,63 +122,63 @@ class RAGConfig:
             logger.info("🔒 NAIVE SETUP aktiviert - alle Advanced-Techniken deaktiviert")
     
     # ============================================================================
-    # COMPUTED PROPERTIES (basierend auf naive_setup)
+    # COMPUTED PROPERTIES (basierend auf naive_setup UND individual flags)
     # ============================================================================
     
     @property
     def use_semantic_chunking(self) -> bool:
         """Pre-Retrieval: Semantic Chunking aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_semantic_chunking
     
     @property
     def use_content_cleaning(self) -> bool:
         """Pre-Retrieval: Content Cleaning aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_content_cleaning
     
     @property
     def use_deduplication(self) -> bool:
         """Pre-Retrieval: Deduplication aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_deduplication
     
     @property
     def use_multi_collection_search(self) -> bool:
         """Retrieval: Multi-Collection Search aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_multi_collection
     
     @property
     def use_result_aggregation(self) -> bool:
         """Retrieval: Result Aggregation aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_result_aggregation
     
     @property
     def use_distance_conversion(self) -> bool:
         """Retrieval: Distance Conversion aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_distance_conversion
     
     @property
     def use_global_reranking(self) -> bool:
         """Retrieval: Global Reranking aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_global_reranking
     
     @property
     def use_relevance_filtering(self) -> bool:
         """Post-Retrieval: Relevance Filtering aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_relevance_filtering
     
     @property
     def use_result_formatting(self) -> bool:
         """Post-Retrieval: Result Formatting aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_result_formatting
     
     @property
     def use_context_hints(self) -> bool:
         """Post-Retrieval: Context Hints aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_context_hints
     
     @property
     def use_empty_result_handling(self) -> bool:
         """Post-Retrieval: Empty Result Handling aktiv?"""
-        return not self.naive_setup
+        return (not self.naive_setup) and self.enable_empty_result_handling
     
     @property
     def baseline_enabled(self) -> bool:
@@ -220,10 +238,24 @@ class RAGConfig:
             # === MASTER SWITCH ===
             naive_setup=_get_bool_env("RAG_NAIVE_SETUP", False),
             
+            # === INDIVIDUAL FEATURE FLAGS ===
+            enable_semantic_chunking=_get_bool_env("ENABLE_SEMANTIC_CHUNKING", True),
+            enable_content_cleaning=_get_bool_env("ENABLE_CONTENT_CLEANING", False),
+            enable_deduplication=_get_bool_env("ENABLE_DEDUPLICATION", False),
+            enable_multi_collection=_get_bool_env("ENABLE_MULTI_COLLECTION", False),
+            enable_result_aggregation=_get_bool_env("ENABLE_RESULT_AGGREGATION", False),
+            enable_distance_conversion=_get_bool_env("ENABLE_DISTANCE_CONVERSION", False),
+            enable_global_reranking=_get_bool_env("ENABLE_GLOBAL_RERANKING", False),
+            enable_relevance_filtering=_get_bool_env("ENABLE_RELEVANCE_FILTERING", False),
+            enable_result_formatting=_get_bool_env("ENABLE_RESULT_FORMATTING", False),
+            enable_context_hints=_get_bool_env("ENABLE_CONTEXT_HINTS", False),
+            enable_empty_result_handling=_get_bool_env("ENABLE_EMPTY_RESULT_HANDLING", False),
+            
             # === PRE-RETRIEVAL HYPERPARAMETER ===
             semantic_chunking_max_size=_get_int_env("SEMANTIC_CHUNKING_MAX_SIZE", 1500),
             semantic_chunking_min_size=_get_int_env("SEMANTIC_CHUNKING_MIN_SIZE", 200),
             semantic_chunking_overlap=_get_int_env("SEMANTIC_CHUNKING_OVERLAP", 300),
+            semantic_chunking_similarity_threshold=_get_float_env("SEMANTIC_CHUNKING_SIMILARITY_THRESHOLD", 0.5),
             
             content_cleaning_min_length=_get_int_env("CONTENT_CLEANING_MIN_LENGTH", 50),
             content_cleaning_remove_html=_get_bool_env("CONTENT_CLEANING_REMOVE_HTML", True),

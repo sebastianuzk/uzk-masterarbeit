@@ -33,17 +33,30 @@ from config.settings import SENTENCE_TRANSFORMER_MODEL
 try:
     from src.advanced_rag.rag_config import RAGConfig
     rag_config = RAGConfig.load_from_env()
-    USE_ADVANCED = not rag_config.baseline_enabled  # baseline=True bedeutet Naive
+    # Prüfe ob mindestens eine Advanced-Technik aktiv ist
+    USE_ADVANCED = not rag_config.baseline_enabled
+    # Individuelle Feature-Flags
+    USE_SEMANTIC_CHUNKING = rag_config.use_semantic_chunking
+    USE_CONTENT_CLEANING = rag_config.use_content_cleaning
+    USE_DEDUPLICATION = rag_config.use_deduplication
+    USE_MULTI_COLLECTION = rag_config.use_multi_collection_search
 except Exception as e:
     print(f"⚠️  Fehler beim Laden der RAG-Config: {e}")
-    print("   Verwende Advanced RAG als Fallback")
-    USE_ADVANCED = True
+    print("   Verwende Naive RAG als Fallback")
+    USE_ADVANCED = False
+    USE_SEMANTIC_CHUNKING = False
+    USE_CONTENT_CLEANING = False
+    USE_DEDUPLICATION = False
+    USE_MULTI_COLLECTION = False
 
-# Conditional Imports für Advanced-Techniken
-if USE_ADVANCED:
-    from src.advanced_rag.pre_retrieval.cleaning import ContentCleaner
+# Conditional Imports für Advanced-Techniken (nur wenn benötigt)
+if USE_SEMANTIC_CHUNKING:
     from src.advanced_rag.pre_retrieval.chunking import SemanticChunker
+if USE_CONTENT_CLEANING:
+    from src.advanced_rag.pre_retrieval.cleaning import ContentCleaner
+if USE_DEDUPLICATION:
     from src.advanced_rag.pre_retrieval.deduplication import ContentDeduplicator
+if USE_MULTI_COLLECTION:
     from src.advanced_rag.pre_retrieval.collection_categorizer import CollectionCategorizer
 
 # Datenbank-Pfade
@@ -264,7 +277,7 @@ def process_document(doc_id, url, title, content, content_type,
                      content_cleaner=None, chunker=None, deduplicator=None, categorizer=None):
     """
     Verarbeite ein einzelnes Dokument (ohne Embeddings).
-    Respektiert USE_ADVANCED Flag.
+    Respektiert individuelle Feature-Flags.
     
     Returns:
         dict mit Chunks und Metadaten oder None wenn übersprungen
@@ -279,30 +292,27 @@ def process_document(doc_id, url, title, content, content_type,
         else:  # pdf
             cleaned_text = naive_clean_text(raw_content)
         
-        if USE_ADVANCED:
-            # ADVANCED: Mit Pre-Retrieval Techniken
-            # Zusätzliches Cleaning durch ContentCleaner (Boilerplate-Entfernung etc.)
-            if content_type == 'html':
-                cleaned_text = content_cleaner._clean_text(cleaned_text)
-            else:  # pdf
-                cleaned_text = content_cleaner._clean_text(cleaned_text)
-            
+        # Optional: Erweitertes Content Cleaning
+        if USE_CONTENT_CLEANING and content_cleaner is not None:
+            cleaned_text = content_cleaner._clean_text(cleaned_text)
+        
+        # Chunking: Semantic oder Naive
+        if USE_SEMANTIC_CHUNKING and chunker is not None:
             chunks = chunker.chunk_by_paragraphs(cleaned_text)
-            
-            # Deduplication nur für HTMLs
-            if content_type == 'html' and len(chunks) > 0:
-                chunk_docs = [{"url": f"{url}#chunk_{i}", "content": chunk} for i, chunk in enumerate(chunks)]
-                unique_chunks, _ = deduplicator.deduplicate_batch(chunk_docs)
-                chunks = [doc["content"] for doc in unique_chunks]
         else:
-            # NAIVE: Nur Basis-Cleaning (bereits oben durchgeführt)
-            chunks = naive_chunk_text(cleaned_text)  # Verwendet Standardwerte: chunk_size=1250, overlap=300
+            chunks = naive_chunk_text(cleaned_text)  # Standardwerte: chunk_size=1250, overlap=300
+        
+        # Optional: Deduplication (nur für HTMLs)
+        if USE_DEDUPLICATION and deduplicator is not None and content_type == 'html' and len(chunks) > 0:
+            chunk_docs = [{"url": f"{url}#chunk_{i}", "content": chunk} for i, chunk in enumerate(chunks)]
+            unique_chunks, _ = deduplicator.deduplicate_batch(chunk_docs)
+            chunks = [doc["content"] for doc in unique_chunks]
         
         if len(chunks) == 0:
             return None
         
-        # Bestimme Collection (mit categorizer für Advanced)
-        collection_name = get_collection_name(url, categorizer)
+        # Bestimme Collection (Multi-Collection oder Single)
+        collection_name = get_collection_name(url, categorizer if USE_MULTI_COLLECTION else None)
         
         return {
             'doc_id': doc_id,
@@ -337,39 +347,51 @@ def run_production_scraper():
     print("SCHRITT 2: Module initialisieren")
     print("=" * 80)
     
-    if USE_ADVANCED:
-        print("📦 Lade Advanced Pre-Retrieval Komponenten...")
+    # Initialisiere Module basierend auf individuellen Feature-Flags
+    print("📦 Initialisiere Pre-Retrieval Komponenten...")
+    
+    # Embedding-Modell zuerst laden (wird von SemanticChunker benötigt)
+    print("\n🤖 Lade Embedding-Modell...")
+    embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+    print(f"   ✅ {SENTENCE_TRANSFORMER_MODEL}")
+    
+    content_cleaner = None
+    chunker = None
+    deduplicator = None
+    categorizer = None
+    
+    if USE_CONTENT_CLEANING:
         content_cleaner = ContentCleaner()
         print("   ✅ ContentCleaner")
-        
-        # Lade Chunking-Parameter aus Config
+    else:
+        print("   ❌ ContentCleaner (deaktiviert)")
+    
+    if USE_SEMANTIC_CHUNKING:
         chunker = SemanticChunker(
             max_chunk_size=rag_config.semantic_chunking_max_size,
             min_chunk_size=rag_config.semantic_chunking_min_size,
-            overlap=rag_config.semantic_chunking_overlap
+            overlap=rag_config.semantic_chunking_overlap,
+            similarity_threshold=rag_config.semantic_chunking_similarity_threshold,
+            embedding_model=embedding_model  # Übergebe das bereits geladene Modell
         )
-        print(f"   ✅ SemanticChunker (max={rag_config.semantic_chunking_max_size}, min={rag_config.semantic_chunking_min_size}, overlap={rag_config.semantic_chunking_overlap})")
-        
+        print(f"   ✅ SemanticChunker (max={rag_config.semantic_chunking_max_size}, min={rag_config.semantic_chunking_min_size}, overlap={rag_config.semantic_chunking_overlap}, threshold={rag_config.semantic_chunking_similarity_threshold})")
+    else:
+        print("   ❌ SemanticChunker (deaktiviert) → Naive Chunking (1250/300)")
+    
+    if USE_DEDUPLICATION:
         deduplicator = ContentDeduplicator(
             similarity_threshold=rag_config.deduplication_similarity_threshold,
             shingle_size=rag_config.deduplication_shingle_size
         )
-        print("   ✅ ContentDeduplicator (Quick-Win optimiert: Cache + Early Exit + Size-Bucketing)")
-        
-        categorizer = CollectionCategorizer()  # Verwendet DEFAULT_COLLECTIONS
+        print("   ✅ ContentDeduplicator")
+    else:
+        print("   ❌ ContentDeduplicator (deaktiviert)")
+    
+    if USE_MULTI_COLLECTION:
+        categorizer = CollectionCategorizer()
         print(f"   ✅ CollectionCategorizer ({len(categorizer.get_collection_names())} Collections)")
     else:
-        print("📦 Verwende Naive RAG (keine Advanced-Techniken)...")
-        content_cleaner = None
-        chunker = None
-        deduplicator = None
-        categorizer = None
-        print("   ✅ Naive Text-Bereinigung")
-        print("   ✅ Naive Chunking (einfache Zeichenzahl-basiert)")
-    
-    print("\n🤖 Lade Embedding-Modell...")
-    embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
-    print(f"   ✅ {SENTENCE_TRANSFORMER_MODEL}")
+        print("   ❌ CollectionCategorizer (deaktiviert) → Single Collection")
     
     # Verbinde zu ChromaDB
     print("\n💾 Initialisiere ChromaDB...")
@@ -378,8 +400,8 @@ def run_production_scraper():
     # Erstelle/Lade Collections
     collections_dict = {}
     
-    # NAIVE RAG: Nur eine Collection
-    if not USE_ADVANCED:
+    # Single Collection (wenn Multi-Collection deaktiviert)
+    if not USE_MULTI_COLLECTION:
         collection_name = 'wiso_documents'
         if collection_name in completed_collections:
             collections_dict[collection_name] = client.get_collection(name=collection_name)
@@ -388,14 +410,14 @@ def run_production_scraper():
             try:
                 collections_dict[collection_name] = client.create_collection(
                     name=collection_name,
-                    metadata={"description": "WiSo Fakultät - Alle Dokumente (Naive RAG)"}
+                    metadata={"description": "WiSo Fakultät - Alle Dokumente (Single Collection)"}
                 )
-                print(f"   ✅ Collection '{collection_name}' erstellt (NAIVE RAG - keine Kategorisierung)")
+                print(f"   ✅ Collection '{collection_name}' erstellt")
             except:
                 collections_dict[collection_name] = client.get_collection(name=collection_name)
                 print(f"   ♻️  Collection '{collection_name}' geladen")
     
-    # ADVANCED RAG: Multi-Collections
+    # Multi-Collections
     else:
         collection_names = categorizer.get_collection_names()
         for collection_name in collection_names:
