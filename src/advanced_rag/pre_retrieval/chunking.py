@@ -24,6 +24,7 @@ class SemanticChunker:
     3. Cosine-Similarity zwischen aufeinanderfolgenden Sätzen messen
     4. Bei niedriger Similarity (Themenwechsel) → neuer Chunk
     5. Chunks zusammenführen bis max_size erreicht
+    6. Overlap am Anfang jedes Chunks (außer dem ersten) hinzufügen
     """
     
     def __init__(
@@ -32,24 +33,39 @@ class SemanticChunker:
         min_chunk_size: int = 400,
         overlap: int = 300,
         similarity_threshold: float = 0.65,
-        embedding_model: Optional[Any] = None
+        embedding_model: Optional[Any] = None,
+        debug_overlap: bool = False
     ):
         """
         Initialisiere den Semantic Chunker.
         
         Args:
-            max_chunk_size: Maximale Chunk-Größe in Zeichen
-            min_chunk_size: Minimale Chunk-Größe in Zeichen
-            overlap: Überlappung zwischen Chunks (in Sätzen, nicht Zeichen)
-            similarity_threshold: Schwellwert für Themenwechsel (0.0-1.0)
-                                  Niedrigerer Wert = mehr Splits
-            embedding_model: SentenceTransformer Model (optional, wird lazy geladen)
+            max_chunk_size: Maximale Chunk-Größe in Zeichen (nicht Tokens!).
+                           Empfohlen: 1500-2000 für die meisten Embedding-Modelle.
+            min_chunk_size: Minimale Chunk-Größe in Zeichen.
+                           Chunks unter diesem Wert werden mit dem vorherigen
+                           zusammengeführt (sofern max_size nicht überschritten wird).
+            overlap: Überlappung zwischen Chunks in Zeichen.
+                    Die letzten N Zeichen des vorherigen Chunks werden am Anfang
+                    des nächsten Chunks wiederholt (am Satz-/Wortgrenze geschnitten).
+            similarity_threshold: Schwellwert für Themenwechsel (Wertebereich 0.0-1.0).
+                                 Wenn die Cosine-Similarity zwischen zwei aufeinander-
+                                 folgenden Sätzen UNTER diesem Wert liegt, wird eine
+                                 Chunk-Grenze gesetzt. Niedrigerer Wert = weniger Splits,
+                                 höherer Wert = mehr/kleinere Chunks.
+                                 Empfohlen: 0.5-0.7 je nach Domäne.
+            embedding_model: SentenceTransformer Model (optional).
+                            Wird lazy geladen wenn nicht angegeben.
+            debug_overlap: Wenn True, wird '[...]' als Marker zwischen Overlap
+                          und Chunk-Inhalt eingefügt (für Debugging).
+                          Wenn False (Standard), nahtloser Übergang.
         """
         self.max_chunk_size = max_chunk_size
         self.min_chunk_size = min_chunk_size
         self.overlap = overlap
         self.similarity_threshold = similarity_threshold
         self._embedding_model = embedding_model
+        self.debug_overlap = debug_overlap
         
     @property
     def embedding_model(self):
@@ -74,15 +90,23 @@ class SemanticChunker:
         """
         Teile Text in Sätze auf.
         
+        Verwendet ein pragmatisches Regex-basiertes Splitting. Erkennt Satzenden
+        an Punkt, Ausrufezeichen oder Fragezeichen, gefolgt von Leerzeichen und
+        einem typischen Satzanfang (Großbuchstabe, Ziffer, Klammer, Bindestrich).
+        
+        HINWEIS: Abkürzungen wie "z.B.", "d.h." werden NICHT perfekt behandelt.
+        
         Args:
             text: Eingabetext
             
         Returns:
-            Liste von Sätzen
+            Liste von Sätzen. Gibt niemals leere Liste zurück wenn text nicht leer ist.
         """
-        # Splitten an Satzenden (. ! ?) gefolgt von Leerzeichen
-        # Berücksichtigt auch deutsche Abkürzungen wie "z.B.", "d.h."
-        sentence_pattern = r'(?<=[.!?])\s+(?=[A-ZÄÖÜ])'
+        # Pragmatisches Regex-basiertes Satz-Splitting:
+        # Satzende (. ! ?) gefolgt von Leerzeichen und typischem Satzanfang
+        # (Großbuchstabe, Ziffer, Klammer, Bindestrich)
+        # HINWEIS: Deckt nicht alle Sonderfälle perfekt ab.
+        sentence_pattern = r'(?<=[.!?])\s+(?=[A-ZÄÖÜ0-9\(\-])'
         
         # Erst Absätze respektieren
         paragraphs = text.split('\n\n')
@@ -98,7 +122,8 @@ class SemanticChunker:
             
             for sent in para_sentences:
                 sent = sent.strip()
-                if sent and len(sent) > 10:  # Mindestlänge für Sätze
+                # Minimale Schwelle: nur völlig leere Strings ausschließen
+                if sent and len(sent) > 0:
                     sentences.append(sent)
         
         return sentences
@@ -138,11 +163,16 @@ class SemanticChunker:
         """
         Finde Breakpoints basierend auf Similarity-Drops.
         
+        Für jedes Paar aufeinanderfolgender Sätze wird die Cosine-Similarity
+        berechnet. Wenn sim < self.similarity_threshold, wird ein Breakpoint
+        gesetzt (= Themenwechsel erkannt, neuer Chunk beginnt).
+        
         Args:
-            embeddings: Sentence embeddings
+            embeddings: Sentence embeddings (shape: n_sentences x embedding_dim)
             
         Returns:
-            Liste von Indizes wo neue Chunks beginnen sollten
+            Liste von Indizes wo neue Chunks beginnen sollten.
+            Index i bedeutet: Satz i ist der erste Satz eines neuen Chunks.
         """
         if len(embeddings) <= 1:
             return []
@@ -168,20 +198,45 @@ class SemanticChunker:
         """
         Teile Text semantisch basierend auf Embedding-Ähnlichkeit.
         
+        Analysiert die Cosine-Similarity zwischen aufeinanderfolgenden Sätzen
+        und setzt Chunk-Grenzen bei Themenwechseln (sim < similarity_threshold).
+        Chunks werden auf max_chunk_size begrenzt und bei Bedarf zusammengeführt
+        wenn sie unter min_chunk_size liegen.
+        
+        Falls aktiviert (overlap > 0), werden die letzten overlap Zeichen des
+        vorherigen Chunks am Anfang des nächsten wiederholt (zeichenbasiert,
+        an Satz-/Wortgrenzen geschnitten).
+        
+        GARANTIE: Gibt niemals leere Liste zurück wenn der Input-Text nicht
+        leer ist. Text geht nicht verloren.
+        
         Args:
-            text: Eingabetext
+            text: Eingabetext (beliebiger String)
             
         Returns:
-            Liste von semantisch kohärenten Text-Chunks
+            Liste von semantisch kohärenten Text-Chunks.
+            Jeder Chunk hat maximal max_chunk_size Zeichen.
         """
         # 1. Text in Sätze aufteilen
         sentences = self._split_into_sentences(text)
         
+        # Fallback: Wenn kein Satz gefunden wurde, verwende den gesamten Text
+        # Damit geht kein Text verloren, nur weil das Satz-Splitting nichts findet
         if not sentences:
-            return []
+            text_stripped = text.strip()
+            if not text_stripped:
+                return []  # Wirklich leerer Text
+            sentences = [text_stripped]
         
+        # Falls nur ein "Satz" gefunden wurde, prüfe ob er zu groß ist
         if len(sentences) == 1:
-            return [sentences[0]] if len(sentences[0]) >= self.min_chunk_size else []
+            single_sentence = sentences[0]
+            if len(single_sentence) > self.max_chunk_size:
+                # Zu groß - teile hart auf
+                return self._hard_split_text(single_sentence)
+            else:
+                # Einzelsatz immer behalten - lieber zu kurz als Information verlieren
+                return [single_sentence]
         
         # 2. Embeddings berechnen
         logger.debug(f"Berechne Embeddings für {len(sentences)} Sätze...")
@@ -206,12 +261,23 @@ class SemanticChunker:
             if len(chunk_text) > self.max_chunk_size:
                 # Chunk ist zu groß - teile ihn weiter auf
                 sub_chunks = self._split_large_chunk(chunk_sentences)
-                chunks.extend(sub_chunks)
+                # Validiere jeden sub_chunk
+                for sub_chunk in sub_chunks:
+                    if len(sub_chunk) <= self.max_chunk_size:
+                        chunks.append(sub_chunk)
+                    else:
+                        # Fallback: hart teilen
+                        chunks.extend(self._hard_split_text(sub_chunk))
             elif len(chunk_text) >= self.min_chunk_size:
                 chunks.append(chunk_text)
             elif chunks:
-                # Zu klein - füge zum vorherigen Chunk hinzu
-                chunks[-1] += ' ' + chunk_text
+                # Zu klein - füge zum vorherigen Chunk hinzu, ABER nur wenn dieser nicht zu groß wird
+                combined_size = len(chunks[-1]) + len(chunk_text) + 1
+                if combined_size <= self.max_chunk_size:
+                    chunks[-1] += ' ' + chunk_text
+                else:
+                    # Vorheriger Chunk würde zu groß - starte neuen Chunk trotz min_size
+                    chunks.append(chunk_text)
             else:
                 # Erster Chunk ist zu klein - speichere trotzdem
                 chunks.append(chunk_text)
@@ -220,11 +286,31 @@ class SemanticChunker:
         
         # 5. Überlappung hinzufügen (optional)
         if self.overlap > 0 and len(chunks) > 1:
-            chunks = self._add_overlap(chunks, sentences)
+            chunks = self._add_overlap(chunks)
         
-        logger.info(f"Semantic Chunking: {len(sentences)} Sätze → {len(chunks)} Chunks")
+        # 6. FINALE VALIDIERUNG: Stelle sicher, dass KEIN Chunk max_size überschreitet
+        validated_chunks = []
+        for chunk in chunks:
+            if len(chunk) <= self.max_chunk_size:
+                validated_chunks.append(chunk)
+            else:
+                # Sollte nicht passieren, aber als Fallback hart teilen
+                logger.warning(f"Chunk mit {len(chunk)} Zeichen überschreitet max_size, teile hart...")
+                validated_chunks.extend(self._hard_split_text(chunk))
         
-        return chunks
+        # Aussagekräftiges Logging mit Statistiken
+        if validated_chunks:
+            avg_len = int(np.mean([len(c) for c in validated_chunks]))
+            min_len = min(len(c) for c in validated_chunks)
+            max_len = max(len(c) for c in validated_chunks)
+            logger.info(
+                f"Semantic Chunking: {len(sentences)} Sätze → {len(validated_chunks)} Chunks "
+                f"(Ø {avg_len}, min {min_len}, max {max_len} Zeichen)"
+            )
+        else:
+            logger.info(f"Semantic Chunking: {len(sentences)} Sätze → 0 Chunks")
+        
+        return validated_chunks
     
     def _split_large_chunk(self, sentences: List[str]) -> List[str]:
         """
@@ -243,51 +329,218 @@ class SemanticChunker:
         for sentence in sentences:
             sentence_size = len(sentence)
             
-            if current_size + sentence_size > self.max_chunk_size and current_chunk:
-                chunks.append(' '.join(current_chunk))
+            # Falls ein einzelner Satz bereits zu groß ist, teile ihn hart auf
+            if sentence_size > self.max_chunk_size:
+                # Speichere bisherigen Chunk
+                if current_chunk:
+                    chunk_text = ' '.join(current_chunk)
+                    # Prüfe nochmal die tatsächliche Größe
+                    if len(chunk_text) <= self.max_chunk_size:
+                        chunks.append(chunk_text)
+                    else:
+                        # Sollte nicht passieren, aber als Fallback
+                        chunks.extend(self._hard_split_text(chunk_text))
+                    current_chunk = []
+                    current_size = 0
+                
+                # Teile den zu langen Satz in Stücke
+                sub_chunks = self._hard_split_text(sentence)
+                chunks.extend(sub_chunks)
+                continue
+            
+            # Berechne die tatsächliche Größe nach dem Join
+            # +1 für das Leerzeichen zwischen Sätzen (wenn current_chunk nicht leer)
+            space_needed = 1 if current_chunk else 0
+            projected_size = current_size + space_needed + sentence_size
+            
+            if projected_size > self.max_chunk_size and current_chunk:
+                chunk_text = ' '.join(current_chunk)
+                # Finale Validierung der Größe
+                if len(chunk_text) <= self.max_chunk_size:
+                    chunks.append(chunk_text)
+                else:
+                    # Fallback: hart teilen
+                    chunks.extend(self._hard_split_text(chunk_text))
                 current_chunk = [sentence]
                 current_size = sentence_size
             else:
                 current_chunk.append(sentence)
-                current_size += sentence_size + 1  # +1 für Leerzeichen
+                current_size = projected_size
+        
+        if current_chunk:
+            chunk_text = ' '.join(current_chunk)
+            if len(chunk_text) >= self.min_chunk_size:
+                if len(chunk_text) <= self.max_chunk_size:
+                    chunks.append(chunk_text)
+                else:
+                    chunks.extend(self._hard_split_text(chunk_text))
+            elif chunks:
+                # Nur zusammenfügen wenn max_size nicht überschritten wird
+                combined_size = len(chunks[-1]) + len(chunk_text) + 1
+                if combined_size <= self.max_chunk_size:
+                    chunks[-1] += ' ' + chunk_text
+                else:
+                    # Chunk trotz Untergröße separat speichern
+                    chunks.append(chunk_text)
+            else:
+                chunks.append(chunk_text)  # Lieber zu klein als verloren
+        
+        return chunks
+    
+    def _hard_split_text(self, text: str) -> List[str]:
+        """
+        Teile einen zu langen Text hart an Wortgrenzen auf.
+        
+        Wird verwendet wenn ein einzelner "Satz" bereits max_chunk_size überschreitet.
+        
+        Args:
+            text: Zu langer Text
+            
+        Returns:
+            Liste von Chunks mit max. max_chunk_size Zeichen
+        """
+        chunks = []
+        words = text.split()
+        current_chunk = []
+        current_size = 0
+        
+        for word in words:
+            word_size = len(word)
+            
+            # Falls ein einzelnes Wort zu lang ist (sehr selten)
+            if word_size > self.max_chunk_size:
+                if current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                    current_chunk = []
+                    current_size = 0
+                # Teile das Wort in Stücke
+                for i in range(0, word_size, self.max_chunk_size - 100):
+                    chunks.append(word[i:i + self.max_chunk_size - 100])
+                continue
+            
+            if current_size + word_size + 1 > self.max_chunk_size and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [word]
+                current_size = word_size
+            else:
+                current_chunk.append(word)
+                current_size += word_size + 1
         
         if current_chunk:
             chunk_text = ' '.join(current_chunk)
             if len(chunk_text) >= self.min_chunk_size:
                 chunks.append(chunk_text)
             elif chunks:
-                chunks[-1] += ' ' + chunk_text
+                # Prüfe ob zusammenfügen max_size überschreiten würde
+                combined_size = len(chunks[-1]) + len(chunk_text) + 1
+                if combined_size <= self.max_chunk_size:
+                    chunks[-1] += ' ' + chunk_text
+                else:
+                    # Lieber zu kurz als zu lang
+                    chunks.append(chunk_text)
+            else:
+                chunks.append(chunk_text)  # Lieber zu kurz als verloren
         
-        return chunks
+        # Finale Validierung: Alle Chunks müssen <= max_size sein
+        validated = []
+        for chunk in chunks:
+            if len(chunk) <= self.max_chunk_size:
+                validated.append(chunk)
+            else:
+                # Rekursiv weiter teilen (sollte sehr selten passieren)
+                # Um Endlosrekursion zu vermeiden, teile am Zeichen-Index
+                for i in range(0, len(chunk), self.max_chunk_size - 50):
+                    sub = chunk[i:i + self.max_chunk_size - 50]
+                    # Schneide an Wortgrenze wenn möglich
+                    if i + self.max_chunk_size - 50 < len(chunk):
+                        last_space = sub.rfind(' ')
+                        if last_space > len(sub) - 200:  # Nicht zu viel abschneiden
+                            sub = sub[:last_space]
+                    validated.append(sub.strip())
+        
+        return validated
     
-    def _add_overlap(self, chunks: List[str], sentences: List[str]) -> List[str]:
+    def _add_overlap(self, chunks: List[str]) -> List[str]:
         """
         Füge Überlappung zwischen Chunks hinzu.
         
-        Nimmt die letzten N Zeichen des vorherigen Chunks und fügt sie
-        am Anfang des nächsten Chunks hinzu.
+        Nimmt die letzten N Zeichen (self.overlap) des vorherigen Chunks
+        und fügt sie am Anfang des nächsten Chunks hinzu.
+        Der Schnitt erfolgt an Satz- oder Wortgrenzen, nicht mitten im Wort.
+        
+        WICHTIG: Respektiert max_chunk_size - kürzt den Overlap wenn nötig!
         
         Args:
-            chunks: Liste von Chunks
-            sentences: Original-Sätze (für Kontext)
+            chunks: Liste von Chunks ohne Overlap
             
         Returns:
-            Chunks mit Überlappung
+            Chunks mit Überlappung (außer dem ersten Chunk)
         """
         if len(chunks) <= 1:
             return chunks
         
         overlapped_chunks = [chunks[0]]
         
+        # Separator nur im Debug-Modus
+        if self.debug_overlap:
+            separator = ' [...] '
+        else:
+            separator = ' '
+        separator_len = len(separator)
+        
         for i in range(1, len(chunks)):
             prev_chunk = chunks[i - 1]
             current_chunk = chunks[i]
             
-            # Nimm die letzten overlap Zeichen des vorherigen Chunks
-            overlap_text = prev_chunk[-self.overlap:] if len(prev_chunk) > self.overlap else prev_chunk
+            # Berechne verfügbaren Platz für Overlap
+            available_space = self.max_chunk_size - len(current_chunk) - separator_len
             
-            # Füge am Anfang hinzu (mit Trennzeichen)
-            overlapped_chunks.append(overlap_text + ' [...] ' + current_chunk)
+            # Wenn kein Platz für Overlap, füge Chunk ohne Overlap hinzu
+            if available_space <= 50:  # Mindestens 50 Zeichen sinnvoll
+                overlapped_chunks.append(current_chunk)
+                continue
+            
+            # Begrenze Overlap auf verfügbaren Platz
+            actual_overlap = min(self.overlap, available_space)
+            
+            # Nimm die letzten overlap Zeichen des vorherigen Chunks
+            # ABER: Schneide am Satzanfang, nicht mitten im Satz!
+            if len(prev_chunk) > actual_overlap:
+                overlap_text = prev_chunk[-actual_overlap:]
+                # Finde letzten Satzanfang (nach . ! ? gefolgt von typischem Satzanfang)
+                # Nutzt globales re-Modul (am Modulanfang importiert)
+                matches = list(re.finditer(r'[.!?]\s+[A-ZÄÖÜ0-9\(\-]', overlap_text))
+                if matches:
+                    # Nimm den letzten Satzanfang
+                    last_match = matches[-1]
+                    # Starte nach dem Satzzeichen und Leerzeichen (beim Großbuchstaben)
+                    overlap_text = overlap_text[last_match.end() - 1:]
+                else:
+                    # Kein Satzanfang gefunden - schneide an Wortgrenze
+                    first_space = overlap_text.find(' ')
+                    if first_space > 0 and first_space < len(overlap_text) - 10:
+                        overlap_text = overlap_text[first_space + 1:]
+            else:
+                overlap_text = prev_chunk
+            
+            # Finale Größenprüfung vor dem Zusammenfügen
+            combined = overlap_text + separator + current_chunk
+            while len(combined) > self.max_chunk_size:
+                # Kürze overlap_text weiter
+                excess = len(combined) - self.max_chunk_size
+                if len(overlap_text) > excess + 20:
+                    overlap_text = overlap_text[excess:]
+                    # Schneide an Wortgrenze
+                    first_space = overlap_text.find(' ')
+                    if first_space > 0:
+                        overlap_text = overlap_text[first_space + 1:]
+                    combined = overlap_text + separator + current_chunk
+                else:
+                    # Kein sinnvoller Overlap möglich - verwende nur current_chunk
+                    combined = current_chunk
+                    break
+            
+            overlapped_chunks.append(combined)
         
         return overlapped_chunks
     
@@ -402,17 +655,23 @@ class ParagraphChunker:
     """
     Einfacher Paragraph-basierter Chunker (ohne Embeddings).
     Für schnelle Verarbeitung wenn semantische Analyse nicht benötigt wird.
+    
+    HINWEIS: Diese Klasse implementiert KEIN Overlap zwischen Chunks.
+    Für Overlap-Funktionalität verwende SemanticChunker.
     """
     
     def __init__(
         self,
         max_chunk_size: int = 1500,
-        min_chunk_size: int = 200,
-        overlap: int = 300
+        min_chunk_size: int = 200
     ):
+        """
+        Args:
+            max_chunk_size: Maximale Chunk-Größe in Zeichen
+            min_chunk_size: Minimale Chunk-Größe in Zeichen
+        """
         self.max_chunk_size = max_chunk_size
         self.min_chunk_size = min_chunk_size
-        self.overlap = overlap
     
     def chunk_by_paragraphs(self, text: str) -> List[str]:
         """Teile Text an Absatzgrenzen."""

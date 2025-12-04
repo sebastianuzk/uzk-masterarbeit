@@ -22,6 +22,7 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import time
 from datetime import datetime
+import pandas as pd
 
 # Scraper Utils
 from src.scraper.utils.checkpoint_manager import CheckpointManager
@@ -442,11 +443,11 @@ def run_production_scraper():
     conn = sqlite3.connect(CONTENT_DB)
     
     # Initialisiere Stats und Collections
-    # NAIVE RAG: Nur eine Collection
-    if not USE_ADVANCED:
-        collection_names = ['wiso_documents']
-    else:
+    # Multi-Collection nur wenn aktiviert UND categorizer vorhanden
+    if USE_MULTI_COLLECTION and categorizer is not None:
         collection_names = categorizer.get_collection_names()
+    else:
+        collection_names = ['wiso_documents']
     
     stats = {
         'total': 0,
@@ -746,15 +747,145 @@ def run_production_scraper():
         print(f"   📊 Chunk {example['chunk_index']+1}/{example['total_chunks']}")
         print(f"   📝 Inhalt: {example['content'][:150]}...")
     
+    # Berechne Gesamtzeit
+    end_time = time.time()
+    total_time_seconds = end_time - start_time
+    total_time_minutes = total_time_seconds / 60
+    
     print("\n" + "=" * 80)
     print("🎉 PIPELINE ERFOLGREICH ABGESCHLOSSEN")
     print("=" * 80)
-    print(f"\n✅ Alle {stats['total']:,} Dokumente wurden mit Advanced Pre-Retrieval")
-    print(f"   Techniken verarbeitet und in ChromaDB gespeichert!")
+    print(f"\n✅ Alle {stats['total']:,} Dokumente wurden verarbeitet")
+    print(f"   und in ChromaDB gespeichert!")
     print(f"\n✓ {stats['html']:,} HTML-Dokumente verarbeitet")
     print(f"✓ {stats['pdf']:,} PDF-Dokumente verarbeitet")
-    print(f"✓ {stats['chunks']:,} Chunks erstellt (nach Deduplication)")
+    print(f"✓ {stats['chunks']:,} Chunks erstellt")
+    print(f"✓ {stats['skipped']:,} Dokumente übersprungen")
+    print(f"✓ {stats['errors']:,} Fehler")
+    print(f"\n⏱️  Gesamtzeit: {total_time_minutes:.2f} Minuten ({total_time_seconds:.0f} Sekunden)")
     print(f"\nEnde: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 80)
+    
+    # =========================================================================
+    # EXCEL-EXPORT: Scraping-Statistiken
+    # =========================================================================
+    print("\n📊 Erstelle Scraping-Statistiken Excel...")
+    
+    # Bestimme RAG-Modus für Dateinamen
+    if USE_ADVANCED:
+        active_techniques = []
+        if USE_SEMANTIC_CHUNKING:
+            active_techniques.append("SemanticChunking")
+        if USE_CONTENT_CLEANING:
+            active_techniques.append("ContentCleaning")
+        if USE_DEDUPLICATION:
+            active_techniques.append("Deduplication")
+        if USE_MULTI_COLLECTION:
+            active_techniques.append("MultiCollection")
+        
+        if active_techniques:
+            rag_mode = "_".join(active_techniques)
+        else:
+            rag_mode = "Advanced_NoTechniques"
+    else:
+        rag_mode = "Naive"
+    
+    # Erstelle DataFrame mit Statistiken
+    scraping_stats = {
+        'Metrik': [
+            'RAG Modus',
+            'Anzahl Collections',
+            'Gesamtdokumente',
+            'HTML-Dokumente',
+            'PDF-Dokumente',
+            'Chunks erstellt',
+            'Durchschn. Chunks/Dokument',
+            'Dokumente übersprungen',
+            'Fehler',
+            'Gesamtzeit (Minuten)',
+            'Gesamtzeit (Sekunden)',
+            'Dokumente/Sekunde',
+            'Startzeit',
+            'Endzeit'
+        ],
+        'Wert': [
+            rag_mode,
+            len(collection_names),
+            stats['total'],
+            stats['html'],
+            stats['pdf'],
+            stats['chunks'],
+            round(stats['chunks'] / max(stats['total'], 1), 2),
+            stats['skipped'],
+            stats['errors'],
+            round(total_time_minutes, 2),
+            round(total_time_seconds, 0),
+            round(stats['total'] / max(total_time_seconds, 1), 2),
+            datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S'),
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ]
+    }
+    
+    df_stats = pd.DataFrame(scraping_stats)
+    
+    # Erstelle DataFrame mit Chunking-Hyperparametern
+    if USE_SEMANTIC_CHUNKING:
+        chunking_params = {
+            'Parameter': [
+                'Chunking-Methode',
+                'Max Chunk Size',
+                'Min Chunk Size', 
+                'Overlap',
+                'Similarity Threshold',
+                'Embedding Model'
+            ],
+            'Wert': [
+                'Semantic Chunking (Embedding-basiert)',
+                rag_config.semantic_chunking_max_size,
+                rag_config.semantic_chunking_min_size,
+                rag_config.semantic_chunking_overlap,
+                rag_config.semantic_chunking_similarity_threshold,
+                rag_config.embedding_model_name
+            ]
+        }
+    else:
+        chunking_params = {
+            'Parameter': [
+                'Chunking-Methode',
+                'Chunk Size',
+                'Overlap'
+            ],
+            'Wert': [
+                'Naive Chunking (Character-basiert)',
+                1250,
+                300
+            ]
+        }
+    
+    df_chunking = pd.DataFrame(chunking_params)
+    
+    # Erstelle DataFrame mit Collection-Statistiken
+    collection_stats = []
+    for name in collection_names:
+        count = stats['collections'].get(name, 0)
+        collection_stats.append({
+            'Collection': name,
+            'Anzahl Chunks': count,
+            'Anteil (%)': round(count / max(stats['chunks'], 1) * 100, 2)
+        })
+    
+    df_collections = pd.DataFrame(collection_stats)
+    
+    # Speichere als Excel mit mehreren Sheets
+    excel_path = Path("src/evaluation/data") / f"scraping_stats_{rag_mode}.xlsx"
+    excel_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        df_stats.to_excel(writer, sheet_name='Übersicht', index=False)
+        df_chunking.to_excel(writer, sheet_name='Chunking-Parameter', index=False)
+        df_collections.to_excel(writer, sheet_name='Collections', index=False)
+    
+    print(f"   ✅ Statistiken gespeichert: {excel_path}")
     print("=" * 80)
 
 if __name__ == "__main__":
