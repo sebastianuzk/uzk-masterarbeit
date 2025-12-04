@@ -5,17 +5,18 @@ Testet ob der Agent das RAG-Tool korrekt nutzt.
 
 HINWEIS: Diese Tests verwenden das gpt-oss:20b Modell für bessere Ergebnisse.
 """
-import pytest
-import sys
 import os
+import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 # Setze das Modell für alle Integration Tests auf gpt-oss:20b
 os.environ["OLLAMA_MODEL"] = "gpt-oss:20b"
 
-from src.agent.react_agent import ReactAgent
+from tests.integration.tools.conftest import ollama_available
 
 
 def has_vector_db():
@@ -30,9 +31,17 @@ def has_vector_db():
     return False
 
 
+# Überspringe alle Tests wenn Ollama nicht verfügbar ist
+pytestmark = pytest.mark.skipif(
+    not ollama_available(),
+    reason="Ollama-Server nicht erreichbar"
+)
+
+
 @pytest.fixture
 def agent():
     """Erstellt einen Agent für die Tests"""
+    from src.agent.react_agent import ReactAgent
     return ReactAgent()
 
 
@@ -60,6 +69,7 @@ class TestAgentRAGSearch:
     
     def test_agent_answers_fristen_question(self, agent):
         """Test: Agent beantwortet Fristenfrage"""
+        from src.agent.react_agent import ReactAgent
         test_agent = ReactAgent()
         response = test_agent.chat("Wann sind die Bewerbungsfristen für das Wintersemester?")
         
@@ -68,6 +78,7 @@ class TestAgentRAGSearch:
     
     def test_agent_answers_studiengang_question(self, agent):
         """Test: Agent beantwortet Studiengangfrage"""
+        from src.agent.react_agent import ReactAgent
         test_agent = ReactAgent()
         response = test_agent.chat("Welche Studiengänge bietet die WiSo-Fakultät an?")
         
@@ -76,6 +87,7 @@ class TestAgentRAGSearch:
     
     def test_agent_uses_knowledge_for_klips(self, agent):
         """Test: Agent nutzt Wissensdatenbank für KLIPS-Fragen"""
+        from src.agent.react_agent import ReactAgent
         test_agent = ReactAgent()
         response = test_agent.chat("Was ist KLIPS und wie funktioniert es?")
         
@@ -84,6 +96,7 @@ class TestAgentRAGSearch:
     
     def test_agent_handles_specific_question(self, agent):
         """Test: Agent beantwortet spezifische Uni-Frage"""
+        from src.agent.react_agent import ReactAgent
         test_agent = ReactAgent()
         response = test_agent.chat("Wie hoch ist der Semesterbeitrag an der Uni Köln?")
         
