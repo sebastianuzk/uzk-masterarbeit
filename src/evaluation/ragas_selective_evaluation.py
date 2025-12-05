@@ -7,10 +7,17 @@ Ergebnisse in ragas_results.csv (oder erstellt neue, falls nicht vorhanden).
 
 import sys
 import os
+import random
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from typing import List
 import time
+
+# Reproduzierbarkeit: Fester Seed für alle Zufallsoperationen
+RANDOM_SEED = 42
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
 
 # Fix Windows Terminal encoding für Emojis
 if os.name == 'nt':
@@ -32,17 +39,26 @@ from config.settings import (
     OLLAMA_MODEL,
     OLLAMA_BASE_URL,
     LANGSMITH_API_KEY,
-    LANGSMITH_PROJECT
+    LANGSMITH_PROJECT,
+    RAGAS_EVAL_MODEL,
+    TEMPERATURE,
+    CONTEXT_WINDOW,
+    RANDOM_SEED
 )
 from src.agent.react_agent import create_react_agent
+
+# Setze Seeds für Reproduzierbarkeit
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
 
 # ============================================================================
 # KONFIGURATION: Hier die Indizes eintragen (1-basiert wie in CSV)
 # ============================================================================
-SPECIFIC_INDICES = []  # Leer lassen für Auto-Detect (fehlgeschlagen + fehlend)
-AUTO_DETECT_FAILED = True  # Automatisch fehlgeschlagene IDs aus ragas_results.csv erkennen
-AUTO_DETECT_MISSING = True  # Automatisch noch nicht evaluierte IDs erkennen
-REUSE_EXISTING_RESPONSES = True  # Antworten und Kontexte aus ragas_results.csv laden (statt neu generieren)
+SPECIFIC_INDICES = [1]  # Test: Metriken für ID 1 neu berechnen (ohne neue Antwort)
+AUTO_DETECT_FAILED = False  # Deaktiviert - wir evaluieren alle
+AUTO_DETECT_MISSING = False  # Deaktiviert - wir evaluieren alle
+REUSE_EXISTING_RESPONSES = True  # Bestehende Antworten verwenden
+FORCE_RECALC_ALL_METRICS = True  # Alle Metriken neu berechnen
 
 
 def detect_failed_and_missing_indices(results_path: Path, testset_path: Path) -> tuple:
@@ -74,6 +90,9 @@ def detect_failed_and_missing_indices(results_path: Path, testset_path: Path) ->
         print("⚠️  CSV hat keine 'id' Spalte - kann Status nicht prüfen")
         missing_ids = sorted(list(all_expected_ids))
         return failed_ids, missing_ids
+    
+    # Filtere META/AVG Zeilen aus
+    df = df[~df['id'].astype(str).isin(['META', 'AVG'])]
     
     # Prüfe welche IDs NaN-Werte in den Metriken haben
     metric_cols = ['faithfulness', 'context_recall', 'context_precision']
@@ -116,6 +135,9 @@ def detect_missing_metrics_per_id(results_path: Path) -> dict:
     
     if 'id' not in df.columns:
         return {}
+    
+    # Filtere META/AVG Zeilen aus
+    df = df[~df['id'].astype(str).isin(['META', 'AVG'])]
     
     metric_cols = ['faithfulness', 'context_recall', 'context_precision']
     missing_metrics = {}
@@ -174,6 +196,12 @@ def load_existing_responses(indices: List[int]) -> EvaluationDataset:
     
     df = pd.read_csv(results_path, encoding='utf-8')
     
+    # Filtere META/AVG Zeilen aus
+    df = df[~df['id'].astype(str).isin(['META', 'AVG'])]
+    
+    # Konvertiere ID zu int für korrektes Filtern
+    df['id'] = df['id'].astype(int)
+    
     # Filtere nach IDs
     df = df[df['id'].isin(indices)]
     
@@ -220,8 +248,13 @@ def load_existing_responses(indices: List[int]) -> EvaluationDataset:
     return EvaluationDataset(samples=samples), df
 
 
-def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
-    """Holt RAG-Kontext-Chunks aus LangSmith"""
+def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
+    """
+    Holt RAG-Kontext-Chunks und URLs aus LangSmith.
+    
+    Returns:
+        Tuple (contexts, urls): Listen von RAG-Context-Chunks und zugehörigen URLs
+    """
     try:
         child_runs = list(client.list_runs(
             project_name=LANGSMITH_PROJECT,
@@ -230,6 +263,7 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
         ))
         
         contexts = []
+        urls = []
         for child in child_runs:
             if child.run_type == "retriever":
                 if child.outputs and isinstance(child.outputs, dict):
@@ -237,23 +271,34 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
                     for doc in documents:
                         if isinstance(doc, dict) and 'page_content' in doc:
                             contexts.append(doc['page_content'])
+                            # URL aus metadata.source extrahieren
+                            metadata = doc.get('metadata', {})
+                            url = metadata.get('source', 'Keine URL')
+                            urls.append(url)
         
         if contexts:
-            return contexts
+            return contexts, urls
         
-        return ["Kein RAG-Kontext gefunden"]
+        return ["Kein RAG-Kontext gefunden"], ["Keine URL"]
     
     except Exception as e:
         print(f"      ⚠️ LangSmith-Fehler: {str(e)[:100]}")
-        return ["LangSmith-Fehler"]
+        return ["LangSmith-Fehler"], ["Keine URL"]
 
 
-def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> EvaluationDataset:
-    """Generiert Chatbot-Antworten für die gefilterten Fragen"""
+def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> tuple:
+    """
+    Generiert Chatbot-Antworten für die gefilterten Fragen.
+    
+    Returns:
+        Tuple (dataset, response_times, urls_list): EvaluationDataset, Liste der Antwortzeiten, Liste der URL-Listen
+    """
     print("\n🤖 Generiere Chatbot-Antworten...")
     print("=" * 80)
     
     samples = []
+    response_times = []  # Zeit pro Antwort in Sekunden
+    urls_list = []  # Liste von URL-Listen pro Frage
     
     for idx, row in df.iterrows():
         question_id = row['id']
@@ -268,8 +313,15 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         import uuid
         session_id = str(uuid.uuid4())
         
+        # Zeit messen für Antwortgenerierung
+        response_start = time.time()
+        
         answer = agent.chat(question, session_id=session_id)
-        print(f"   ✅ Antwort: {answer[:80]}...")
+        
+        response_time = time.time() - response_start
+        response_times.append(response_time)
+        
+        print(f"   ✅ Antwort: {answer[:80]}... ({response_time:.2f}s)")
         
         time.sleep(1)  # Reduziert von 3s auf 1s
         
@@ -283,6 +335,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         ))
         
         contexts = ["Kein RAG-Kontext gefunden"]
+        urls = ["Keine URL"]
         matching_run = None
         
         # Der letzte Run sollte unser Run sein
@@ -291,13 +344,16 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         
         if matching_run:
             trace_id = matching_run.trace_id
-            contexts = get_rag_context_from_langsmith(langsmith_client, trace_id)
+            contexts, urls = get_rag_context_from_langsmith(langsmith_client, trace_id)
             print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
         else:
             print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
         
+        urls_list.append(urls)
+        
         total_chars = sum(len(c) for c in contexts)
         print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
+        print(f"   🔗 URLs: {len(urls)} Quellen")
         
         sample = SingleTurnSample(
             user_input=question,
@@ -309,11 +365,13 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     
     print("\n" + "=" * 80)
     print(f"✅ {len(samples)} Antworten generiert\n")
+    print(f"   ⏱️ Durchschn. Antwortzeit: {sum(response_times)/len(response_times):.2f}s")
+    print(f"   ⏱️ Gesamt Antwortzeit: {sum(response_times):.2f}s\n")
     
-    return EvaluationDataset(samples=samples)
+    return EvaluationDataset(samples=samples), response_times, urls_list
 
 
-def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[str] = None) -> pd.DataFrame:
+def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[str] = None) -> tuple:
     """
     Führt RAGAS-Evaluation durch.
     
@@ -322,17 +380,23 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
         metrics_to_compute: Optional - Liste der zu berechnenden Metriken.
                            Falls None, werden alle berechnet.
                            Mögliche Werte: 'faithfulness', 'context_recall', 'context_precision'
+    
+    Returns:
+        Tuple (results_df, evaluation_time): DataFrame mit Ergebnissen und Evaluationszeit in Sekunden
     """
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
+    # Separates LLM für RAGAS-Evaluation (gleiches Setup wie Chatbot, nur anderes Modell)
     llm = ChatOllama(
-        model=OLLAMA_MODEL,
+        model=RAGAS_EVAL_MODEL,  # Separates Modell für Evaluation
         base_url=OLLAMA_BASE_URL,
-        temperature=0.0,
-        num_ctx=12288  # Reduziert für 8GB VRAM (Modell ~5GB + KV-Cache ~1.5GB)
+        temperature=TEMPERATURE,  # Gleiche Parameter wie Chatbot
+        seed=RANDOM_SEED,
+        num_ctx=CONTEXT_WINDOW
     )
-    print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL} (num_ctx=12288)")
+    print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
+    print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
     
     # Alle verfügbaren Metriken
     all_metrics = {
@@ -359,6 +423,9 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
         max_wait=30  # Max 30 Sekunden warten zwischen Retries
     )
     
+    # Zeit messen für Evaluation
+    eval_start = time.time()
+    
     # Evaluation durchführen
     results = evaluate(
         dataset, 
@@ -368,14 +435,20 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
         raise_exceptions=False
     )
     
+    evaluation_time = time.time() - eval_start
+    
     results_df = results.to_pandas()
     
-    print("\n✅ RAGAS-Evaluation abgeschlossen!\n")
+    print(f"\n✅ RAGAS-Evaluation abgeschlossen in {evaluation_time:.2f}s")
+    print(f"   ⏱️ Durchschn. pro Sample: {evaluation_time/len(dataset.samples):.2f}s\n")
     
-    return results_df
+    return results_df, evaluation_time
 
 
-def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFrame, only_fill_nan: bool = False) -> pd.DataFrame:
+def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFrame, 
+                                  only_fill_nan: bool = False,
+                                  response_times: List[float] = None,
+                                  urls_list: List[List[str]] = None) -> pd.DataFrame:
     """
     Merged neue Ergebnisse mit bestehenden ragas_results.csv.
     Wenn ragas_results.csv nicht existiert, wird sie neu erstellt.
@@ -384,6 +457,8 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
         new_results_df: Neue Evaluationsergebnisse
         test_df: Testset DataFrame mit IDs
         only_fill_nan: Wenn True, werden nur NaN-Werte in bestehenden Einträgen überschrieben
+        response_times: Liste der Antwortzeiten pro Frage (optional)
+        urls_list: Liste von URL-Listen pro Frage (optional)
     """
     results_path = Path(__file__).parent / "data" / "ragas_results.csv"
     
@@ -397,6 +472,14 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
         lambda x: len(x) if isinstance(x, list) else 0
     )
     
+    # Response-Zeiten hinzufügen (falls vorhanden)
+    if response_times:
+        new_results_df['response_time_seconds'] = response_times[:len(new_results_df)]
+    
+    # URLs hinzufügen (falls vorhanden)
+    if urls_list:
+        new_results_df['retrieved_urls'] = [str(urls) for urls in urls_list[:len(new_results_df)]]
+    
     metric_cols = ['faithfulness', 'context_recall', 'context_precision']
     
     if results_path.exists():
@@ -405,6 +488,12 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
         
         # Prüfe ob 'id' Spalte existiert
         if 'id' in existing_df.columns:
+            # Filtere META/AVG Zeilen aus (werden später neu generiert)
+            existing_df = existing_df[~existing_df['id'].astype(str).isin(['META', 'AVG'])].copy()
+            
+            # Konvertiere id zu int für konsistentes Matching
+            existing_df['id'] = existing_df['id'].astype(int)
+            
             # Konvertiere retrieved_contexts zurück zu Liste falls als String gespeichert
             if 'retrieved_contexts' in existing_df.columns:
                 existing_df['retrieved_contexts'] = existing_df['retrieved_contexts'].apply(
@@ -436,20 +525,56 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
                 
                 merged_df = existing_df
             else:
-                # Alte Einträge komplett ersetzen
+                # Metriken ersetzen, aber response_time und urls aus bestehenden Daten beibehalten
+                print(f"   🔄 Ersetze Metriken für {len(updated_ids)} IDs: {updated_ids}")
+                
+                # Speichere bestehende Zeiten/URLs bevor wir ersetzen
+                preserve_cols = ['response_time_seconds', 'retrieved_urls']
+                preserved_data = {}
+                for col in preserve_cols:
+                    if col in existing_df.columns:
+                        for row_id in updated_ids:
+                            mask = existing_df['id'] == row_id
+                            if mask.any():
+                                val = existing_df.loc[mask, col].values[0]
+                                if pd.notna(val) and val != '':
+                                    if row_id not in preserved_data:
+                                        preserved_data[row_id] = {}
+                                    preserved_data[row_id][col] = val
+                
+                # Entferne alte Einträge
                 existing_df = existing_df[~existing_df['id'].isin(updated_ids)]
-                print(f"   🔄 Ersetze {len(updated_ids)} alte Einträge für IDs: {updated_ids}")
                 merged_df = pd.concat([existing_df, new_results_df], ignore_index=True)
+                
+                # Stelle die bewahrten Werte wieder her
+                for row_id, cols in preserved_data.items():
+                    mask = merged_df['id'] == row_id
+                    for col, val in cols.items():
+                        if col in merged_df.columns:
+                            # Nur wiederherstellen wenn neuer Wert leer/NaN ist
+                            current_val = merged_df.loc[mask, col].values[0] if mask.any() else None
+                            if pd.isna(current_val) or current_val == '' or current_val is None:
+                                merged_df.loc[mask, col] = val
+                                print(f"      ID {row_id}: {col} beibehalten")
             
             # Stelle sicher, dass alle Spalten vorhanden sind
             for col in new_results_df.columns:
                 if col not in merged_df.columns:
                     merged_df[col] = None
             
-            # Sortiere nach ID und wähle nur die relevanten Spalten
-            merged_df = merged_df[['id', 'category', 'difficulty', 'user_input', 'response', 
-                                    'reference', 'retrieved_contexts', 'faithfulness', 
-                                    'context_recall', 'context_precision', 'context_count']].copy()
+            # Filtere META/AVG Zeilen aus (werden später neu generiert)
+            merged_df = merged_df[~merged_df['id'].astype(str).isin(['META', 'AVG'])].copy()
+            
+            # Sortiere nach ID und wähle nur die relevanten Spalten (erweitert um neue Spalten)
+            available_cols = ['id', 'category', 'difficulty', 'user_input', 'response', 
+                              'reference', 'retrieved_contexts', 'retrieved_urls',
+                              'faithfulness', 'context_recall', 'context_precision', 
+                              'context_count', 'response_time_seconds']
+            # Nur vorhandene Spalten verwenden
+            cols_to_use = [col for col in available_cols if col in merged_df.columns]
+            merged_df = merged_df[cols_to_use].copy()
+            # Konvertiere id zu int für korrektes Sortieren
+            merged_df['id'] = merged_df['id'].astype(int)
             merged_df = merged_df.sort_values('id').reset_index(drop=True)
             
             print(f"   ✅ Gesamt: {len(merged_df)} Einträge in CSV")
@@ -541,7 +666,11 @@ def main():
         for metrics_list in missing_metrics_per_id.values():
             all_missing_metrics.update(metrics_list)
         
-        if all_missing_metrics:
+        # Falls FORCE_RECALC_ALL_METRICS aktiv, alle Metriken neu berechnen
+        if FORCE_RECALC_ALL_METRICS:
+            print("🔄 FORCE_RECALC_ALL_METRICS aktiviert - Alle Metriken werden neu berechnet")
+            all_missing_metrics = None  # None = alle Metriken
+        elif all_missing_metrics:
             print(f"📊 Fehlende Metriken pro ID:")
             for id_, metrics in sorted(missing_metrics_per_id.items()):
                 if id_ in indices_to_eval:
@@ -557,6 +686,9 @@ def main():
         print()
         
         # 4. Entweder bestehende Responses wiederverwenden oder neu generieren
+        response_times = None
+        urls_list = None
+        
         if REUSE_EXISTING_RESPONSES:
             print("♻️  REUSE_EXISTING_RESPONSES aktiviert - Lade bestehende Antworten...")
             dataset, loaded_df = load_existing_responses(indices_to_eval)
@@ -574,23 +706,25 @@ def main():
             agent = create_react_agent()
             print()
             
-            # Antworten generieren
-            dataset = generate_chatbot_responses(test_df, agent, langsmith_client)
+            # Antworten generieren (jetzt mit Timing und URLs)
+            dataset, response_times, urls_list = generate_chatbot_responses(test_df, agent, langsmith_client)
         
-        # 5. RAGAS-Evaluation (nur fehlende Metriken wenn REUSE aktiv)
+        # 5. RAGAS-Evaluation (nur fehlende Metriken wenn REUSE aktiv, außer FORCE_RECALC)
         metrics_to_compute = list(all_missing_metrics) if all_missing_metrics else None
-        results_df = run_ragas_evaluation(dataset, metrics_to_compute=metrics_to_compute)
+        results_df, evaluation_time = run_ragas_evaluation(dataset, metrics_to_compute=metrics_to_compute)
         
-        # 6. Mit bestehenden Ergebnissen mergen (nur NaN-Werte überschreiben wenn REUSE aktiv)
-        only_fill_nan = REUSE_EXISTING_RESPONSES and all_missing_metrics is not None
-        merged_df = merge_results_with_existing(results_df, test_df, only_fill_nan=only_fill_nan)
+        # 6. Mit bestehenden Ergebnissen mergen 
+        # Bei FORCE_RECALC_ALL_METRICS: Komplette Zeilen ersetzen (nicht nur NaN)
+        only_fill_nan = REUSE_EXISTING_RESPONSES and all_missing_metrics is not None and not FORCE_RECALC_ALL_METRICS
+        merged_df = merge_results_with_existing(results_df, test_df, only_fill_nan=only_fill_nan,
+                                                 response_times=response_times, urls_list=urls_list)
         
         # 7. Ergebnisse anzeigen
         display_results(results_df, test_df)
         
         # 8. Speichern in CSV
-        output_path_csv = Path(__file__).parent / "data" / "ragas_results.csv"
-        
+        from datetime import datetime
+        output_path_csv = Path(__file__).parent / "data" / "ragas_results.csv"        
         # Entferne Zeilenumbrüche aus Textfeldern für saubere CSV
         text_columns = ['user_input', 'response', 'reference']
         for col in text_columns:
@@ -602,8 +736,131 @@ def main():
             lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if isinstance(x, list) else str(x)
         )
         
+        # Konvertiere retrieved_urls zu String ohne Zeilenumbrüche (falls vorhanden)
+        if 'retrieved_urls' in merged_df.columns:
+            merged_df['retrieved_urls'] = merged_df['retrieved_urls'].apply(
+                lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if x else ''
+            )
+        
+        # ============================================================================
+        # METADATEN-ZEILEN: Modelle, Zeitstempel, Dauern (nur für Daten-Zeilen, nicht META/AVG)
+        # ============================================================================
+        # Filtere nur echte Daten-Zeilen (keine META/AVG Zeilen)
+        data_df = merged_df[~merged_df['id'].astype(str).isin(['META', 'AVG'])].copy()
+        
+        csv_columns = list(merged_df.columns)
+        metadata_rows = []
+        
+        # Berechne akkumulierte Zeiten aus ALLEN Daten-Zeilen
+        total_response_time = 0.0
+        if 'response_time_seconds' in data_df.columns:
+            valid_times = data_df['response_time_seconds'].dropna()
+            if len(valid_times) > 0:
+                total_response_time = valid_times.sum()
+        
+        # Lade bestehende Eval-Zeit aus alter META-Zeile und addiere neue
+        existing_eval_time = 0.0
+        if output_path_csv.exists():
+            try:
+                old_df = pd.read_csv(output_path_csv, encoding='utf-8')
+                meta_rows = old_df[old_df['id'].astype(str) == 'META']
+                if len(meta_rows) > 0:
+                    eval_str = str(meta_rows.iloc[0].get('retrieved_contexts', ''))
+                    if 'Eval-Zeit gesamt:' in eval_str:
+                        # Extrahiere Zahl aus "Eval-Zeit gesamt: 123.45s"
+                        import re
+                        match = re.search(r'Eval-Zeit gesamt:\s*([\d.]+)s', eval_str)
+                        if match:
+                            existing_eval_time = float(match.group(1))
+                            print(f"📊 Bestehende Eval-Zeit aus CSV: {existing_eval_time:.2f}s")
+            except Exception as e:
+                print(f"⚠️  Warnung: Konnte bestehende Eval-Zeit nicht laden: {e}")
+                pass
+        
+        # Addiere aktuelle Eval-Zeit zur bestehenden
+        total_eval_time = existing_eval_time + (evaluation_time if evaluation_time else 0.0)
+        
+        # Metadaten-Zeile 1: Allgemeine Infos (mit akkumulierten Werten)
+        meta1 = {col: '' for col in csv_columns}
+        meta1['id'] = 'META'
+        meta1['category'] = 'Evaluation Metadaten'
+        meta1['difficulty'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        meta1['user_input'] = f'Chatbot: {OLLAMA_MODEL} (ctx=dynamisch, temp={TEMPERATURE}, seed={RANDOM_SEED})'
+        meta1['response'] = f'RAGAS-LLM: {RAGAS_EVAL_MODEL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})'
+        meta1['reference'] = f'Testset: {len(data_df)} Fragen'
+        meta1['retrieved_contexts'] = f'Eval-Zeit gesamt: {total_eval_time:.2f}s'
+        if 'retrieved_urls' in csv_columns:
+            meta1['retrieved_urls'] = f'Antwort-Zeit gesamt: {total_response_time:.2f}s'
+        metadata_rows.append(meta1)
+        
+        # ============================================================================
+        # DURCHSCHNITTE: Gesamt, pro Kategorie, pro Schwierigkeit, kombiniert
+        # ============================================================================
+        metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+        
+        # Gesamtdurchschnitt
+        avg_row = {col: '' for col in csv_columns}
+        avg_row['id'] = 'AVG'
+        avg_row['category'] = 'GESAMT'
+        avg_row['difficulty'] = f'n={len(data_df)}'
+        for metric in metric_cols:
+            if metric in data_df.columns:
+                avg_row[metric] = data_df[metric].mean()
+        if 'response_time_seconds' in data_df.columns and data_df['response_time_seconds'].notna().any():
+            avg_row['response_time_seconds'] = data_df['response_time_seconds'].mean()
+        metadata_rows.append(avg_row)
+        
+        # Durchschnitte pro Kategorie
+        for category in sorted(data_df['category'].unique()):
+            cat_df = data_df[data_df['category'] == category]
+            cat_row = {col: '' for col in csv_columns}
+            cat_row['id'] = 'AVG'
+            cat_row['category'] = category
+            cat_row['difficulty'] = f'n={len(cat_df)}'
+            for metric in metric_cols:
+                if metric in cat_df.columns:
+                    cat_row[metric] = cat_df[metric].mean()
+            if 'response_time_seconds' in cat_df.columns and cat_df['response_time_seconds'].notna().any():
+                cat_row['response_time_seconds'] = cat_df['response_time_seconds'].mean()
+            metadata_rows.append(cat_row)
+        
+        # Durchschnitte pro Schwierigkeit
+        for difficulty in ['easy', 'medium', 'hard']:
+            diff_df = data_df[data_df['difficulty'] == difficulty]
+            if len(diff_df) > 0:
+                diff_row = {col: '' for col in csv_columns}
+                diff_row['id'] = 'AVG'
+                diff_row['category'] = f'Schwierigkeit: {difficulty.upper()}'
+                diff_row['difficulty'] = f'n={len(diff_df)}'
+                for metric in metric_cols:
+                    if metric in diff_df.columns:
+                        diff_row[metric] = diff_df[metric].mean()
+                if 'response_time_seconds' in diff_df.columns and diff_df['response_time_seconds'].notna().any():
+                    diff_row['response_time_seconds'] = diff_df['response_time_seconds'].mean()
+                metadata_rows.append(diff_row)
+        
+        # Durchschnitte pro Kategorie + Schwierigkeit (kombiniert)
+        for category in sorted(data_df['category'].unique()):
+            for difficulty in ['easy', 'medium', 'hard']:
+                combo_df = data_df[(data_df['category'] == category) & (data_df['difficulty'] == difficulty)]
+                if len(combo_df) > 0:
+                    combo_row = {col: '' for col in csv_columns}
+                    combo_row['id'] = 'AVG'
+                    combo_row['category'] = f'{category} / {difficulty.upper()}'
+                    combo_row['difficulty'] = f'n={len(combo_df)}'
+                    for metric in metric_cols:
+                        if metric in combo_df.columns:
+                            combo_row[metric] = combo_df[metric].mean()
+                    if 'response_time_seconds' in combo_df.columns and combo_df['response_time_seconds'].notna().any():
+                        combo_row['response_time_seconds'] = combo_df['response_time_seconds'].mean()
+                    metadata_rows.append(combo_row)
+        
+        # Metadaten-DataFrame erstellen und anhängen
+        meta_df = pd.DataFrame(metadata_rows)
+        final_df = pd.concat([data_df, meta_df], ignore_index=True)
+        
         # Speichere mit UTF-8-BOM für korrekte Umlaut-Darstellung
-        merged_df.to_csv(output_path_csv, index=False, encoding='utf-8-sig', sep=',', quoting=1)
+        final_df.to_csv(output_path_csv, index=False, encoding='utf-8-sig', sep=',', quoting=1)
         
         print("\n" + "=" * 80)
         print(f"💾 Ergebnisse gespeichert:")

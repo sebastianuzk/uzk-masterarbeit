@@ -92,12 +92,32 @@ class UniversityRAGTool(BaseTool):
         return self._embedding_model
     
     def _should_use_advanced(self) -> bool:
-        """Prüfe ob Advanced-Techniken aktiviert sind."""
+        """
+        Prüfe ob Advanced-RETRIEVAL-Techniken aktiviert sind.
+        
+        Nur Retrieval- und Post-Retrieval-Techniken zählen hier.
+        Pre-Retrieval-Techniken (Semantic Chunking) betreffen nur das Scraping,
+        nicht die Runtime-Suche.
+        """
         if not self.config:
             return False
         
-        # Baseline-Modus = Naive = Kein Advanced
-        return not self.config.baseline_enabled
+        # Nur Advanced wenn Retrieval-Techniken aktiv sind
+        # (Multi-Collection, Reranking, Relevance-Filtering, etc.)
+        retrieval_features = [
+            self.config.enable_multi_collection,
+            self.config.enable_result_aggregation,
+            self.config.enable_global_reranking,
+        ]
+        
+        post_retrieval_features = [
+            self.config.enable_relevance_filtering,
+            self.config.enable_result_formatting,
+            self.config.enable_context_hints,
+            self.config.enable_empty_result_handling,
+        ]
+        
+        return any(retrieval_features) or any(post_retrieval_features)
     
     def _get_chromadb_client(self):
         """Hole ChromaDB Client (Shared Helper)."""

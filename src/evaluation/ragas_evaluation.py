@@ -10,10 +10,16 @@ Evaluiert den Chatbot mit RAGAS-Framework:
 """
 
 import sys
+import random
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from typing import List
 import time
+
+# Reproduzierbarkeit: Seeds werden aus config.settings geladen
+import random
+import numpy as np
 
 # Projekt-Root
 project_root = Path(__file__).parent.parent.parent
@@ -29,9 +35,17 @@ from config.settings import (
     OLLAMA_MODEL,
     OLLAMA_BASE_URL,
     LANGSMITH_API_KEY,
-    LANGSMITH_PROJECT
+    LANGSMITH_PROJECT,
+    RAGAS_EVAL_MODEL,
+    TEMPERATURE,
+    CONTEXT_WINDOW,
+    RANDOM_SEED
 )
 from src.agent.react_agent import create_react_agent
+
+# Setze Seeds für Reproduzierbarkeit
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
 
 
 def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.DataFrame:
@@ -47,19 +61,19 @@ def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.Da
     return df
 
 
-def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
+def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
     """
-    Holt RAG-Kontext aus LangSmith für eine spezifische Trace-ID.
+    Holt RAG-Kontext und URLs aus LangSmith für eine spezifische Trace-ID.
     
     Die Documents befinden sich im Retriever-Output unter dem Key 'output' (nicht 'documents'!).
-    Jedes Document hat 'page_content' und 'metadata'.
+    Jedes Document hat 'page_content' und 'metadata' (mit 'source' URL).
     
     Args:
         client: LangSmith Client
         trace_id: Die Trace-ID der Session
         
     Returns:
-        Liste von RAG-Context-Chunks aus den Retriever-Documents
+        Tuple (contexts, urls): Listen von RAG-Context-Chunks und zugehörigen URLs
     """
     try:
         # Hole alle Child-Runs für diese Trace
@@ -71,6 +85,7 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
         
         # Suche nach Retriever-Run
         contexts = []
+        urls = []
         for child in child_runs:
             if child.run_type == "retriever":
                 if child.outputs and isinstance(child.outputs, dict):
@@ -79,25 +94,34 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
                     for doc in documents:
                         if isinstance(doc, dict) and 'page_content' in doc:
                             contexts.append(doc['page_content'])
+                            # URL aus metadata.source extrahieren
+                            metadata = doc.get('metadata', {})
+                            url = metadata.get('source', 'Keine URL')
+                            urls.append(url)
         
         if contexts:
-            return contexts  # Liste von Chunks zurückgeben
+            return contexts, urls  # Tuple von Listen zurückgeben
         
-        return ["Kein RAG-Kontext gefunden"]  # Als Liste
+        return ["Kein RAG-Kontext gefunden"], ["Keine URL"]  # Als Listen
     
     except Exception as e:
         print(f"      ⚠️ LangSmith-Fehler: {str(e)[:100]}")
-        return ["LangSmith-Fehler"]  # Als Liste
+        return ["LangSmith-Fehler"], ["Keine URL"]  # Als Listen
 
 
-def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> EvaluationDataset:
+def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> tuple:
     """
     Generiert Chatbot-Antworten für alle Fragen und sammelt RAG-Kontexte.
+    
+    Returns:
+        Tuple (dataset, response_times, urls_list): EvaluationDataset, Liste der Antwortzeiten, Liste der URL-Listen
     """
     print("\n🤖 Generiere Chatbot-Antworten...")
     print("=" * 80)
     
     samples = []
+    response_times = []  # Zeit pro Antwort in Sekunden
+    urls_list = []  # Liste von URL-Listen pro Frage
     
     for idx, row in df.iterrows():
         question = row['question']
@@ -113,9 +137,16 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         import uuid
         session_id = str(uuid.uuid4())
         
+        # Zeit messen für Antwortgenerierung
+        response_start = time.time()
+        
         # Agent.chat() mit session_id aufrufen
         answer = agent.chat(question, session_id=session_id)
-        print(f"   ✅ Antwort: {answer[:80]}...")
+        
+        response_time = time.time() - response_start
+        response_times.append(response_time)
+        
+        print(f"   ✅ Antwort: {answer[:80]}... ({response_time:.2f}s)")
         
         # Warten damit LangSmith Trace vollständig ist
         time.sleep(1)  # Reduziert von 3s auf 1s
@@ -131,6 +162,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         ))
         
         contexts = ["Kein RAG-Kontext gefunden"]  # Default als Liste
+        urls = ["Keine URL"]  # Default als Liste
         matching_run = None
         
         # Der letzte Run sollte unser Run sein
@@ -139,13 +171,16 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         
         if matching_run:
             trace_id = matching_run.trace_id
-            contexts = get_rag_context_from_langsmith(langsmith_client, trace_id)
+            contexts, urls = get_rag_context_from_langsmith(langsmith_client, trace_id)
             print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
         else:
             print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
         
+        urls_list.append(urls)
+        
         total_chars = sum(len(c) for c in contexts)
         print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
+        print(f"   🔗 URLs: {len(urls)} Quellen")
         
         # RAGAS-Sample erstellen
         sample = SingleTurnSample(
@@ -158,6 +193,8 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     
     print("\n" + "=" * 80)
     print(f"✅ {len(samples)} Antworten generiert\n")
+    print(f"   ⏱️ Durchschn. Antwortzeit: {sum(response_times)/len(response_times):.2f}s")
+    print(f"   ⏱️ Gesamt Antwortzeit: {sum(response_times):.2f}s\n")
     
     # Zwischenspeicherung der Antworten und Kontexte
     dataset = EvaluationDataset(samples=samples)
@@ -167,33 +204,47 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     import pickle
     checkpoint_data = {
         'dataset': dataset,
-        'test_df': df
+        'test_df': df,
+        'response_times': response_times,
+        'urls_list': urls_list
     }
     with open(checkpoint_path, 'wb') as f:
         pickle.dump(checkpoint_data, f)
     print(f"💾 Checkpoint gespeichert: {checkpoint_path}")
-    print(f"   (Antworten + Kontexte für alle {len(samples)} Fragen)\n")
+    print(f"   (Antworten + Kontexte + Zeiten + URLs für alle {len(samples)} Fragen)\n")
     
-    return dataset
+    return dataset, response_times, urls_list
 
 
-def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
+# ============================================================================
+# KONFIGURATION
+# ============================================================================
+# Limit für Testfragen (None = alle, z.B. 3 für Test)
+TEST_LIMIT = 3  # Für Test mit 3 Fragen (auf None setzen für vollständige Evaluation)
+
+
+def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     """
     Führt RAGAS-Evaluation durch.
     Verwendet 3 Standard-RAGAS-Metriken: faithfulness, context_recall, context_precision.
     (answer_relevancy auskommentiert - benötigt qwen3-embedding:8b)
+    
+    Returns:
+        Tuple (results_df, evaluation_time): DataFrame mit Ergebnissen und Evaluationszeit in Sekunden
     """
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
-    # Ollama LLM konfigurieren mit reduziertem Context für GPU-Optimierung
+    # Separates LLM für RAGAS-Evaluation (gleiches Setup wie Chatbot, nur anderes Modell)
     llm = ChatOllama(
-        model=OLLAMA_MODEL,
+        model=RAGAS_EVAL_MODEL,  # Separates Modell für Evaluation
         base_url=OLLAMA_BASE_URL,
-        temperature=0.0,
-        num_ctx=12288  # Kompromiss für 8GB VRAM (Modell ~5GB + KV-Cache ~1.5GB)
+        temperature=TEMPERATURE,  # Gleiche Parameter wie Chatbot
+        seed=RANDOM_SEED,
+        num_ctx=CONTEXT_WINDOW
     )
-    print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL} (num_ctx=12288)")
+    print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
+    print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
     
     # Ollama Embeddings für answer_relevancy (später aktivieren)
     # embeddings = OllamaEmbeddings(
@@ -216,6 +267,9 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
     # RunConfig für parallele Requests an Ollama
     run_config = RunConfig(max_workers=4)
     
+    # Zeit messen für Evaluation
+    eval_start = time.time()
+    
     # Evaluation durchführen
     results = evaluate(
         dataset=dataset,
@@ -225,16 +279,45 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
         raise_exceptions=False  # Weiter bei Fehlern
     )
     
-    return results.to_pandas()
+    evaluation_time = time.time() - eval_start
+    
+    print(f"\n   ✅ Evaluation abgeschlossen in {evaluation_time:.2f}s")
+    print(f"   ⏱️ Durchschn. pro Sample: {evaluation_time/len(dataset.samples):.2f}s\n")
+    
+    return results.to_pandas(), evaluation_time
 
 
-def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
-    """Zeigt Ergebnisse an und speichert sie."""
+def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame, 
+                              response_times: List[float] = None, urls_list: List[List[str]] = None,
+                              evaluation_time: float = None):
+    """
+    Zeigt Ergebnisse an und speichert sie.
+    
+    Args:
+        results_df: DataFrame mit RAGAS-Ergebnissen
+        test_df: DataFrame mit Testdaten
+        response_times: Liste der Antwortzeiten pro Frage (optional)
+        urls_list: Liste von URL-Listen pro Frage (optional)
+        evaluation_time: Gesamtzeit für RAGAS-Evaluation in Sekunden (optional)
+    """
+    from datetime import datetime
     
     # IDs, Kategorien und Schwierigkeiten hinzufügen
     results_df['id'] = test_df['id'].values[:len(results_df)]
     results_df['category'] = test_df['category'].values[:len(results_df)]
     results_df['difficulty'] = test_df['difficulty'].values[:len(results_df)]
+    
+    # Antwortzeiten hinzufügen (falls vorhanden)
+    if response_times:
+        results_df['response_time_seconds'] = response_times[:len(results_df)]
+    else:
+        results_df['response_time_seconds'] = None
+    
+    # URLs hinzufügen (falls vorhanden)
+    if urls_list:
+        results_df['retrieved_urls'] = [str(urls) for urls in urls_list[:len(results_df)]]
+    else:
+        results_df['retrieved_urls'] = None
     
     print("\n" + "=" * 80)
     print("📊 RAGAS-EVALUATION ERGEBNISSE")
@@ -288,10 +371,106 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
         lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if isinstance(x, list) else str(x)
     )
     
-    # CSV mit allen wichtigen Spalten
-    csv_df = results_df[['id', 'category', 'difficulty', 'user_input', 'response', 
-                          'reference', 'retrieved_contexts', 'faithfulness', 
-                          'context_recall', 'context_precision', 'context_count']].copy()
+    # Konvertiere retrieved_urls zu String ohne Zeilenumbrüche (falls vorhanden)
+    if 'retrieved_urls' in results_df.columns:
+        results_df['retrieved_urls'] = results_df['retrieved_urls'].apply(
+            lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if x else ''
+        )
+    
+    # CSV mit allen wichtigen Spalten (erweitert um response_time und urls)
+    csv_columns = ['id', 'category', 'difficulty', 'user_input', 'response', 
+                   'reference', 'retrieved_contexts', 'retrieved_urls',
+                   'faithfulness', 'context_recall', 'context_precision', 
+                   'context_count', 'response_time_seconds']
+    
+    # Nur vorhandene Spalten verwenden
+    csv_columns = [col for col in csv_columns if col in results_df.columns]
+    csv_df = results_df[csv_columns].copy()
+    
+    # ============================================================================
+    # METADATEN-ZEILEN: Modelle, Zeitstempel, Dauern
+    # ============================================================================
+    metadata_rows = []
+    
+    # Metadaten-Zeile 1: Allgemeine Infos
+    meta1 = {col: '' for col in csv_columns}
+    meta1['id'] = 'META'
+    meta1['category'] = 'Evaluation Metadaten'
+    meta1['difficulty'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    meta1['user_input'] = f'Chatbot: {OLLAMA_MODEL} (ctx=dynamisch, temp={TEMPERATURE}, seed={RANDOM_SEED})'
+    meta1['response'] = f'RAGAS-LLM: {RAGAS_EVAL_MODEL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})'
+    meta1['reference'] = f'Testset: {len(results_df)} Fragen'
+    if evaluation_time:
+        meta1['retrieved_contexts'] = f'Eval-Zeit: {evaluation_time:.2f}s'
+    if response_times:
+        meta1['retrieved_urls'] = f'Antwort-Zeit gesamt: {sum(response_times):.2f}s'
+    metadata_rows.append(meta1)
+    
+    # ============================================================================
+    # DURCHSCHNITTE: Gesamt, pro Kategorie, pro Schwierigkeit, kombiniert
+    # ============================================================================
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+    
+    # Gesamtdurchschnitt
+    avg_row = {col: '' for col in csv_columns}
+    avg_row['id'] = 'AVG'
+    avg_row['category'] = 'GESAMT'
+    avg_row['difficulty'] = f'n={len(results_df)}'
+    for metric in metric_cols:
+        if metric in results_df.columns:
+            avg_row[metric] = results_df[metric].mean()
+    if 'response_time_seconds' in results_df.columns and results_df['response_time_seconds'].notna().any():
+        avg_row['response_time_seconds'] = results_df['response_time_seconds'].mean()
+    metadata_rows.append(avg_row)
+    
+    # Durchschnitte pro Kategorie
+    for category in sorted(results_df['category'].unique()):
+        cat_df = results_df[results_df['category'] == category]
+        cat_row = {col: '' for col in csv_columns}
+        cat_row['id'] = 'AVG'
+        cat_row['category'] = category
+        cat_row['difficulty'] = f'n={len(cat_df)}'
+        for metric in metric_cols:
+            if metric in cat_df.columns:
+                cat_row[metric] = cat_df[metric].mean()
+        if 'response_time_seconds' in cat_df.columns and cat_df['response_time_seconds'].notna().any():
+            cat_row['response_time_seconds'] = cat_df['response_time_seconds'].mean()
+        metadata_rows.append(cat_row)
+    
+    # Durchschnitte pro Schwierigkeit
+    for difficulty in ['easy', 'medium', 'hard']:
+        diff_df = results_df[results_df['difficulty'] == difficulty]
+        if len(diff_df) > 0:
+            diff_row = {col: '' for col in csv_columns}
+            diff_row['id'] = 'AVG'
+            diff_row['category'] = f'Schwierigkeit: {difficulty.upper()}'
+            diff_row['difficulty'] = f'n={len(diff_df)}'
+            for metric in metric_cols:
+                if metric in diff_df.columns:
+                    diff_row[metric] = diff_df[metric].mean()
+            if 'response_time_seconds' in diff_df.columns and diff_df['response_time_seconds'].notna().any():
+                diff_row['response_time_seconds'] = diff_df['response_time_seconds'].mean()
+            metadata_rows.append(diff_row)
+    
+    # Durchschnitte pro Kategorie + Schwierigkeit (kombiniert)
+    for category in sorted(results_df['category'].unique()):
+        for difficulty in ['easy', 'medium', 'hard']:
+            combo_df = results_df[(results_df['category'] == category) & (results_df['difficulty'] == difficulty)]
+            if len(combo_df) > 0:
+                combo_row = {col: '' for col in csv_columns}
+                combo_row['id'] = 'AVG'
+                combo_row['category'] = f'{category} / {difficulty.upper()}'
+                combo_row['difficulty'] = f'n={len(combo_df)}'
+                for metric in metric_cols:
+                    if metric in combo_df.columns:
+                        combo_row[metric] = combo_df[metric].mean()
+                if 'response_time_seconds' in combo_df.columns and combo_df['response_time_seconds'].notna().any():
+                    combo_row['response_time_seconds'] = combo_df['response_time_seconds'].mean()
+                metadata_rows.append(combo_row)
+    
+    # Metadaten-DataFrame erstellen und anhängen
+    meta_df = pd.DataFrame(metadata_rows)
+    csv_df = pd.concat([csv_df, meta_df], ignore_index=True)
     
     # Speichere mit UTF-8-BOM für korrekte Umlaut-Darstellung
     csv_df.to_csv(output_path_csv, index=False, encoding='utf-8-sig', sep=',', quoting=1)
@@ -476,6 +655,10 @@ def main():
     # Checkpoint-Pfad
     checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
     
+    # Variablen für Timing und URLs initialisieren
+    response_times = None
+    urls_list = None
+    
     try:
         # Prüfe ob Checkpoint existiert
         if checkpoint_path.exists():
@@ -488,6 +671,9 @@ def main():
             if isinstance(checkpoint_data, dict):
                 dataset = checkpoint_data['dataset']
                 test_df = checkpoint_data['test_df']
+                # Neue Felder aus erweitertem Checkpoint laden (falls vorhanden)
+                response_times = checkpoint_data.get('response_times', None)
+                urls_list = checkpoint_data.get('urls_list', None)
             else:
                 # Alter Checkpoint-Format (nur Dataset)
                 dataset = checkpoint_data
@@ -495,6 +681,10 @@ def main():
                 test_df = load_testset()  # Alle Fragen laden
             
             print(f"   ✅ {len(dataset.samples)} Antworten aus Checkpoint geladen\n")
+            if response_times:
+                print(f"   ⏱️ Antwortzeiten aus Checkpoint: {len(response_times)} Einträge")
+            if urls_list:
+                print(f"   🔗 URLs aus Checkpoint: {len(urls_list)} Einträge")
             
         else:
             # Kein Checkpoint → Vollständiger Durchlauf
@@ -503,9 +693,9 @@ def main():
             langsmith_client = Client(api_key=LANGSMITH_API_KEY)
             print(f"   ✅ Projekt: {LANGSMITH_PROJECT}\n")
             
-            # 2. Testset laden (alle Fragen)
+            # 2. Testset laden (mit optionalem Limit)
             print("📂 Lade Testset...")
-            test_df = load_testset()  # Alle Fragen laden
+            test_df = load_testset(limit=TEST_LIMIT)
             print()
             
             # 3. Chatbot initialisieren
@@ -513,14 +703,14 @@ def main():
             agent = create_react_agent()
             print()
             
-            # 4. Antworten generieren
-            dataset = generate_chatbot_responses(test_df, agent, langsmith_client)
+            # 4. Antworten generieren (jetzt mit Timing und URLs)
+            dataset, response_times, urls_list = generate_chatbot_responses(test_df, agent, langsmith_client)
         
-        # 5. RAGAS-Evaluation (immer ausführen)
-        results_df = run_ragas_evaluation(dataset)
+        # 5. RAGAS-Evaluation (immer ausführen, jetzt mit Timing)
+        results_df, evaluation_time = run_ragas_evaluation(dataset)
         
-        # 6. Ergebnisse anzeigen und speichern
-        display_and_save_results(results_df, test_df)
+        # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten)
+        display_and_save_results(results_df, test_df, response_times, urls_list, evaluation_time)
         
         print("✅ Evaluation erfolgreich abgeschlossen!")
         

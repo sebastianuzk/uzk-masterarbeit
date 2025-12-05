@@ -18,8 +18,18 @@ class Settings:
     # paraphrase-multilingual-MiniLM-L12-v2 für DE+EN Texte (384 Dimensionen)
     SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
     
-    # LLM Konfiguration
-    TEMPERATURE = 0.0
+    # LLM Konfiguration (Chatbot UND Evaluation)
+    # Temperature 0.0 für deterministische Antworten, CONTEXT_WINDOW als Fallback
+    # (ReactAgent verwendet dynamische ctx-Berechnung basierend auf Modellgröße)
+    TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
+    CONTEXT_WINDOW = int(os.getenv("CONTEXT_WINDOW", "12288"))
+    
+    # RAGAS Evaluation: Separates Modell für Metrik-Berechnung
+    # (nutzt gleiche LLM-Parameter: TEMPERATURE, CONTEXT_WINDOW, RANDOM_SEED)
+    RAGAS_EVAL_MODEL = os.getenv("RAGAS_EVAL_MODEL", "qwen2.5:7b")
+    
+    # Reproduzierbarkeit
+    RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
     
     # Agent Konfiguration
     MAX_ITERATIONS = 10
@@ -96,3 +106,8 @@ SMTP_PORT = settings.SMTP_PORT
 SMTP_USERNAME = settings.SMTP_USERNAME
 SMTP_PASSWORD = settings.SMTP_PASSWORD
 DEFAULT_RECIPIENT = settings.DEFAULT_RECIPIENT
+
+# RAGAS Evaluation Export (nutzt gemeinsame LLM-Parameter)
+RAGAS_EVAL_MODEL = settings.RAGAS_EVAL_MODEL
+CONTEXT_WINDOW = settings.CONTEXT_WINDOW
+RANDOM_SEED = settings.RANDOM_SEED
