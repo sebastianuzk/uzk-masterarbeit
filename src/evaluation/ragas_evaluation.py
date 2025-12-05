@@ -48,6 +48,48 @@ random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 
 
+def calculate_gold_doc_rank(context_hint: str, retrieved_urls: list) -> float:
+    """
+    Berechnet den gold_doc_rank: An welcher Position erscheint die Referenz-URL?
+    
+    Args:
+        context_hint: Die erwartete Referenz-URL aus dem Testset
+        retrieved_urls: Liste der URLs der retrieved contexts
+        
+    Returns:
+        float: 1/rank wenn gefunden (1.0 für Platz 1, 0.5 für Platz 2, etc.), 0.0 wenn nicht gefunden
+    """
+    if not context_hint or not retrieved_urls:
+        return 0.0
+    
+    context_hint_str = str(context_hint)
+    
+    for i, url in enumerate(retrieved_urls):
+        if url is None:
+            continue
+        url_str = str(url)
+        
+        # Exakte Übereinstimmung
+        if context_hint_str == url_str:
+            return 1.0 / (i + 1)
+        
+        # Für Web-URLs: Prüfe ob context_hint in der URL enthalten ist
+        # z.B. https://wiso.uni-koeln.de/de/studium -> file://...html_cache/html/wiso.uni-koeln.de_de_studium...
+        if context_hint_str.startswith('https://'):
+            # Konvertiere https://wiso.uni-koeln.de/de/... zu wiso.uni-koeln.de_de_...
+            url_part = context_hint_str.replace('https://', '').replace('/', '_')
+            if url_part in url_str:
+                return 1.0 / (i + 1)
+        
+        # Für file:// URLs: Direkter Vergleich
+        if context_hint_str.startswith('file://') and url_str.startswith('file://'):
+            if context_hint_str == url_str:
+                return 1.0 / (i + 1)
+    
+    # Nicht gefunden
+    return 0.0
+
+
 def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.DataFrame:
     """Lädt Testset.CSV"""
     full_path = Path(__file__).parent / csv_path
@@ -63,17 +105,17 @@ def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.Da
 
 def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
     """
-    Holt RAG-Kontext und URLs aus LangSmith für eine spezifische Trace-ID.
+    Holt RAG-Kontext, URLs und Content-Types aus LangSmith für eine spezifische Trace-ID.
     
     Die Documents befinden sich im Retriever-Output unter dem Key 'output' (nicht 'documents'!).
-    Jedes Document hat 'page_content' und 'metadata' (mit 'source' URL).
+    Jedes Document hat 'page_content' und 'metadata' (mit 'url' und 'content_type').
     
     Args:
         client: LangSmith Client
         trace_id: Die Trace-ID der Session
         
     Returns:
-        Tuple (contexts, urls): Listen von RAG-Context-Chunks und zugehörigen URLs
+        Tuple (contexts, urls, content_types): Listen von RAG-Context-Chunks, URLs und Content-Types
     """
     try:
         # Hole alle Child-Runs für diese Trace
@@ -86,6 +128,7 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
         # Suche nach Retriever-Run
         contexts = []
         urls = []
+        content_types = []
         for child in child_runs:
             if child.run_type == "retriever":
                 if child.outputs and isinstance(child.outputs, dict):
@@ -94,40 +137,89 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
                     for doc in documents:
                         if isinstance(doc, dict) and 'page_content' in doc:
                             contexts.append(doc['page_content'])
-                            # URL aus metadata.source extrahieren
+                            # Metadata extrahieren (ohne Fallbacks)
                             metadata = doc.get('metadata', {})
-                            url = metadata.get('source', 'Keine URL')
-                            urls.append(url)
+                            # URL und Content-Type direkt aus metadata
+                            urls.append(metadata.get('url'))
+                            content_types.append(metadata.get('content_type'))
         
         if contexts:
-            return contexts, urls  # Tuple von Listen zurückgeben
+            return contexts, urls, content_types  # Tuple von 3 Listen zurückgeben
         
-        return ["Kein RAG-Kontext gefunden"], ["Keine URL"]  # Als Listen
+        return [], [], []  # Leere Listen wenn keine Kontexte gefunden
     
     except Exception as e:
         print(f"      ⚠️ LangSmith-Fehler: {str(e)[:100]}")
-        return ["LangSmith-Fehler"], ["Keine URL"]  # Als Listen
+        return [], [], []  # Leere Listen bei Fehler
 
 
 def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> tuple:
     """
     Generiert Chatbot-Antworten für alle Fragen und sammelt RAG-Kontexte.
+    Speichert nach jeder Frage einen inkrementellen Checkpoint.
+    Bei Timeout (3 Min) wird der Agent neu gestartet.
     
     Returns:
-        Tuple (dataset, response_times, urls_list): EvaluationDataset, Liste der Antwortzeiten, Liste der URL-Listen
+        Tuple (dataset, response_times, urls_list, content_types_list): 
+        EvaluationDataset, Liste der Antwortzeiten, Liste der URL-Listen, Liste der Content-Type-Listen
     """
+    import pickle
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+    
+    TIMEOUT_SECONDS = 180  # 3 Minuten
+    
     print("\n🤖 Generiere Chatbot-Antworten...")
+    print(f"   ⏱️ Timeout pro Frage: {TIMEOUT_SECONDS}s")
     print("=" * 80)
     
-    samples = []
-    response_times = []  # Zeit pro Antwort in Sekunden
-    urls_list = []  # Liste von URL-Listen pro Frage
+    # Checkpoint-Pfad
+    checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
+    checkpoint_path.parent.mkdir(exist_ok=True)
     
-    for idx, row in df.iterrows():
+    # Prüfe ob inkrementeller Checkpoint existiert (für Fortsetzung nach Abbruch)
+    samples = []
+    response_times = []
+    urls_list = []
+    content_types_list = []
+    start_idx = 0
+    
+    if checkpoint_path.exists():
+        try:
+            with open(checkpoint_path, 'rb') as f:
+                checkpoint_data = pickle.load(f)
+            
+            # Prüfe ob Checkpoint zum aktuellen Testset passt
+            if isinstance(checkpoint_data, dict) and 'test_df' in checkpoint_data:
+                saved_df = checkpoint_data['test_df']
+                if len(saved_df) == len(df):
+                    # Lade bisherige Samples
+                    saved_dataset = checkpoint_data.get('dataset')
+                    if saved_dataset and hasattr(saved_dataset, 'samples'):
+                        samples = list(saved_dataset.samples)
+                        response_times = checkpoint_data.get('response_times', [])
+                        urls_list = checkpoint_data.get('urls_list', [])
+                        content_types_list = checkpoint_data.get('content_types_list', [])
+                        start_idx = len(samples)
+                        
+                        if start_idx > 0 and start_idx < len(df):
+                            print(f"📂 Checkpoint geladen: {start_idx}/{len(df)} Fragen bereits beantwortet")
+                            print(f"   → Setze fort ab Frage {start_idx + 1}")
+                        elif start_idx >= len(df):
+                            print(f"📂 Checkpoint vollständig: Alle {len(df)} Fragen beantwortet")
+                            dataset = EvaluationDataset(samples=samples)
+                            return dataset, response_times, urls_list, content_types_list
+        except Exception as e:
+            print(f"⚠️ Checkpoint-Ladefehler: {e} - Starte neu")
+            samples, response_times, urls_list, content_types_list, start_idx = [], [], [], [], 0
+    
+    # Iteriere über verbleibende Fragen (ab start_idx)
+    total_questions = len(df)
+    for i in range(start_idx, total_questions):
+        row = df.iloc[i]
         question = row['question']
         expected_answer = row['expected_answer']
         
-        print(f"\n[{idx + 1}/{len(df)}] {question[:70]}...")
+        print(f"\n[{i + 1}/{total_questions}] {question[:70]}...")
         
         # Memory löschen für isolierte Evaluation
         agent.clear_memory()
@@ -140,8 +232,16 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         # Zeit messen für Antwortgenerierung
         response_start = time.time()
         
-        # Agent.chat() mit session_id aufrufen
-        answer = agent.chat(question, session_id=session_id)
+        # Agent.chat() mit Timeout
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(agent.chat, question, session_id)
+                answer = future.result(timeout=TIMEOUT_SECONDS)
+        except FuturesTimeoutError:
+            print(f"   ⏰ TIMEOUT nach {TIMEOUT_SECONDS}s - Agent wird neu gestartet...")
+            agent = create_react_agent()
+            print(f"   🔄 Agent neu gestartet - überspringe diese Frage")
+            continue
         
         response_time = time.time() - response_start
         response_times.append(response_time)
@@ -161,8 +261,9 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
             limit=1  # Nur den letzten Run
         ))
         
-        contexts = ["Kein RAG-Kontext gefunden"]  # Default als Liste
-        urls = ["Keine URL"]  # Default als Liste
+        contexts = []  # Leere Liste als Default
+        urls = []  # Leere Liste als Default
+        content_types = []  # Leere Liste als Default
         matching_run = None
         
         # Der letzte Run sollte unser Run sein
@@ -171,16 +272,18 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         
         if matching_run:
             trace_id = matching_run.trace_id
-            contexts, urls = get_rag_context_from_langsmith(langsmith_client, trace_id)
+            contexts, urls, content_types = get_rag_context_from_langsmith(langsmith_client, trace_id)
             print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
         else:
             print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
         
         urls_list.append(urls)
+        content_types_list.append(content_types)
         
         total_chars = sum(len(c) for c in contexts)
         print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
         print(f"   🔗 URLs: {len(urls)} Quellen")
+        print(f"   📁 Content-Types: {set(content_types)}")
         
         # RAGAS-Sample erstellen
         sample = SingleTurnSample(
@@ -190,37 +293,34 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
             reference=expected_answer
         )
         samples.append(sample)
+        
+        # 💾 INKREMENTELLER CHECKPOINT nach jeder Frage
+        dataset = EvaluationDataset(samples=samples)
+        checkpoint_data = {
+            'dataset': dataset,
+            'test_df': df,
+            'response_times': response_times,
+            'urls_list': urls_list,
+            'content_types_list': content_types_list
+        }
+        with open(checkpoint_path, 'wb') as f:
+            pickle.dump(checkpoint_data, f)
+        print(f"   💾 Checkpoint: {len(samples)}/{len(df)} Fragen gespeichert")
     
     print("\n" + "=" * 80)
     print(f"✅ {len(samples)} Antworten generiert\n")
     print(f"   ⏱️ Durchschn. Antwortzeit: {sum(response_times)/len(response_times):.2f}s")
     print(f"   ⏱️ Gesamt Antwortzeit: {sum(response_times):.2f}s\n")
     
-    # Zwischenspeicherung der Antworten und Kontexte
     dataset = EvaluationDataset(samples=samples)
-    checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
-    checkpoint_path.parent.mkdir(exist_ok=True)
-    
-    import pickle
-    checkpoint_data = {
-        'dataset': dataset,
-        'test_df': df,
-        'response_times': response_times,
-        'urls_list': urls_list
-    }
-    with open(checkpoint_path, 'wb') as f:
-        pickle.dump(checkpoint_data, f)
-    print(f"💾 Checkpoint gespeichert: {checkpoint_path}")
-    print(f"   (Antworten + Kontexte + Zeiten + URLs für alle {len(samples)} Fragen)\n")
-    
-    return dataset, response_times, urls_list
+    return dataset, response_times, urls_list, content_types_list
 
 
 # ============================================================================
 # KONFIGURATION
 # ============================================================================
-# Limit für Testfragen (None = alle, z.B. 3 für Test)
-TEST_LIMIT = 3  # Für Test mit 3 Fragen (auf None setzen für vollständige Evaluation)
+# Limit für Testfragen (None = alle, z.B. 5 für Test)
+TEST_LIMIT = None  # None = alle Fragen evaluieren
 
 
 def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
@@ -289,7 +389,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
 
 def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame, 
                               response_times: List[float] = None, urls_list: List[List[str]] = None,
-                              evaluation_time: float = None):
+                              content_types_list: List[List[str]] = None, evaluation_time: float = None):
     """
     Zeigt Ergebnisse an und speichert sie.
     
@@ -298,6 +398,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         test_df: DataFrame mit Testdaten
         response_times: Liste der Antwortzeiten pro Frage (optional)
         urls_list: Liste von URL-Listen pro Frage (optional)
+        content_types_list: Liste von Content-Type-Listen pro Frage (optional)
         evaluation_time: Gesamtzeit für RAGAS-Evaluation in Sekunden (optional)
     """
     from datetime import datetime
@@ -319,6 +420,24 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     else:
         results_df['retrieved_urls'] = None
     
+    # Content-Types hinzufügen (falls vorhanden)
+    if content_types_list:
+        results_df['retrieved_content_types'] = [str(types) for types in content_types_list[:len(results_df)]]
+    else:
+        results_df['retrieved_content_types'] = None
+    
+    # gold_doc_rank berechnen (Position der Referenz-URL in retrieved contexts)
+    if urls_list:
+        gold_doc_ranks = []
+        for i in range(len(results_df)):
+            context_hint = test_df['context_hint'].iloc[i] if i < len(test_df) else None
+            retrieved_urls = urls_list[i] if i < len(urls_list) else []
+            rank = calculate_gold_doc_rank(context_hint, retrieved_urls)
+            gold_doc_ranks.append(rank)
+        results_df['gold_doc_rank'] = gold_doc_ranks
+    else:
+        results_df['gold_doc_rank'] = None
+    
     print("\n" + "=" * 80)
     print("📊 RAGAS-EVALUATION ERGEBNISSE")
     print("=" * 80)
@@ -326,7 +445,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     # Gesamtscores
     print("\n📈 Durchschnittliche Scores:")
     print("-" * 80)
-    for metric in ['faithfulness', 'context_recall', 'context_precision']:
+    for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
         if metric in results_df.columns:
             avg = results_df[metric].mean()
             print(f"   {metric:20s}: {avg:.3f}")
@@ -337,7 +456,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     for category in results_df['category'].unique():
         cat_df = results_df[results_df['category'] == category]
         print(f"\n   {category}:")
-        for metric in ['faithfulness', 'context_recall', 'context_precision']:
+        for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
             if metric in cat_df.columns:
                 avg = cat_df[metric].mean()
                 print(f"      {metric:20s}: {avg:.3f}")
@@ -349,7 +468,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         diff_df = results_df[results_df['difficulty'] == difficulty]
         if len(diff_df) > 0:
             print(f"\n   {difficulty.upper()}:")
-            for metric in ['faithfulness', 'context_recall', 'context_precision']:
+            for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
                 if metric in diff_df.columns:
                     avg = diff_df[metric].mean()
                     print(f"      {metric:20s}: {avg:.3f}")
@@ -377,10 +496,16 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if x else ''
         )
     
-    # CSV mit allen wichtigen Spalten (erweitert um response_time und urls)
+    # Konvertiere retrieved_content_types zu String ohne Zeilenumbrüche (falls vorhanden)
+    if 'retrieved_content_types' in results_df.columns:
+        results_df['retrieved_content_types'] = results_df['retrieved_content_types'].apply(
+            lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if x else ''
+        )
+    
+    # CSV mit allen wichtigen Spalten (erweitert um response_time, urls, content_types und gold_doc_rank)
     csv_columns = ['id', 'category', 'difficulty', 'user_input', 'response', 
-                   'reference', 'retrieved_contexts', 'retrieved_urls',
-                   'faithfulness', 'context_recall', 'context_precision', 
+                   'reference', 'retrieved_contexts', 'retrieved_urls', 'retrieved_content_types',
+                   'faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank',
                    'context_count', 'response_time_seconds']
     
     # Nur vorhandene Spalten verwenden
@@ -409,7 +534,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     # ============================================================================
     # DURCHSCHNITTE: Gesamt, pro Kategorie, pro Schwierigkeit, kombiniert
     # ============================================================================
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
     
     # Gesamtdurchschnitt
     avg_row = {col: '' for col in csv_columns}
@@ -655,62 +780,75 @@ def main():
     # Checkpoint-Pfad
     checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
     
-    # Variablen für Timing und URLs initialisieren
+    # Variablen für Timing, URLs und Content-Types initialisieren
     response_times = None
     urls_list = None
+    content_types_list = None
+    dataset = None
+    checkpoint_complete = False
     
     try:
-        # Prüfe ob Checkpoint existiert
+        # 1. LangSmith Client (immer initialisieren)
+        print("🔗 Initialisiere LangSmith...")
+        langsmith_client = Client(api_key=LANGSMITH_API_KEY)
+        print(f"   ✅ Projekt: {LANGSMITH_PROJECT}\n")
+        
+        # 2. Testset laden (mit optionalem Limit)
+        print("📂 Lade Testset...")
+        test_df = load_testset(limit=TEST_LIMIT)
+        print()
+        
+        # 3. Prüfe ob Checkpoint existiert und vollständig ist
         if checkpoint_path.exists():
-            print("📂 Lade Checkpoint...")
+            print("📂 Prüfe Checkpoint...")
             import pickle
             with open(checkpoint_path, 'rb') as f:
                 checkpoint_data = pickle.load(f)
             
             # Checkpoint kann EvaluationDataset oder dict sein
             if isinstance(checkpoint_data, dict):
-                dataset = checkpoint_data['dataset']
-                test_df = checkpoint_data['test_df']
-                # Neue Felder aus erweitertem Checkpoint laden (falls vorhanden)
+                saved_dataset = checkpoint_data.get('dataset')
+                saved_df = checkpoint_data.get('test_df')
                 response_times = checkpoint_data.get('response_times', None)
                 urls_list = checkpoint_data.get('urls_list', None)
+                content_types_list = checkpoint_data.get('content_types_list', None)
+                
+                # Prüfe ob Checkpoint vollständig ist
+                if saved_dataset and hasattr(saved_dataset, 'samples'):
+                    num_saved = len(saved_dataset.samples)
+                    num_expected = len(test_df)
+                    
+                    if num_saved >= num_expected:
+                        # Vollständig → direkt zur Evaluation
+                        print(f"   ✅ Checkpoint vollständig: {num_saved}/{num_expected} Antworten")
+                        dataset = saved_dataset
+                        checkpoint_complete = True
+                    else:
+                        # Unvollständig → Fortsetzung nötig
+                        print(f"   ⏳ Checkpoint unvollständig: {num_saved}/{num_expected} Antworten")
+                        print(f"   → generate_chatbot_responses() wird fortsetzen\n")
             else:
                 # Alter Checkpoint-Format (nur Dataset)
                 dataset = checkpoint_data
-                # test_df muss neu geladen werden
-                test_df = load_testset()  # Alle Fragen laden
-            
-            print(f"   ✅ {len(dataset.samples)} Antworten aus Checkpoint geladen\n")
-            if response_times:
-                print(f"   ⏱️ Antwortzeiten aus Checkpoint: {len(response_times)} Einträge")
-            if urls_list:
-                print(f"   🔗 URLs aus Checkpoint: {len(urls_list)} Einträge")
-            
-        else:
-            # Kein Checkpoint → Vollständiger Durchlauf
-            # 1. LangSmith Client
-            print("🔗 Initialisiere LangSmith...")
-            langsmith_client = Client(api_key=LANGSMITH_API_KEY)
-            print(f"   ✅ Projekt: {LANGSMITH_PROJECT}\n")
-            
-            # 2. Testset laden (mit optionalem Limit)
-            print("📂 Lade Testset...")
-            test_df = load_testset(limit=TEST_LIMIT)
-            print()
-            
-            # 3. Chatbot initialisieren
+                if hasattr(dataset, 'samples') and len(dataset.samples) >= len(test_df):
+                    checkpoint_complete = True
+                    print(f"   ✅ Alter Checkpoint vollständig: {len(dataset.samples)} Antworten")
+        
+        # 4. Falls Checkpoint unvollständig oder nicht vorhanden → Antworten generieren
+        if not checkpoint_complete:
+            # Chatbot initialisieren
             print("🤖 Initialisiere Chatbot...")
             agent = create_react_agent()
             print()
             
-            # 4. Antworten generieren (jetzt mit Timing und URLs)
-            dataset, response_times, urls_list = generate_chatbot_responses(test_df, agent, langsmith_client)
+            # Antworten generieren (setzt bei Checkpoint fort)
+            dataset, response_times, urls_list, content_types_list = generate_chatbot_responses(test_df, agent, langsmith_client)
         
         # 5. RAGAS-Evaluation (immer ausführen, jetzt mit Timing)
         results_df, evaluation_time = run_ragas_evaluation(dataset)
         
         # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten)
-        display_and_save_results(results_df, test_df, response_times, urls_list, evaluation_time)
+        display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time)
         
         print("✅ Evaluation erfolgreich abgeschlossen!")
         
