@@ -22,7 +22,7 @@ class Settings:
     # Temperature 0.0 für deterministische Antworten, CONTEXT_WINDOW als Fallback
     # (ReactAgent verwendet dynamische ctx-Berechnung basierend auf Modellgröße)
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
-    CONTEXT_WINDOW = int(os.getenv("CONTEXT_WINDOW", "12288"))
+    CONTEXT_WINDOW = int(os.getenv("CONTEXT_WINDOW", "14500"))
     
     # RAGAS Evaluation: Separates Modell für Metrik-Berechnung
     # (nutzt gleiche LLM-Parameter: TEMPERATURE, CONTEXT_WINDOW, RANDOM_SEED)

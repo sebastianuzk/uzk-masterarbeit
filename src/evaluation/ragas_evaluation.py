@@ -357,7 +357,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
 # KONFIGURATION
 # ============================================================================
 # Limit für Testfragen (None = alle, z.B. 5 für Test)
-TEST_LIMIT = 1  # None = alle Fragen evaluieren, 1 oder 2 für Tests
+TEST_LIMIT = None  # None = alle Fragen evaluieren
 
 
 def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:

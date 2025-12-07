@@ -54,10 +54,10 @@ np.random.seed(RANDOM_SEED)
 # ============================================================================
 # KONFIGURATION: Hier die Indizes eintragen (1-basiert wie in CSV)
 # ============================================================================
-SPECIFIC_INDICES = [1]  # Test: Metriken für ID 1 neu berechnen (ohne neue Antwort)
+SPECIFIC_INDICES = [1]  # Nur ID 1 zum Testen
 AUTO_DETECT_FAILED = False  # Deaktiviert - wir evaluieren alle
 AUTO_DETECT_MISSING = False  # Deaktiviert - wir evaluieren alle
-REUSE_EXISTING_RESPONSES = True  # Bestehende Antworten verwenden
+REUSE_EXISTING_RESPONSES = False  # NEUE Antworten generieren
 FORCE_RECALC_ALL_METRICS = True  # Alle Metriken neu berechnen
 
 
