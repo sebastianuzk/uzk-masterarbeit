@@ -16,6 +16,8 @@ import numpy as np
 from pathlib import Path
 from typing import List
 import time
+import requests
+import gc
 
 # Reproduzierbarkeit: Seeds werden aus config.settings geladen
 import random
@@ -151,6 +153,41 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
     except Exception as e:
         print(f"      ⚠️ LangSmith-Fehler: {str(e)[:100]}")
         return [], [], []  # Leere Listen bei Fehler
+
+
+def stop_ollama_model(model_name: str):
+    """
+    Stoppt ein Ollama-Modell via CLI-Befehl, um GPU-Speicher freizugeben.
+    Der Ollama-Server läuft weiter und kann andere Modelle laden.
+    
+    Args:
+        model_name: Name des zu stoppenden Modells (z.B. 'llama3.1:8b')
+    """
+    import subprocess
+    
+    try:
+        result = subprocess.run(
+            ["ollama", "stop", model_name],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            print(f"   ✅ Modell {model_name} gestoppt (GPU-Speicher freigegeben)")
+        else:
+            # Fehlerausgabe prüfen
+            if "not running" in result.stderr.lower():
+                print(f"   ℹ️ Modell {model_name} war nicht geladen")
+            else:
+                print(f"   ⚠️ ollama stop: {result.stderr.strip()}")
+                
+    except subprocess.TimeoutExpired:
+        print(f"   ⚠️ Timeout beim Stoppen von {model_name}")
+    except FileNotFoundError:
+        print(f"   ⚠️ 'ollama' Befehl nicht gefunden - ist Ollama installiert?")
+    except Exception as e:
+        print(f"   ⚠️ Fehler beim Stoppen von {model_name}: {e}")
 
 
 def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> tuple:
@@ -320,7 +357,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
 # KONFIGURATION
 # ============================================================================
 # Limit für Testfragen (None = alle, z.B. 5 für Test)
-TEST_LIMIT = None  # None = alle Fragen evaluieren
+TEST_LIMIT = 1  # None = alle Fragen evaluieren, 1 oder 2 für Tests
 
 
 def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
@@ -843,6 +880,15 @@ def main():
             
             # Antworten generieren (setzt bei Checkpoint fort)
             dataset, response_times, urls_list, content_types_list = generate_chatbot_responses(test_df, agent, langsmith_client)
+            
+            # ====================================================================
+            # CHATBOT-MODELL ENTLADEN (GPU-Speicher freigeben vor RAGAS)
+            # ====================================================================
+            print("\n🧹 Räume GPU-Speicher auf (Chatbot-Modell entladen)...")
+            del agent  # Python-Referenz löschen
+            gc.collect()  # Garbage Collection
+            stop_ollama_model(OLLAMA_MODEL)  # Modell via CLI stoppen
+            print()
         
         # 5. RAGAS-Evaluation (immer ausführen, jetzt mit Timing)
         results_df, evaluation_time = run_ragas_evaluation(dataset)

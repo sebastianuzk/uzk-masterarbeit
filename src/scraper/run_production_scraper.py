@@ -243,13 +243,13 @@ def naive_clean_text(text: str) -> str:
     text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Entferne mehrfache Zeilenumbrüche
     return text.strip()
 
-def naive_chunk_text(text: str, chunk_size: int = 1250, overlap: int = 300) -> list:
+def naive_chunk_text(text: str, chunk_size: int = 1750, overlap: int = 300) -> list:
     """
     Naive Chunking: Einfaches Character-basiertes Chunking mit Overlap.
     
     Args:
         text: Eingabetext
-        chunk_size: Chunk-Größe in Zeichen (Standard: 1250)
+        chunk_size: Chunk-Größe in Zeichen (Standard: 1750)
         overlap: Überlappung zwischen Chunks (Standard: 300)
     
     Returns:
@@ -301,7 +301,7 @@ def process_document(doc_id, url, title, content, content_type,
         if USE_SEMANTIC_CHUNKING and chunker is not None:
             chunks = chunker.chunk_by_paragraphs(cleaned_text)
         else:
-            chunks = naive_chunk_text(cleaned_text)  # Standardwerte: chunk_size=1250, overlap=300
+            chunks = naive_chunk_text(cleaned_text)  # Standardwerte: chunk_size=1750, overlap=300
         
         # Optional: Deduplication (nur für HTMLs)
         if USE_DEDUPLICATION and deduplicator is not None and content_type == 'html' and len(chunks) > 0:
@@ -377,7 +377,7 @@ def run_production_scraper():
         )
         print(f"   ✅ SemanticChunker (max={rag_config.semantic_chunking_max_size}, min={rag_config.semantic_chunking_min_size}, overlap={rag_config.semantic_chunking_overlap}, threshold={rag_config.semantic_chunking_similarity_threshold})")
     else:
-        print("   ❌ SemanticChunker (deaktiviert) → Naive Chunking (1250/300)")
+        print("   ❌ SemanticChunker (deaktiviert) → Naive Chunking (1750/300)")
     
     if USE_DEDUPLICATION:
         deduplicator = ContentDeduplicator(
@@ -456,7 +456,8 @@ def run_production_scraper():
         'chunks': 0,
         'skipped': 0,
         'collections': {name: 0 for name in collection_names},
-        'errors': 0
+        'errors': 0,
+        'chunk_lengths': []  # Sammle alle Chunk-Längen für Statistiken
     }
     
     # Sammle verarbeitete Dokumente nach Collection
@@ -472,6 +473,10 @@ def run_production_scraper():
         docs_by_collection = phase1_checkpoint
         total_new_docs = sum(len(docs) for docs in docs_by_collection.values())
         stats['chunks'] = sum(sum(len(doc['chunks']) for doc in docs) for docs in docs_by_collection.values())
+        # Sammle Chunk-Längen aus Checkpoint
+        for docs in docs_by_collection.values():
+            for doc in docs:
+                stats['chunk_lengths'].extend([len(chunk) for chunk in doc['chunks']])
         
         print(f"\n✅ Phase 1 übersprungen: {total_new_docs:,} Dokumente aus Checkpoint")
         print(f"   📊 {stats['chunks']:,} Chunks bereit für Embedding")
@@ -496,7 +501,10 @@ def run_production_scraper():
         print("\n" + "=" * 80)
         print("SCHRITT 4: Dokumente verarbeiten")
         print("=" * 80)
-        print("🔄 Phase 1: Decompress → Clean → Chunk → Deduplicate")
+        if USE_DEDUPLICATION:
+            print("🔄 Phase 1: Decompress → Clean → Chunk → Deduplicate")
+        else:
+            print("🔄 Phase 1: Decompress → Clean → Chunk")
         print()
         
         cursor = conn.execute("""
@@ -532,6 +540,8 @@ def run_production_scraper():
                         stats['skipped'] += 1
                     else:
                         stats['chunks'] += len(result['chunks'])
+                        # Sammle Chunk-Längen für Statistiken
+                        stats['chunk_lengths'].extend([len(chunk) for chunk in result['chunks']])
                         docs_by_collection[collection_name].append(result)
                 
                 pbar.set_postfix({
@@ -790,6 +800,17 @@ def run_production_scraper():
     else:
         rag_mode = "Naive"
     
+    # Berechne Chunk-Längen-Statistiken
+    chunk_lengths = stats['chunk_lengths']
+    if chunk_lengths:
+        avg_chunk_len = round(sum(chunk_lengths) / len(chunk_lengths), 2)
+        min_chunk_len = min(chunk_lengths)
+        max_chunk_len = max(chunk_lengths)
+    else:
+        avg_chunk_len = 0
+        min_chunk_len = 0
+        max_chunk_len = 0
+    
     # Erstelle DataFrame mit Statistiken
     scraping_stats = {
         'Metrik': [
@@ -800,6 +821,9 @@ def run_production_scraper():
             'PDF-Dokumente',
             'Chunks erstellt',
             'Durchschn. Chunks/Dokument',
+            'Durchschn. Chunk-Länge (Zeichen)',
+            'Min Chunk-Länge (Zeichen)',
+            'Max Chunk-Länge (Zeichen)',
             'Dokumente übersprungen',
             'Fehler',
             'Gesamtzeit (Minuten)',
@@ -816,6 +840,9 @@ def run_production_scraper():
             stats['pdf'],
             stats['chunks'],
             round(stats['chunks'] / max(stats['total'], 1), 2),
+            avg_chunk_len,
+            min_chunk_len,
+            max_chunk_len,
             stats['skipped'],
             stats['errors'],
             round(total_time_minutes, 2),
@@ -857,7 +884,7 @@ def run_production_scraper():
             ],
             'Wert': [
                 'Naive Chunking (Character-basiert)',
-                1250,
+                1750,
                 300
             ]
         }
