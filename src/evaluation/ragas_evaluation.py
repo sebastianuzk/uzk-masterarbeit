@@ -475,6 +475,16 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     else:
         results_df['gold_doc_rank'] = None
     
+    # ============================================================================
+    # SOFORT SPEICHERN - Rohdaten CSV (bevor irgendwas schiefgehen kann)
+    # ============================================================================
+    output_path_raw = Path(__file__).parent / "data" / "ragas_results_raw.csv"
+    try:
+        results_df.to_csv(output_path_raw, index=False, encoding='utf-8-sig')
+        print(f"\n💾 ROHDATEN GESPEICHERT: {output_path_raw}")
+    except Exception as e:
+        print(f"\n⚠️ Fehler beim Speichern der Rohdaten: {e}")
+    
     print("\n" + "=" * 80)
     print("📊 RAGAS-EVALUATION ERGEBNISSE")
     print("=" * 80)
@@ -487,10 +497,11 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             avg = results_df[metric].mean()
             print(f"   {metric:20s}: {avg:.3f}")
     
-    # Nach Kategorie
+    # Nach Kategorie (NaN ausfiltern)
     print("\n📁 Scores nach Kategorie:")
     print("-" * 80)
-    for category in results_df['category'].unique():
+    display_categories = [c for c in results_df['category'].unique() if pd.notna(c)]
+    for category in sorted(display_categories):
         cat_df = results_df[results_df['category'] == category]
         print(f"\n   {category}:")
         for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
@@ -585,8 +596,9 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         avg_row['response_time_seconds'] = results_df['response_time_seconds'].mean()
     metadata_rows.append(avg_row)
     
-    # Durchschnitte pro Kategorie
-    for category in sorted(results_df['category'].unique()):
+    # Durchschnitte pro Kategorie (NaN-Werte ausfiltern)
+    categories = [c for c in results_df['category'].unique() if pd.notna(c)]
+    for category in sorted(categories):
         cat_df = results_df[results_df['category'] == category]
         cat_row = {col: '' for col in csv_columns}
         cat_row['id'] = 'AVG'
@@ -615,7 +627,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             metadata_rows.append(diff_row)
     
     # Durchschnitte pro Kategorie + Schwierigkeit (kombiniert)
-    for category in sorted(results_df['category'].unique()):
+    for category in sorted(categories):  # Verwende bereits gefilterte categories-Liste
         for difficulty in ['easy', 'medium', 'hard']:
             combo_df = results_df[(results_df['category'] == category) & (results_df['difficulty'] == difficulty)]
             if len(combo_df) > 0:
@@ -741,7 +753,9 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
         
-        for category in sorted(results_df['category'].unique()):
+        # NaN-Kategorien ausfiltern für Excel
+        excel_categories = [c for c in results_df['category'].unique() if pd.notna(c)]
+        for category in sorted(excel_categories):
             cat_df = results_df[results_df['category'] == category]
             ws_summary[f'A{row}'] = category
             

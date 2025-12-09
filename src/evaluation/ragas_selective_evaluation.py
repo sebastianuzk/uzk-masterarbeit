@@ -54,7 +54,7 @@ np.random.seed(RANDOM_SEED)
 # ============================================================================
 # KONFIGURATION: Hier die Indizes eintragen (1-basiert wie in CSV)
 # ============================================================================
-SPECIFIC_INDICES = [1]  # Nur ID 1 zum Testen
+SPECIFIC_INDICES = [116]  # Letzte ID zum Testen
 AUTO_DETECT_FAILED = False  # Deaktiviert - wir evaluieren alle
 AUTO_DETECT_MISSING = False  # Deaktiviert - wir evaluieren alle
 REUSE_EXISTING_RESPONSES = False  # NEUE Antworten generieren

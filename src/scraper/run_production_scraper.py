@@ -243,14 +243,14 @@ def naive_clean_text(text: str) -> str:
     text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Entferne mehrfache Zeilenumbrüche
     return text.strip()
 
-def naive_chunk_text(text: str, chunk_size: int = 1750, overlap: int = 300) -> list:
+def naive_chunk_text(text: str, chunk_size: int, overlap: int) -> list:
     """
     Naive Chunking: Einfaches Character-basiertes Chunking mit Overlap.
     
     Args:
         text: Eingabetext
-        chunk_size: Chunk-Größe in Zeichen (Standard: 1750)
-        overlap: Überlappung zwischen Chunks (Standard: 300)
+        chunk_size: Chunk-Größe in Zeichen (REQUIRED)
+        overlap: Überlappung zwischen Chunks (REQUIRED)
     
     Returns:
         Liste von Text-Chunks
@@ -301,7 +301,12 @@ def process_document(doc_id, url, title, content, content_type,
         if USE_SEMANTIC_CHUNKING and chunker is not None:
             chunks = chunker.chunk_by_paragraphs(cleaned_text)
         else:
-            chunks = naive_chunk_text(cleaned_text)  # Standardwerte: chunk_size=1750, overlap=300
+            # Naive Chunking mit konfigurierbaren Parametern aus rag_config
+            chunks = naive_chunk_text(
+                cleaned_text, 
+                chunk_size=rag_config.semantic_chunking_max_size,  # 1750
+                overlap=rag_config.semantic_chunking_overlap        # 200
+            )
         
         # Optional: Deduplication (nur für HTMLs)
         if USE_DEDUPLICATION and deduplicator is not None and content_type == 'html' and len(chunks) > 0:
@@ -884,8 +889,8 @@ def run_production_scraper():
             ],
             'Wert': [
                 'Naive Chunking (Character-basiert)',
-                1750,
-                300
+                rag_config.semantic_chunking_max_size,  # Verwendet als chunk_size für Naive
+                rag_config.semantic_chunking_overlap    # Verwendet als overlap für Naive
             ]
         }
     

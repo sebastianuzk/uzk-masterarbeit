@@ -29,14 +29,14 @@ class RAGConfig:
     # ============================================================================
     # MASTER SWITCH (steuert ALLE Advanced-Techniken)
     # ============================================================================
-    naive_setup: bool = False  # False = Advanced RAG, True = Naive Baseline
+    naive_setup: bool = True  # False = Advanced RAG, True = Naive Baseline
     
     # ============================================================================
     # INDIVIDUAL FEATURE FLAGS (ermöglichen granulare Kontrolle)
     # Wenn naive_setup=True, sind alle deaktiviert.
     # Wenn naive_setup=False, können einzelne Features hier deaktiviert werden.
     # ============================================================================
-    enable_semantic_chunking: bool = True
+    enable_semantic_chunking: bool = False
     enable_content_cleaning: bool = False
     enable_deduplication: bool = False
     enable_multi_collection: bool = False
@@ -50,12 +50,14 @@ class RAGConfig:
     
     # ============================================================================
     # PRE-RETRIEVAL HYPERPARAMETER
+    # HINWEIS: Diese Defaults sollten mit rag.env synchron sein!
+    # Single Source of Truth: src/advanced_rag/rag.env
     # ============================================================================
-    # Semantic Chunking
-    semantic_chunking_max_size: int = 1500
-    semantic_chunking_min_size: int = 200
-    semantic_chunking_overlap: int = 300
-    semantic_chunking_similarity_threshold: float = 0.5  # Schwellwert für Themenwechsel
+    # Semantic Chunking (Defaults aus rag.env)
+    semantic_chunking_max_size: int = 1750
+    semantic_chunking_min_size: int = 400
+    semantic_chunking_overlap: int = 200
+    semantic_chunking_similarity_threshold: float = 0.7  # Schwellwert für Themenwechsel
     
     # Content Cleaning
     content_cleaning_min_length: int = 50
@@ -252,10 +254,11 @@ class RAGConfig:
             enable_empty_result_handling=_get_bool_env("ENABLE_EMPTY_RESULT_HANDLING", False),
             
             # === PRE-RETRIEVAL HYPERPARAMETER ===
-            semantic_chunking_max_size=_get_int_env("SEMANTIC_CHUNKING_MAX_SIZE", 1500),
-            semantic_chunking_min_size=_get_int_env("SEMANTIC_CHUNKING_MIN_SIZE", 200),
-            semantic_chunking_overlap=_get_int_env("SEMANTIC_CHUNKING_OVERLAP", 300),
-            semantic_chunking_similarity_threshold=_get_float_env("SEMANTIC_CHUNKING_SIMILARITY_THRESHOLD", 0.5),
+            # Fallback-Werte synchron mit rag.env (Single Source of Truth)
+            semantic_chunking_max_size=_get_int_env("SEMANTIC_CHUNKING_MAX_SIZE", 1750),
+            semantic_chunking_min_size=_get_int_env("SEMANTIC_CHUNKING_MIN_SIZE", 400),
+            semantic_chunking_overlap=_get_int_env("SEMANTIC_CHUNKING_OVERLAP", 200),
+            semantic_chunking_similarity_threshold=_get_float_env("SEMANTIC_CHUNKING_SIMILARITY_THRESHOLD", 0.7),
             
             content_cleaning_min_length=_get_int_env("CONTENT_CLEANING_MIN_LENGTH", 50),
             content_cleaning_remove_html=_get_bool_env("CONTENT_CLEANING_REMOVE_HTML", True),
