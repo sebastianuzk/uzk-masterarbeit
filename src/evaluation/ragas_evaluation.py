@@ -667,8 +667,10 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
         header_font = Font(bold=True, color="FFFFFF", size=11)
         
-        # Daten schreiben
-        for r_idx, row in enumerate(dataframe_to_rows(csv_df, index=False, header=True), 1):
+        # Daten schreiben - NUR results_df (ohne AVG-Zeilen), csv_df enthält Metadaten
+        # Verwende die gleichen Spalten wie csv_df, aber aus results_df
+        excel_details_df = results_df[csv_columns].copy()
+        for r_idx, row in enumerate(dataframe_to_rows(excel_details_df, index=False, header=True), 1):
             for c_idx, value in enumerate(row, 1):
                 cell = ws_details.cell(row=r_idx, column=c_idx, value=value)
                 
@@ -720,20 +722,21 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'A{row}'].font = Font(bold=True, size=12)
         row += 1
         
-        for metric in ['faithfulness', 'context_recall', 'context_precision']:
+        for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
             if metric in results_df.columns:
                 avg = results_df[metric].mean()
                 ws_summary[f'A{row}'] = metric
                 ws_summary[f'B{row}'] = avg
                 ws_summary[f'B{row}'].number_format = '0.000'
                 
-                # Farbe basierend auf Score
-                if avg >= 0.8:
-                    ws_summary[f'B{row}'].fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-                elif avg >= 0.6:
-                    ws_summary[f'B{row}'].fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
-                else:
-                    ws_summary[f'B{row}'].fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+                # Farbe basierend auf Score (gold_doc_rank hat andere Skala)
+                if metric != 'gold_doc_rank':
+                    if avg >= 0.8:
+                        ws_summary[f'B{row}'].fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                    elif avg >= 0.6:
+                        ws_summary[f'B{row}'].fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+                    else:
+                        ws_summary[f'B{row}'].fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
                 
                 row += 1
         
@@ -748,7 +751,8 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'B{row}'] = "Faithfulness"
         ws_summary[f'C{row}'] = "Context Recall"
         ws_summary[f'D{row}'] = "Context Precision"
-        for col in ['A', 'B', 'C', 'D']:
+        ws_summary[f'E{row}'] = "Gold Doc Rank"
+        for col in ['A', 'B', 'C', 'D', 'E']:
             ws_summary[f'{col}{row}'].font = Font(bold=True)
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
@@ -759,10 +763,10 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             cat_df = results_df[results_df['category'] == category]
             ws_summary[f'A{row}'] = category
             
-            for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision'], 2):
+            for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank'], 2):
                 if metric in cat_df.columns:
                     avg = cat_df[metric].mean()
-                    col_letter = chr(65 + idx)  # B, C, D
+                    col_letter = chr(65 + idx)  # B, C, D, E
                     ws_summary[f'{col_letter}{row}'] = avg
                     ws_summary[f'{col_letter}{row}'].number_format = '0.000'
             
@@ -779,7 +783,8 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'B{row}'] = "Faithfulness"
         ws_summary[f'C{row}'] = "Context Recall"
         ws_summary[f'D{row}'] = "Context Precision"
-        for col in ['A', 'B', 'C', 'D']:
+        ws_summary[f'E{row}'] = "Gold Doc Rank"
+        for col in ['A', 'B', 'C', 'D', 'E']:
             ws_summary[f'{col}{row}'].font = Font(bold=True)
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
@@ -789,10 +794,10 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             if len(diff_df) > 0:
                 ws_summary[f'A{row}'] = difficulty.upper()
                 
-                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision'], 2):
+                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank'], 2):
                     if metric in diff_df.columns:
                         avg = diff_df[metric].mean()
-                        col_letter = chr(65 + idx)
+                        col_letter = chr(65 + idx)  # B, C, D, E
                         ws_summary[f'{col_letter}{row}'] = avg
                         ws_summary[f'{col_letter}{row}'].number_format = '0.000'
                 
@@ -803,6 +808,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary.column_dimensions['B'].width = 15
         ws_summary.column_dimensions['C'].width = 18
         ws_summary.column_dimensions['D'].width = 18
+        ws_summary.column_dimensions['E'].width = 15
         
         # Speichern
         wb.save(output_path_excel)

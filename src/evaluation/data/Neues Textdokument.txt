@@ -1,0 +1,35 @@
+❌ Fehler: Length of values (1) does not match length of index (116)
+
+Traceback (most recent call last):
+  File "D:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\src\evaluation\ragas_evaluation.py", line 897, in main
+    display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\src\evaluation\ragas_evaluation.py", line 444, in display_and_save_results
+    results_df['id'] = test_df['id'].values[:len(results_df)]
+    ~~~~~~~~~~^^^^^^
+  File "D:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\Masterarbeit\Lib\site-packages\pandas\core\frame.py", line 4322, in __setitem__
+    self._set_item(key, value)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "D:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\Masterarbeit\Lib\site-packages\pandas\core\frame.py", line 4535, in _set_item
+    value, refs = self._sanitize_column(value)
+                  ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "D:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\Masterarbeit\Lib\site-packages\pandas\core\frame.py", line 5288, in _sanitize_column
+    com.require_length_match(value, self.index)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\Masterarbeit\Lib\site-packages\pandas\core\common.py", line 573, in require_length_match
+    raise ValueError(
+    ...<4 lines>...
+    )
+ValueError: Length of values (1) does not match length of index (116)
+
+
+
+
+
+
+
+
+   faithfulness        : 0.520
+   context_recall      : 0.511
+   context_precision   : 0.507
+   gold_doc_rank       : 0.165
