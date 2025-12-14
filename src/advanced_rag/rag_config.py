@@ -59,6 +59,10 @@ class RAGConfig:
     semantic_chunking_overlap: int = 200
     semantic_chunking_similarity_threshold: float = 0.7  # Schwellwert für Themenwechsel
     
+    # Naive Chunking (fallback wenn Semantic Chunking deaktiviert)
+    naive_chunking_max_size: int = 1750
+    naive_chunking_overlap: int = 300
+    
     # Content Cleaning
     content_cleaning_min_length: int = 50
     content_cleaning_remove_html: bool = True
@@ -259,6 +263,10 @@ class RAGConfig:
             semantic_chunking_min_size=_get_int_env("SEMANTIC_CHUNKING_MIN_SIZE", 400),
             semantic_chunking_overlap=_get_int_env("SEMANTIC_CHUNKING_OVERLAP", 200),
             semantic_chunking_similarity_threshold=_get_float_env("SEMANTIC_CHUNKING_SIMILARITY_THRESHOLD", 0.7),
+            
+            # Naive Chunking (separate Parameter)
+            naive_chunking_max_size=_get_int_env("NAIVE_CHUNKING_MAX_SIZE", 1750),
+            naive_chunking_overlap=_get_int_env("NAIVE_CHUNKING_OVERLAP", 300),
             
             content_cleaning_min_length=_get_int_env("CONTENT_CLEANING_MIN_LENGTH", 50),
             content_cleaning_remove_html=_get_bool_env("CONTENT_CLEANING_REMOVE_HTML", True),

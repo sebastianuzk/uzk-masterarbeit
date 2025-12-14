@@ -99,8 +99,7 @@ Du beantwortest Fragen zu:
 ## ANTWORTSTIL
 
 - Freundlich und professionell
-- Strukturiert mit Aufzählungen bei mehreren Punkten
-- Verweise auf offizielle Quellen wenn möglich
+- Zusammenfassung der Suchergebnisse, aber informativ
 - Bei Unsicherheit: Empfehle Kontakt zur Studienberatung
 
 ## BEISPIELE

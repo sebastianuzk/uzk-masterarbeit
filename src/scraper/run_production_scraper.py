@@ -56,7 +56,7 @@ if USE_SEMANTIC_CHUNKING:
 if USE_CONTENT_CLEANING:
     from src.advanced_rag.pre_retrieval.cleaning import ContentCleaner
 if USE_DEDUPLICATION:
-    from src.advanced_rag.pre_retrieval.deduplication import ContentDeduplicator
+    from src.advanced_rag.pre_retrieval.deduplication import ContentDeduplicator, deduplicate_documents_exact, create_dedup_excel
 if USE_MULTI_COLLECTION:
     from src.advanced_rag.pre_retrieval.collection_categorizer import CollectionCategorizer
 
@@ -274,6 +274,100 @@ def naive_chunk_text(text: str, chunk_size: int, overlap: int) -> list:
     
     return chunks
 
+
+def extract_document_text(doc_id, url, title, content, content_type, content_cleaner=None):
+    """
+    Extrahiere und bereinige Text aus einem Dokument (OHNE Chunking).
+    Für Exact-Deduplication auf Dokument-Ebene.
+    
+    Args:
+        doc_id: Dokument-ID
+        url: Quell-URL
+        title: Dokumenttitel
+        content: Komprimierter Inhalt (gzip)
+        content_type: 'html' oder 'pdf'
+        content_cleaner: Optional ContentCleaner
+    
+    Returns:
+        dict mit doc_id, url, title, content_type, text
+        oder None bei Fehler
+    """
+    try:
+        # Dekomprimiere
+        raw_content = decompress_content(content)
+        
+        # Basis-Cleaning: HTML → Markdown-ähnlicher Text
+        if content_type == 'html':
+            cleaned_text = naive_extract_text_from_html(raw_content)
+        else:  # pdf
+            cleaned_text = naive_clean_text(raw_content)
+        
+        # Optional: Erweitertes Content Cleaning
+        if USE_CONTENT_CLEANING and content_cleaner is not None:
+            cleaned_text = content_cleaner._clean_text(cleaned_text)
+        
+        if not cleaned_text or len(cleaned_text.strip()) < 50:
+            return None
+        
+        return {
+            'doc_id': str(doc_id),
+            'url': url,
+            'title': title,
+            'content_type': content_type,
+            'text': cleaned_text
+        }
+        
+    except Exception as e:
+        print(f"\n⚠️  Fehler beim Extrahieren von Dokument {doc_id}: {e}")
+        return None
+
+
+def chunk_document(doc_dict, chunker=None, categorizer=None):
+    """
+    Chunke ein bereits extrahiertes Dokument.
+    
+    Args:
+        doc_dict: Dictionary mit doc_id, url, title, content_type, text
+        chunker: Optional SemanticChunker
+        categorizer: Optional CollectionCategorizer
+    
+    Returns:
+        dict mit Chunks und Metadaten oder None
+    """
+    try:
+        cleaned_text = doc_dict['text']
+        url = doc_dict['url']
+        
+        # Chunking: Semantic oder Naive
+        if USE_SEMANTIC_CHUNKING and chunker is not None:
+            chunks = chunker.chunk_by_paragraphs(cleaned_text)
+        else:
+            chunks = naive_chunk_text(
+                cleaned_text, 
+                chunk_size=rag_config.naive_chunking_max_size,
+                overlap=rag_config.naive_chunking_overlap
+            )
+        
+        if len(chunks) == 0:
+            return None
+        
+        # Bestimme Collection
+        collection_name = get_collection_name(url, categorizer if USE_MULTI_COLLECTION else None)
+        
+        return {
+            'doc_id': doc_dict['doc_id'],
+            'url': url,
+            'title': doc_dict['title'],
+            'content_type': doc_dict['content_type'],
+            'chunks': chunks,
+            'collection_name': collection_name
+        }
+        
+    except Exception as e:
+        print(f"\n⚠️  Fehler beim Chunking von Dokument {doc_dict.get('doc_id', '?')}: {e}")
+        return None
+
+
 def process_document(doc_id, url, title, content, content_type, 
                      content_cleaner=None, chunker=None, deduplicator=None, categorizer=None):
     """
@@ -304,8 +398,8 @@ def process_document(doc_id, url, title, content, content_type,
             # Naive Chunking mit konfigurierbaren Parametern aus rag_config
             chunks = naive_chunk_text(
                 cleaned_text, 
-                chunk_size=rag_config.semantic_chunking_max_size,  # 1750
-                overlap=rag_config.semantic_chunking_overlap        # 200
+                chunk_size=rag_config.naive_chunking_max_size,
+                overlap=rag_config.naive_chunking_overlap
             )
         
         # Optional: Deduplication (nur für HTMLs)
@@ -382,7 +476,7 @@ def run_production_scraper():
         )
         print(f"   ✅ SemanticChunker (max={rag_config.semantic_chunking_max_size}, min={rag_config.semantic_chunking_min_size}, overlap={rag_config.semantic_chunking_overlap}, threshold={rag_config.semantic_chunking_similarity_threshold})")
     else:
-        print("   ❌ SemanticChunker (deaktiviert) → Naive Chunking (1750/300)")
+        print(f"   ❌ SemanticChunker (deaktiviert) → Naive Chunking ({rag_config.semantic_chunking_max_size}/{rag_config.semantic_chunking_overlap})")
     
     if USE_DEDUPLICATION:
         deduplicator = ContentDeduplicator(
@@ -507,7 +601,9 @@ def run_production_scraper():
         print("SCHRITT 4: Dokumente verarbeiten")
         print("=" * 80)
         if USE_DEDUPLICATION:
-            print("🔄 Phase 1: Decompress → Clean → Chunk → Deduplicate")
+            print("🔄 Phase 1a: Decompress → Clean → Text extrahieren")
+            print("🔄 Phase 1b: Exact-Deduplication auf Dokument-Ebene")
+            print("🔄 Phase 1c: Chunking (nur unique Dokumente)")
         else:
             print("🔄 Phase 1: Decompress → Clean → Chunk")
         print()
@@ -518,43 +614,130 @@ def run_production_scraper():
             ORDER BY id
         """)
         
-        # Progress bar für Phase 1
-        with tqdm(total=total_docs, desc="📝 Phase 1: Dokumente verarbeiten", unit="doc") as pbar:
-            for row in cursor:
-                doc_id, url, title, content, content_type = row
-                
-                # Zeige aktuell bearbeitete Datei
-                short_title = title[:40] + "..." if len(title) > 40 else title
-                pbar.set_description(f"📝 [{content_type.upper()}] {short_title}")
-                
-                result = process_document(
-                    doc_id, url, title, content, content_type,
-                    content_cleaner, chunker, deduplicator, categorizer
-                )
-                
-                stats['total'] += 1
-                stats[content_type] += 1
-                
-                if result is None:
-                    stats['skipped'] += 1
-                else:
-                    collection_name = result['collection_name']
+        if USE_DEDUPLICATION:
+            # ================================================================
+            # PHASE 1a: Text extrahieren (für alle Dokumente)
+            # ================================================================
+            print("📝 Phase 1a: Text extrahieren...")
+            all_docs_text = []
+            
+            with tqdm(total=total_docs, desc="📝 Phase 1a: Text extrahieren", unit="doc") as pbar:
+                for row in cursor:
+                    doc_id, url, title, content, content_type = row
                     
-                    # Überspringe wenn Collection bereits fertig ist
-                    if collection_name in completed_collections:
+                    short_title = title[:40] + "..." if len(title) > 40 else title
+                    pbar.set_description(f"📝 [{content_type.upper()}] {short_title}")
+                    
+                    result = extract_document_text(
+                        doc_id, url, title, content, content_type, content_cleaner
+                    )
+                    
+                    stats['total'] += 1
+                    stats[content_type] += 1
+                    
+                    if result is not None:
+                        all_docs_text.append(result)
+                    else:
+                        stats['skipped'] += 1
+                    
+                    pbar.set_postfix({
+                        'Extracted': len(all_docs_text),
+                        'Skip': stats['skipped']
+                    })
+                    pbar.update(1)
+            
+            print(f"\n✅ Phase 1a abgeschlossen: {len(all_docs_text):,} Dokumente extrahiert")
+            
+            # ================================================================
+            # PHASE 1b: Exact-Deduplication
+            # ================================================================
+            print("\n" + "-" * 80)
+            print("🔍 Phase 1b: Exact-Deduplication...")
+            print("-" * 80)
+            
+            unique_docs, removed_docs, dedup_stats = deduplicate_documents_exact(
+                all_docs_text, text_key='text', id_key='doc_id'
+            )
+            
+            print(f"   📊 Input:    {dedup_stats['total']:,} Dokumente")
+            print(f"   📊 Unique:   {dedup_stats['unique']:,} Dokumente")
+            print(f"   📊 Entfernt: {dedup_stats['duplicates_removed']:,} Duplikate")
+            print(f"   📊 Gruppen:  {dedup_stats['duplicate_groups']:,} Duplikat-Gruppen")
+            print(f"   📊 Reduktion: {dedup_stats['reduction_percent']:.1f}%")
+            
+            # Speichere Dedup-Stats für späteren Report
+            stats['dedup'] = dedup_stats
+            
+            # Excel-Übersicht für Deduplication erstellen
+            create_dedup_excel(unique_docs, removed_docs, dedup_stats)
+            
+            # ================================================================
+            # PHASE 1c: Chunking (nur unique Dokumente)
+            # ================================================================
+            print("\n" + "-" * 80)
+            print(f"✂️  Phase 1c: Chunking ({len(unique_docs):,} unique Dokumente)...")
+            print("-" * 80)
+            
+            with tqdm(total=len(unique_docs), desc="✂️  Phase 1c: Chunking", unit="doc") as pbar:
+                for doc_dict in unique_docs:
+                    short_title = doc_dict['title'][:40] + "..." if len(doc_dict['title']) > 40 else doc_dict['title']
+                    pbar.set_description(f"✂️  [{doc_dict['content_type'].upper()}] {short_title}")
+                    
+                    result = chunk_document(doc_dict, chunker, categorizer)
+                    
+                    if result is not None:
+                        collection_name = result['collection_name']
+                        
+                        if collection_name not in completed_collections:
+                            stats['chunks'] += len(result['chunks'])
+                            stats['chunk_lengths'].extend([len(chunk) for chunk in result['chunks']])
+                            docs_by_collection[collection_name].append(result)
+                    
+                    pbar.set_postfix({
+                        'Docs': sum(len(docs) for docs in docs_by_collection.values()),
+                        'Chunks': f"{stats['chunks']:,}"
+                    })
+                    pbar.update(1)
+            
+            print(f"\n✅ Phase 1c abgeschlossen: {stats['chunks']:,} Chunks erstellt")
+            
+        else:
+            # ================================================================
+            # NAIVE MODE: Alle Schritte in einem Durchgang (ohne Dedup)
+            # ================================================================
+            with tqdm(total=total_docs, desc="📝 Phase 1: Dokumente verarbeiten", unit="doc") as pbar:
+                for row in cursor:
+                    doc_id, url, title, content, content_type = row
+                    
+                    short_title = title[:40] + "..." if len(title) > 40 else title
+                    pbar.set_description(f"📝 [{content_type.upper()}] {short_title}")
+                    
+                    result = process_document(
+                        doc_id, url, title, content, content_type,
+                        content_cleaner, chunker, deduplicator, categorizer
+                    )
+                    
+                    stats['total'] += 1
+                    stats[content_type] += 1
+                    
+                    if result is None:
                         stats['skipped'] += 1
                     else:
-                        stats['chunks'] += len(result['chunks'])
-                        # Sammle Chunk-Längen für Statistiken
-                        stats['chunk_lengths'].extend([len(chunk) for chunk in result['chunks']])
-                        docs_by_collection[collection_name].append(result)
-                
-                pbar.set_postfix({
-                    'Docs': sum(len(docs) for docs in docs_by_collection.values()),
-                    'Chunks': f"{stats['chunks']:,}",
-                    'Skip': stats['skipped']
-                })
-                pbar.update(1)
+                        collection_name = result['collection_name']
+                        
+                        if collection_name in completed_collections:
+                            stats['skipped'] += 1
+                        else:
+                            stats['chunks'] += len(result['chunks'])
+                            stats['chunk_lengths'].extend([len(chunk) for chunk in result['chunks']])
+                            docs_by_collection[collection_name].append(result)
+                    
+                    pbar.set_postfix({
+                        'Docs': sum(len(docs) for docs in docs_by_collection.values()),
+                        'Chunks': f"{stats['chunks']:,}",
+                        'Skip': stats['skipped']
+                    })
+                    pbar.update(1)
     
         conn.close()
         
@@ -889,8 +1072,8 @@ def run_production_scraper():
             ],
             'Wert': [
                 'Naive Chunking (Character-basiert)',
-                rag_config.semantic_chunking_max_size,  # Verwendet als chunk_size für Naive
-                rag_config.semantic_chunking_overlap    # Verwendet als overlap für Naive
+                rag_config.naive_chunking_max_size,
+                rag_config.naive_chunking_overlap
             ]
         }
     

@@ -17,6 +17,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 import logging
 
+# Excel-Formatierung
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
 logger = logging.getLogger(__name__)
 
 
@@ -224,6 +227,391 @@ def demo_normalization():
     print("\n" + "=" * 80)
     print("✅ Demo abgeschlossen")
     print("=" * 80)
+
+
+# ============================================================================
+# EXACT-DEDUPLICATION AUF DOKUMENT-EBENE
+# ============================================================================
+
+def deduplicate_documents_exact(
+    documents: list[dict],
+    text_key: str = 'text',
+    id_key: str = 'doc_id'
+) -> tuple[list[dict], list[dict], dict]:
+    """
+    Exact-Deduplication auf Dokument-Ebene (VOR Chunking).
+    
+    Findet Dokumente mit identischem Inhalt nach Normalisierung und
+    entfernt Duplikate. Behält jeweils das erste Dokument einer Gruppe.
+    
+    Args:
+        documents: Liste von Dokumenten als Dictionaries
+                   Erwartet mindestens: {text_key: "...", id_key: "..."}
+        text_key: Schlüssel für den Textinhalt (default: 'text')
+        id_key: Schlüssel für die Dokument-ID (default: 'doc_id')
+    
+    Returns:
+        Tuple von:
+        - unique_documents: Liste der behaltenen Dokumente
+        - removed_documents: Liste der entfernten Duplikate
+        - stats: Dictionary mit Statistiken
+    
+    Example:
+        >>> docs = [
+        ...     {"doc_id": "1", "text": "Hello World", "url": "a.html"},
+        ...     {"doc_id": "2", "text": "hello world", "url": "b.html"},  # Duplikat!
+        ...     {"doc_id": "3", "text": "Different text", "url": "c.html"},
+        ... ]
+        >>> unique, removed, stats = deduplicate_documents_exact(docs)
+        >>> len(unique)
+        2
+        >>> stats['duplicates_removed']
+        1
+    """
+    from collections import defaultdict
+    
+    if not documents:
+        return [], [], {"total": 0, "unique": 0, "duplicates_removed": 0, "duplicate_groups": 0}
+    
+    # Hash-Berechnung mit Gruppierung
+    hash_to_docs = defaultdict(list)
+    
+    for doc in documents:
+        text = doc.get(text_key, '')
+        doc_hash = compute_normalized_hash(text)
+        # Speichere Hash im Dokument für spätere Referenz
+        doc['_normalized_hash'] = doc_hash
+        hash_to_docs[doc_hash].append(doc)
+    
+    # Trenne unique von Duplikaten
+    unique_documents = []
+    removed_documents = []
+    duplicate_groups = {}
+    
+    for doc_hash, docs in hash_to_docs.items():
+        # Erstes Dokument behalten
+        unique_documents.append(docs[0])
+        
+        # Rest sind Duplikate
+        if len(docs) > 1:
+            duplicate_groups[doc_hash] = docs
+            for dup_doc in docs[1:]:
+                dup_doc['_kept_doc_id'] = docs[0].get(id_key, 'unknown')
+                removed_documents.append(dup_doc)
+    
+    stats = {
+        "total": len(documents),
+        "unique": len(unique_documents),
+        "duplicates_removed": len(removed_documents),
+        "duplicate_groups": len(duplicate_groups),
+        "reduction_percent": (len(removed_documents) / len(documents) * 100) if documents else 0
+    }
+    
+    logger.info(
+        f"Exact-Dedup: {stats['total']} → {stats['unique']} Dokumente "
+        f"({stats['duplicates_removed']} entfernt, {stats['reduction_percent']:.1f}%)"
+    )
+    
+    return unique_documents, removed_documents, stats
+
+
+def create_dedup_excel(unique_docs: list, removed_docs: list, dedup_stats: dict, 
+                       output_path: str = None) -> str:
+    """
+    Erstelle Excel-Übersicht für Exact-Deduplication.
+    
+    Formatierung entspricht der Vorlage aus deduplication_overview - Kopie.xlsx:
+    - Übersicht: Header mit Stage-Tabelle und Content-Type-Statistik
+    - Duplikat-Gruppen: Kompakte Darstellung mit Doc IDs als Liste
+    - Entfernte Dokumente: Alle entfernten Docs mit Stichproben-Markierung
+    - Stichprobe: Nur entfernte Docs zur manuellen Prüfung
+    
+    Args:
+        unique_docs: Liste der behaltenen Dokumente
+        removed_docs: Liste der entfernten Duplikate
+        dedup_stats: Statistiken aus deduplicate_documents_exact()
+        output_path: Optional: Pfad für Excel-Datei
+    
+    Returns:
+        Pfad zur erstellten Excel-Datei
+    """
+    import pandas as pd
+    from pathlib import Path
+    from datetime import datetime
+    import random
+    
+    if output_path is None:
+        excel_path = Path("src/advanced_rag/data/deduplication_overview.xlsx")
+    else:
+        excel_path = Path(output_path)
+    
+    excel_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n   📊 Erstelle Deduplication Excel: {excel_path}")
+    
+    all_docs = unique_docs + removed_docs
+    
+    # Berechne Content-Type Statistiken
+    html_original = sum(1 for d in all_docs if d.get('content_type') == 'html')
+    html_unique = sum(1 for d in unique_docs if d.get('content_type') == 'html')
+    html_removed = html_original - html_unique
+    pdf_original = sum(1 for d in all_docs if d.get('content_type') == 'pdf')
+    pdf_unique = sum(1 for d in unique_docs if d.get('content_type') == 'pdf')
+    pdf_removed = pdf_original - pdf_unique
+    
+    # Baue Hash-Gruppen auf
+    hash_to_docs = defaultdict(list)
+    for doc in all_docs:
+        doc_hash = doc.get('_normalized_hash', 'unknown')
+        hash_to_docs[doc_hash].append(doc)
+    duplicate_groups = {h: docs for h, docs in hash_to_docs.items() if len(docs) > 1}
+    sorted_groups = sorted(duplicate_groups.items(), key=lambda x: len(x[1]), reverse=True)
+    
+    # Mapping: doc_id -> (group_index, kept_doc)
+    doc_to_group = {}
+    for group_idx, (hash_val, docs) in enumerate(sorted_groups, 1):
+        kept_doc = docs[0]  # Erstes Dokument wird behalten
+        for doc in docs:
+            doc_to_group[doc.get('doc_id')] = (group_idx, kept_doc)
+    
+    # ================================================================
+    # Sheet 1: Übersicht (mit Header und Formatierung)
+    # ================================================================
+    overview_rows = [
+        ['🔍 Deduplication Pipeline - Übersicht', '', '', '', '', '', ''],
+        [f'Erstellt am: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', ''],
+        ['Stage', 'Name', 'Input', 'Output', 'Entfernt', 'Reduktion %', 'Duplikat-Gruppen'],
+        [1, 'Exact-Deduplication', dedup_stats['total'], dedup_stats['unique'], 
+         dedup_stats['duplicates_removed'], f"{dedup_stats['reduction_percent']:.1f}%", 
+         dedup_stats['duplicate_groups']],
+        ['GESAMT', 'Alle 1 Stages', dedup_stats['total'], dedup_stats['unique'],
+         dedup_stats['duplicates_removed'], f"{dedup_stats['reduction_percent']:.1f}%",
+         dedup_stats['duplicate_groups']],
+        ['', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', ''],
+        ['📁 Statistik nach Content-Type', '', '', '', '', '', ''],
+        ['Content-Type', 'Original', 'Nach Dedup', 'Entfernt', 'Reduktion %', '', ''],
+        ['HTML', html_original, html_unique, html_removed, 
+         f"{html_removed/html_original*100:.1f}%" if html_original > 0 else '0%', '', ''],
+        ['PDF', pdf_original, pdf_unique, pdf_removed,
+         f"{pdf_removed/pdf_original*100:.1f}%" if pdf_original > 0 else '0%', '', ''],
+    ]
+    df_overview = pd.DataFrame(overview_rows)
+    
+    # ================================================================
+    # Sheet 2: Duplikat-Gruppen (kompakte Darstellung)
+    # ================================================================
+    groups_rows = [
+        ['🔗 Exakte Duplikat-Gruppen (Stage 1)', '', '', '', '', ''],
+        [f'Gesamt: {len(duplicate_groups)} Gruppen mit {len(removed_docs)} Duplikaten', '', '', '', '', ''],
+        ['', '', '', '', '', ''],
+        ['Gruppe', 'Hash (kurz)', 'Anzahl Docs', 'Doc IDs', 'URLs', 'Content-Types'],
+    ]
+    
+    for group_idx, (hash_val, docs) in enumerate(sorted_groups, 1):
+        doc_ids = ', '.join(str(d.get('doc_id', '?')) for d in docs)
+        urls = '\n'.join(d.get('url', '')[:80] + ('...' if len(d.get('url', '')) > 80 else '') for d in docs[:5])
+        if len(docs) > 5:
+            urls += f'\n... +{len(docs) - 5} weitere'
+        content_types = ', '.join(set(d.get('content_type', '').upper() for d in docs))
+        
+        groups_rows.append([
+            group_idx, 
+            hash_val[:16] + '...', 
+            len(docs), 
+            doc_ids, 
+            urls, 
+            content_types
+        ])
+    
+    df_groups = pd.DataFrame(groups_rows)
+    
+    # ================================================================
+    # Sheet 3: Entfernte Dokumente (mit Stichproben-Markierung)
+    # ================================================================
+    # WICHTIG: Die entfernten Dokumente müssen in derselben Reihenfolge wie in
+    # deduplication_implementation.py sein: Sortiert nach Duplikat-Gruppen (größte zuerst),
+    # innerhalb jeder Gruppe ab dem zweiten Dokument.
+    
+    # Baue sortierte Liste der entfernten Dokumente (wie in deduplication_implementation.py)
+    all_removed_sorted = []
+    for group_idx, (hash_val, docs) in enumerate(sorted_groups, 1):
+        kept_doc = docs[0]  # Erstes Dokument wird behalten
+        for doc in docs[1:]:  # Rest sind Duplikate
+            all_removed_sorted.append({
+                'doc': doc,
+                'group_idx': group_idx,
+                'kept_doc': kept_doc
+            })
+    
+    # Stichprobe bestimmen - WICHTIG: Algorithmus muss exakt deduplication_implementation.py entsprechen!
+    # 1. Erst 20 aus ALLEN entfernten Dokumenten ziehen (nicht getrennt nach Typ!)
+    # 2. Dann zusätzlich 2 PDFs, die noch nicht in der Stichprobe sind
+    random.seed(42)
+    
+    # Index-Listen für PDF-Tracking (basierend auf sortierter Liste!)
+    pdf_indices = {i for i, item in enumerate(all_removed_sorted) if item['doc'].get('content_type') == 'pdf'}
+    
+    # Schritt 1: Ziehe 20 Dokumente aus allen (reproduziert alte Stichprobe)
+    base_sample_size = min(20, len(all_removed_sorted))
+    base_sample_indices = set(random.sample(range(len(all_removed_sorted)), base_sample_size)) if all_removed_sorted else set()
+    
+    # Schritt 2: Ziehe zusätzlich 2 PDFs (die noch nicht in der Stichprobe sind)
+    pdf_not_in_sample = [i for i in pdf_indices if i not in base_sample_indices]
+    additional_pdf_sample = set()
+    if pdf_not_in_sample:
+        pdf_sample_size = min(2, len(pdf_not_in_sample))
+        additional_pdf_sample = set(random.sample(pdf_not_in_sample, pdf_sample_size))
+    
+    sample_indices = base_sample_indices | additional_pdf_sample
+    sample_doc_ids = {all_removed_sorted[i]['doc'].get('doc_id') for i in sample_indices}
+    
+    removed_rows = [
+        ['🗑️ Alle entfernten Dokumente', '', '', '', '', '', '', '', ''],
+        [f'Stichprobe: {len([i for i in sample_indices if all_removed_sorted[i]["doc"].get("content_type") == "html"])} HTML + {len([i for i in sample_indices if all_removed_sorted[i]["doc"].get("content_type") == "pdf"])} PDF (Seed: 42)', '', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', '', ''],
+        ['Stichprobe', 'Stage', 'Gruppe', 'Doc ID', 'Content-Type', 'Entfernte URL', 'Titel', 'Zeichen', 'Ersetzt durch URL'],
+    ]
+    
+    for idx, item in enumerate(all_removed_sorted):
+        doc = item['doc']
+        doc_id = doc.get('doc_id')
+        group_idx = item['group_idx']
+        kept_doc = item['kept_doc']
+        is_sample = idx in sample_indices
+        
+        removed_rows.append([
+            '✓ PRÜFEN' if is_sample else '',
+            'Exact-Deduplication',
+            group_idx,
+            doc_id,
+            doc.get('content_type', '').upper(),
+            doc.get('url', ''),
+            (doc.get('title', '') or '')[:60],
+            len(doc.get('text', '')),
+            kept_doc.get('url', '') if kept_doc else ''
+        ])
+    
+    df_removed = pd.DataFrame(removed_rows)
+    
+    # ================================================================
+    # Sheet 4: Stichprobe (nur entfernte Docs zur manuellen Prüfung)
+    # ================================================================
+    # Sample-Docs aus der sortierten Liste extrahieren
+    sample_items = [all_removed_sorted[i] for i in sorted(sample_indices)]
+    sample_count_html = len([item for item in sample_items if item['doc'].get('content_type') == 'html'])
+    sample_count_pdf = len([item for item in sample_items if item['doc'].get('content_type') == 'pdf'])
+    
+    sample_rows = [
+        ['🔍 Stichprobe zur manuellen Überprüfung', '', '', '', '', ''],
+        [f'Seed: 42 | Stichprobe: {sample_count_html} HTML + {sample_count_pdf} PDF = {len(sample_items)} von {len(all_removed_sorted)} Dokumenten', '', '', '', '', ''],
+        ['Bitte überprüfen Sie, ob die entfernten Dokumente tatsächlich Duplikate der Ersatz-Dokumente sind.', '', '', '', '', ''],
+        ['', '', '', '', '', ''],
+        ['#', 'Typ', 'Doc ID', 'Entfernte URL', 'Ersetzt durch URL', 'Korrekt? (J/N)', 'Anmerkung'],
+    ]
+    
+    for i, item in enumerate(sample_items, 1):
+        doc = item['doc']
+        kept_doc = item['kept_doc']
+        
+        sample_rows.append([
+            i,
+            doc.get('content_type', '').upper(),
+            doc.get('doc_id', ''),
+            doc.get('url', ''),
+            kept_doc.get('url', '') if kept_doc else '',
+            '',  # Korrekt? (J/N) - leer für manuelle Eingabe
+            ''   # Anmerkung - leer für manuelle Eingabe
+        ])
+    
+    df_sample = pd.DataFrame(sample_rows)
+    
+    # Speichere Excel
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        df_overview.to_excel(writer, sheet_name='Übersicht', index=False, header=False)
+        df_groups.to_excel(writer, sheet_name='Duplikat-Gruppen', index=False, header=False)
+        df_removed.to_excel(writer, sheet_name='Entfernte Dokumente', index=False, header=False)
+        df_sample.to_excel(writer, sheet_name='Stichprobe', index=False, header=False)
+        
+        # ================================================================
+        # Formatierungen anwenden (wie im Template)
+        # ================================================================
+        wb = writer.book
+        
+        # Farben definieren (wie im Template)
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')  # Dunkelblau
+        total_fill = PatternFill(start_color='8FAADC', end_color='8FAADC', fill_type='solid')   # Hellblau
+        sample_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')  # Gelb
+        header_font = Font(bold=True, color='FFFFFF')  # Weiß
+        total_font = Font(bold=True)
+        
+        # --- Sheet 1: Übersicht ---
+        ws_overview = wb['Übersicht']
+        # Zeile 1: Titel (Bold)
+        ws_overview.cell(row=1, column=1).font = Font(bold=True)
+        # Zeile 4: Header (Stage, Name, Input, Output, Entfernt, ...)
+        for col in range(1, 8):
+            cell = ws_overview.cell(row=4, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        # Zeile 6: GESAMT
+        for col in range(1, 8):
+            cell = ws_overview.cell(row=6, column=col)
+            cell.fill = total_fill
+            cell.font = total_font
+        # Zeile 9: Statistik-Titel (Bold)
+        ws_overview.cell(row=9, column=1).font = Font(bold=True)
+        # Zeile 10: Content-Type Header
+        for col in range(1, 6):
+            cell = ws_overview.cell(row=10, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        # --- Sheet 2: Duplikat-Gruppen ---
+        ws_groups = wb['Duplikat-Gruppen']
+        # Zeile 4: Header
+        for col in range(1, 7):
+            cell = ws_groups.cell(row=4, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        # Zeile 1: Titel (Bold)
+        ws_groups.cell(row=1, column=1).font = Font(bold=True)
+        
+        # --- Sheet 3: Entfernte Dokumente ---
+        ws_removed = wb['Entfernte Dokumente']
+        # Zeile 4: Header
+        for col in range(1, 10):
+            cell = ws_removed.cell(row=4, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        # Zeile 1: Titel (Bold)
+        ws_removed.cell(row=1, column=1).font = Font(bold=True)
+        # Gelbe Markierung für Stichproben-Zeilen
+        for row_idx in range(5, ws_removed.max_row + 1):
+            if ws_removed.cell(row=row_idx, column=1).value == '✓ PRÜFEN':
+                for col in range(1, 10):
+                    ws_removed.cell(row=row_idx, column=col).fill = sample_fill
+        
+        # --- Sheet 4: Stichprobe ---
+        ws_sample = wb['Stichprobe']
+        # Zeile 5: Header
+        for col in range(1, 8):
+            cell = ws_sample.cell(row=5, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        # Zeile 1: Titel (Bold)
+        ws_sample.cell(row=1, column=1).font = Font(bold=True)
+        # Hellgrüne Eingabefelder für Spalten 6-7 (Korrekt? und Anmerkung)
+        input_fill = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+        for row_idx in range(6, ws_sample.max_row + 1):
+            if ws_sample.cell(row=row_idx, column=1).value:  # Nur Datenzeilen
+                ws_sample.cell(row=row_idx, column=6).fill = input_fill
+                ws_sample.cell(row=row_idx, column=7).fill = input_fill
+    
+    print(f"   ✅ Excel erstellt: {len(duplicate_groups)} Gruppen, {len(all_removed_sorted)} entfernt, {len(sample_items)} in Stichprobe")
+    
+    return str(excel_path)
 
 
 @dataclass

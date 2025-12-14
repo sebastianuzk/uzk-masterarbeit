@@ -402,7 +402,11 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
     # RunConfig für parallele Requests an Ollama
-    run_config = RunConfig(max_workers=4)
+    # seed=RANDOM_SEED für Reproduzierbarkeit (RAGAS verwendet numpy RNG intern)
+    run_config = RunConfig(
+        max_workers=4,
+        seed=RANDOM_SEED
+    )
     
     # Zeit messen für Evaluation
     eval_start = time.time()

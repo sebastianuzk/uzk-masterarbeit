@@ -47,6 +47,49 @@ from config.settings import (
 )
 from src.agent.react_agent import create_react_agent
 
+
+def calculate_gold_doc_rank(context_hint: str, retrieved_urls: list) -> float:
+    """
+    Berechnet den gold_doc_rank: An welcher Position erscheint die Referenz-URL?
+    
+    Args:
+        context_hint: Die erwartete Referenz-URL aus dem Testset
+        retrieved_urls: Liste der URLs der retrieved contexts
+        
+    Returns:
+        float: 1/rank wenn gefunden (1.0 für Platz 1, 0.5 für Platz 2, etc.), 0.0 wenn nicht gefunden
+    """
+    if not context_hint or not retrieved_urls:
+        return 0.0
+    
+    context_hint_str = str(context_hint)
+    
+    for i, url in enumerate(retrieved_urls):
+        if url is None:
+            continue
+        url_str = str(url)
+        
+        # Exakte Übereinstimmung
+        if context_hint_str == url_str:
+            return 1.0 / (i + 1)
+        
+        # Für Web-URLs: Prüfe ob context_hint in der URL enthalten ist
+        # z.B. https://wiso.uni-koeln.de/de/studium -> file://...html_cache/html/wiso.uni-koeln.de_de_studium...
+        if context_hint_str.startswith('https://'):
+            # Konvertiere https://wiso.uni-koeln.de/de/... zu wiso.uni-koeln.de_de_...
+            url_part = context_hint_str.replace('https://', '').replace('/', '_')
+            if url_part in url_str:
+                return 1.0 / (i + 1)
+        
+        # Für file:// URLs: Direkter Vergleich
+        if context_hint_str.startswith('file://') and url_str.startswith('file://'):
+            if context_hint_str == url_str:
+                return 1.0 / (i + 1)
+    
+    # Nicht gefunden
+    return 0.0
+
+
 # Setze Seeds für Reproduzierbarkeit
 random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
@@ -54,10 +97,10 @@ np.random.seed(RANDOM_SEED)
 # ============================================================================
 # KONFIGURATION: Hier die Indizes eintragen (1-basiert wie in CSV)
 # ============================================================================
-SPECIFIC_INDICES = [116]  # Letzte ID zum Testen
+SPECIFIC_INDICES = list(range(1, 21))  # IDs 1-20 für Mini-Evaluation
 AUTO_DETECT_FAILED = False  # Deaktiviert - wir evaluieren alle
 AUTO_DETECT_MISSING = False  # Deaktiviert - wir evaluieren alle
-REUSE_EXISTING_RESPONSES = False  # NEUE Antworten generieren
+REUSE_EXISTING_RESPONSES = True  # Bestehende Antworten wiederverwenden
 FORCE_RECALC_ALL_METRICS = True  # Alle Metriken neu berechnen
 
 
@@ -95,7 +138,7 @@ def detect_failed_and_missing_indices(results_path: Path, testset_path: Path) ->
     df = df[~df['id'].astype(str).isin(['META', 'AVG'])]
     
     # Prüfe welche IDs NaN-Werte in den Metriken haben
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
     existing_ids = set()
     
     for _, row in df.iterrows():
@@ -139,7 +182,7 @@ def detect_missing_metrics_per_id(results_path: Path) -> dict:
     # Filtere META/AVG Zeilen aus
     df = df[~df['id'].astype(str).isin(['META', 'AVG'])]
     
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
     missing_metrics = {}
     
     for _, row in df.iterrows():
@@ -416,11 +459,13 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
     # RunConfig mit erhöhtem Timeout für Ollama (lokale GPU kann langsam sein)
+    # seed=RANDOM_SEED für Reproduzierbarkeit (RAGAS verwendet numpy RNG intern)
     run_config = RunConfig(
         max_workers=1,  # Reduziert von 4 auf 2 für weniger GPU-Last
         timeout=300,  # 5 Minuten Timeout pro Request
         max_retries=3,
-        max_wait=30  # Max 30 Sekunden warten zwischen Retries
+        max_wait=30,  # Max 30 Sekunden warten zwischen Retries
+        seed=RANDOM_SEED  # Seed für numpy RNG in RAGAS
     )
     
     # Zeit messen für Evaluation
@@ -480,7 +525,7 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
     if urls_list:
         new_results_df['retrieved_urls'] = [str(urls) for urls in urls_list[:len(new_results_df)]]
     
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
     
     if results_path.exists():
         print("📂 Lade bestehende Ergebnisse...")
@@ -568,7 +613,7 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
             # Sortiere nach ID und wähle nur die relevanten Spalten (erweitert um neue Spalten)
             available_cols = ['id', 'category', 'difficulty', 'user_input', 'response', 
                               'reference', 'retrieved_contexts', 'retrieved_urls',
-                              'faithfulness', 'context_recall', 'context_precision', 
+                              'faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank',
                               'context_count', 'response_time_seconds']
             # Nur vorhandene Spalten verwenden
             cols_to_use = [col for col in available_cols if col in merged_df.columns]
@@ -604,7 +649,7 @@ def display_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
     for _, row in results_with_ids.iterrows():
         q_id = row['id']
         print(f"\n   ID {q_id}:")
-        for metric in ['faithfulness', 'context_recall', 'context_precision']:
+        for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
             if metric in row:
                 print(f"      {metric:20s}: {row[metric]:.3f}")
     
@@ -719,6 +764,38 @@ def main():
         merged_df = merge_results_with_existing(results_df, test_df, only_fill_nan=only_fill_nan,
                                                  response_times=response_times, urls_list=urls_list)
         
+        # 6b. gold_doc_rank berechnen (Position der Referenz-URL in retrieved contexts)
+        print("\n📊 Berechne gold_doc_rank...")
+        testset_path = Path(__file__).parent / "data" / "Testset.CSV"
+        testset_full = pd.read_csv(testset_path, sep=';', encoding='utf-8')
+        context_hints = {int(row['id']): row['context_hint'] for _, row in testset_full.iterrows()}
+        
+        gold_doc_ranks = []
+        for _, row in merged_df.iterrows():
+            row_id = int(row['id'])
+            context_hint = context_hints.get(row_id, '')
+            
+            # Parse retrieved_urls aus String zurück zu Liste
+            urls_str = row.get('retrieved_urls', '')
+            if isinstance(urls_str, str) and urls_str.startswith('['):
+                try:
+                    import ast
+                    retrieved_urls = ast.literal_eval(urls_str)
+                except:
+                    retrieved_urls = []
+            elif isinstance(urls_str, list):
+                retrieved_urls = urls_str
+            else:
+                retrieved_urls = []
+            
+            rank = calculate_gold_doc_rank(context_hint, retrieved_urls)
+            gold_doc_ranks.append(rank)
+        
+        merged_df['gold_doc_rank'] = gold_doc_ranks
+        valid_ranks = [r for r in gold_doc_ranks if r > 0]
+        print(f"   ✅ gold_doc_rank berechnet: {len(valid_ranks)}/{len(gold_doc_ranks)} Referenz-URLs gefunden")
+        print(f"   📈 Durchschnitt gold_doc_rank: {sum(gold_doc_ranks)/len(gold_doc_ranks):.3f}")
+        
         # 7. Ergebnisse anzeigen
         display_results(results_df, test_df)
         
@@ -796,7 +873,7 @@ def main():
         # ============================================================================
         # DURCHSCHNITTE: Gesamt, pro Kategorie, pro Schwierigkeit, kombiniert
         # ============================================================================
-        metric_cols = ['faithfulness', 'context_recall', 'context_precision']
+        metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
         
         # Gesamtdurchschnitt
         avg_row = {col: '' for col in csv_columns}
