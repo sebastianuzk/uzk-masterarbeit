@@ -39,7 +39,7 @@ try:
     # Individuelle Feature-Flags
     USE_SEMANTIC_CHUNKING = rag_config.use_semantic_chunking
     USE_CONTENT_CLEANING = rag_config.use_content_cleaning
-    USE_DEDUPLICATION = rag_config.use_deduplication
+    USE_DEDUPLICATION = rag_config.use_deduplication  # Aktiviert Exact + Near Deduplication
     USE_MULTI_COLLECTION = rag_config.use_multi_collection_search
 except Exception as e:
     print(f"⚠️  Fehler beim Laden der RAG-Config: {e}")
@@ -56,7 +56,13 @@ if USE_SEMANTIC_CHUNKING:
 if USE_CONTENT_CLEANING:
     from src.advanced_rag.pre_retrieval.cleaning import ContentCleaner
 if USE_DEDUPLICATION:
-    from src.advanced_rag.pre_retrieval.deduplication import ContentDeduplicator, deduplicate_documents_exact, create_dedup_excel
+    from src.advanced_rag.pre_retrieval.deduplication import (
+        ContentDeduplicator, 
+        deduplicate_documents_exact, 
+        create_dedup_excel,
+        deduplicate_documents_near,
+        create_near_dedup_excel
+    )
 if USE_MULTI_COLLECTION:
     from src.advanced_rag.pre_retrieval.collection_categorizer import CollectionCategorizer
 
@@ -603,6 +609,7 @@ def run_production_scraper():
         if USE_DEDUPLICATION:
             print("🔄 Phase 1a: Decompress → Clean → Text extrahieren")
             print("🔄 Phase 1b: Exact-Deduplication auf Dokument-Ebene")
+            print("🔄 Phase 1b2: Near-Deduplication (Document-Level)")
             print("🔄 Phase 1c: Chunking (nur unique Dokumente)")
         else:
             print("🔄 Phase 1: Decompress → Clean → Chunk")
@@ -670,6 +677,39 @@ def run_production_scraper():
             
             # Excel-Übersicht für Deduplication erstellen
             create_dedup_excel(unique_docs, removed_docs, dedup_stats)
+            
+            # ================================================================
+            # PHASE 1b2: Near-Deduplication (Teil von Deduplication)
+            # ================================================================
+            print("\n" + "-" * 80)
+            print("🔍 Phase 1b2: Near-Deduplication (Document-Level)...")
+            print("-" * 80)
+            
+            near_unique_docs, near_removed_docs, near_dedup_stats = deduplicate_documents_near(
+                unique_docs, 
+                text_key='text', 
+                id_key='doc_id',
+                shingle_k=rag_config.near_deduplication_shingle_k,
+                similarity_threshold=rag_config.near_deduplication_similarity_threshold,
+                min_words=rag_config.near_deduplication_min_words
+            )
+            
+            print(f"   📊 Input:    {near_dedup_stats['total']:,} Dokumente")
+            print(f"   📊 Unique:   {near_dedup_stats['unique']:,} Dokumente")
+            print(f"   📊 Entfernt: {near_dedup_stats['duplicates_removed']:,} Near-Duplicates")
+            print(f"   📊 Cluster:  {near_dedup_stats['clusters']:,}")
+            print(f"   📊 Kandidatenpaare: {near_dedup_stats['candidate_pairs']:,}")
+            print(f"   📊 Verifizierte Paare: {near_dedup_stats['verified_pairs']:,}")
+            print(f"   📊 Reduktion: {near_dedup_stats['reduction_percent']:.1f}%")
+            
+            # Speichere Near-Dedup-Stats für späteren Report
+            stats['near_dedup'] = near_dedup_stats
+            
+            # Excel-Übersicht für Near-Deduplication erstellen
+            create_near_dedup_excel(near_unique_docs, near_removed_docs, near_dedup_stats)
+            
+            # Überschreibe unique_docs für die nächste Phase
+            unique_docs = near_unique_docs
             
             # ================================================================
             # PHASE 1c: Chunking (nur unique Dokumente)
@@ -977,7 +1017,7 @@ def run_production_scraper():
         if USE_CONTENT_CLEANING:
             active_techniques.append("ContentCleaning")
         if USE_DEDUPLICATION:
-            active_techniques.append("Deduplication")
+            active_techniques.append("Deduplication")  # Enthält Exact + Near
         if USE_MULTI_COLLECTION:
             active_techniques.append("MultiCollection")
         

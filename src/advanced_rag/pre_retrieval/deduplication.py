@@ -841,6 +841,643 @@ class ContentDeduplicator:
 
 
 # ============================================================================
+# DOCUMENT-LEVEL NEAR-DEDUPLICATION
+# ============================================================================
+
+def _create_word_shingles(text: str, k: int = 5) -> Set[str]:
+    """
+    Erstelle Wort-Shingles (k-grams) aus normalisiertem Text.
+    
+    Args:
+        text: Eingabetext
+        k: Shingle-Größe (Anzahl Wörter pro Shingle)
+        
+    Returns:
+        Set von Shingles
+    """
+    # Normalisiere Text
+    normalized = normalize_text(text)
+    words = normalized.split()
+    
+    if len(words) < k:
+        # Wenn weniger Wörter als k, ganzen Text als ein Shingle
+        return {normalized} if words else set()
+    
+    shingles = set()
+    for i in range(len(words) - k + 1):
+        shingle = " ".join(words[i:i + k])
+        shingles.add(shingle)
+    
+    return shingles
+
+
+def _jaccard_similarity(set1: Set[str], set2: Set[str]) -> float:
+    """
+    Berechne Jaccard-Ähnlichkeit zwischen zwei Sets.
+    
+    Args:
+        set1: Erstes Set
+        set2: Zweites Set
+        
+    Returns:
+        Ähnlichkeit zwischen 0.0 und 1.0
+    """
+    if not set1 and not set2:
+        return 1.0
+    if not set1 or not set2:
+        return 0.0
+    
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
+    
+    return intersection / union if union > 0 else 0.0
+
+
+def _select_canonical_url(docs: list, id_key: str = 'doc_id') -> dict:
+    """
+    Wähle das kanonische Dokument aus einem Cluster.
+    
+    Kriterien (in Reihenfolge):
+    1. Bevorzuge URLs ohne Query-Parameter (?), print, search, etc.
+    2. Bevorzuge längeren Text
+    3. Im Zweifelsfall: niedrigste doc_id
+    
+    Args:
+        docs: Liste von Dokumenten im Cluster
+        id_key: Schlüssel für die Dokument-ID
+        
+    Returns:
+        Das kanonische Dokument
+    """
+    def url_quality_score(doc):
+        """Höherer Score = bessere URL."""
+        url = doc.get('url', '').lower()
+        score = 0
+        
+        # Malus für problematische URL-Patterns
+        if '?' in url:
+            score -= 10
+        if 'print' in url:
+            score -= 5
+        if 'search' in url:
+            score -= 5
+        if 'mobile' in url:
+            score -= 3
+        if 'redirect' in url:
+            score -= 3
+        
+        # Bonus für kürzere, sauberere URLs
+        score -= len(url) // 50  # Leichter Malus für sehr lange URLs
+        
+        return score
+    
+    def text_length(doc):
+        """Textlänge als Sekundärkriterium."""
+        return len(doc.get('text', ''))
+    
+    def doc_id_sortable(doc):
+        """Doc-ID für deterministisches Tie-Breaking."""
+        doc_id = doc.get(id_key, 'zzz')
+        try:
+            return int(doc_id)
+        except (ValueError, TypeError):
+            return float('inf')
+    
+    # Sortiere nach: URL-Qualität (absteigend), Textlänge (absteigend), Doc-ID (aufsteigend)
+    sorted_docs = sorted(
+        docs,
+        key=lambda d: (-url_quality_score(d), -text_length(d), doc_id_sortable(d))
+    )
+    
+    return sorted_docs[0]
+
+
+class UnionFind:
+    """
+    Union-Find Datenstruktur für Cluster-Bildung.
+    
+    Verwendet für effizientes Clustering von Near-Duplicate-Paaren.
+    """
+    
+    def __init__(self):
+        self.parent = {}
+        self.rank = {}
+    
+    def find(self, x):
+        """Finde den Wurzelknoten mit Pfadkompression."""
+        if x not in self.parent:
+            self.parent[x] = x
+            self.rank[x] = 0
+        
+        if self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+    
+    def union(self, x, y):
+        """Vereinige zwei Sets (Union by Rank)."""
+        root_x = self.find(x)
+        root_y = self.find(y)
+        
+        if root_x == root_y:
+            return
+        
+        if self.rank[root_x] < self.rank[root_y]:
+            self.parent[root_x] = root_y
+        elif self.rank[root_x] > self.rank[root_y]:
+            self.parent[root_y] = root_x
+        else:
+            self.parent[root_y] = root_x
+            self.rank[root_x] += 1
+    
+    def get_clusters(self) -> dict:
+        """Erhalte alle Cluster als Dictionary {root: [members]}."""
+        clusters = defaultdict(list)
+        for item in self.parent:
+            root = self.find(item)
+            clusters[root].append(item)
+        return dict(clusters)
+
+
+def deduplicate_documents_near(
+    documents: list[dict],
+    text_key: str = 'text',
+    id_key: str = 'doc_id',
+    shingle_k: int = 5,
+    similarity_threshold: float = 0.95,
+    min_words: int = 120
+) -> tuple[list[dict], list[dict], dict]:
+    """
+    Near-Deduplication auf Dokument-Ebene (nach Exact-Dedup, vor Chunking).
+    
+    Findet inhaltlich nahezu identische Dokumente mittels Wort-Shingling und
+    Jaccard-Ähnlichkeit. Unterschiedliche Prüfungsordnungen bleiben erhalten.
+    
+    Vergleicht nur Dokumente mit gleichem content_type (HTML↔HTML, PDF↔PDF).
+    Verwendet Size-Bucketing zur Reduzierung der Kandidatenpaare.
+    
+    Args:
+        documents: Liste von Dokumenten als Dictionaries
+                   Erwartet: {text_key: "...", id_key: "...", 'content_type': "..."}
+        text_key: Schlüssel für den Textinhalt (default: 'text')
+        id_key: Schlüssel für die Dokument-ID (default: 'doc_id')
+        shingle_k: Größe der Wort-Shingles (default: 5)
+        similarity_threshold: Schwellwert für Near-Duplicate (default: 0.95)
+        min_words: Minimale Wortanzahl für Vergleich (default: 120)
+    
+    Returns:
+        Tuple von:
+        - unique_documents: Liste der behaltenen Dokumente
+        - removed_documents: Liste der entfernten Near-Duplicates
+        - stats: Dictionary mit Statistiken
+    
+    Example:
+        >>> docs = [
+        ...     {"doc_id": "1", "text": "...", "content_type": "html"},
+        ...     {"doc_id": "2", "text": "...", "content_type": "html"},  # Near-dup!
+        ... ]
+        >>> unique, removed, stats = deduplicate_documents_near(docs)
+    """
+    if not documents:
+        return [], [], {
+            "total": 0, "unique": 0, "duplicates_removed": 0,
+            "clusters": 0, "candidate_pairs": 0, "verified_pairs": 0,
+            "reduction_percent": 0.0
+        }
+    
+    logger.info(f"Near-Dedup: Starte mit {len(documents)} Dokumenten (k={shingle_k}, threshold={similarity_threshold})")
+    
+    # ================================================================
+    # SCHRITT 1: Dokumente nach content_type gruppieren
+    # ================================================================
+    docs_by_type = defaultdict(list)
+    for doc in documents:
+        content_type = doc.get('content_type', 'unknown')
+        docs_by_type[content_type].append(doc)
+    
+    logger.info(f"   Content-Types: {', '.join(f'{ct}={len(docs)}' for ct, docs in docs_by_type.items())}")
+    
+    # ================================================================
+    # SCHRITT 2: Shingles berechnen und Size-Bucketing
+    # ================================================================
+    doc_shingles = {}  # doc_id -> shingles
+    doc_word_counts = {}  # doc_id -> word_count
+    
+    # Size-Buckets pro content_type (Bucket-Größe: 500 Wörter)
+    BUCKET_SIZE = 500
+    size_buckets = defaultdict(lambda: defaultdict(list))  # content_type -> bucket -> [doc_ids]
+    
+    for doc in documents:
+        doc_id = doc.get(id_key)
+        text = doc.get(text_key, '')
+        content_type = doc.get('content_type', 'unknown')
+        
+        # Normalisiere und zähle Wörter
+        normalized = normalize_text(text)
+        words = normalized.split()
+        word_count = len(words)
+        doc_word_counts[doc_id] = word_count
+        
+        # Nur Dokumente mit >= min_words für Vergleich
+        if word_count >= min_words:
+            shingles = _create_word_shingles(text, k=shingle_k)
+            doc_shingles[doc_id] = shingles
+            
+            # Size-Bucket zuweisen
+            bucket = word_count // BUCKET_SIZE
+            size_buckets[content_type][bucket].append(doc_id)
+    
+    logger.info(f"   {len(doc_shingles)} Dokumente mit >= {min_words} Wörtern für Vergleich")
+    
+    # ================================================================
+    # SCHRITT 3: Kandidatenpaare generieren (Size-Bucketing)
+    # ================================================================
+    candidate_pairs = set()
+    
+    for content_type, buckets in size_buckets.items():
+        for bucket, doc_ids in buckets.items():
+            # Vergleiche innerhalb des Buckets
+            for i, doc_id1 in enumerate(doc_ids):
+                for doc_id2 in doc_ids[i+1:]:
+                    candidate_pairs.add((doc_id1, doc_id2))
+            
+            # Vergleiche mit benachbarten Buckets (±1)
+            for neighbor_bucket in [bucket - 1, bucket + 1]:
+                if neighbor_bucket in buckets:
+                    for doc_id1 in doc_ids:
+                        for doc_id2 in buckets[neighbor_bucket]:
+                            if doc_id1 < doc_id2:  # Vermeidung von Duplikaten
+                                candidate_pairs.add((doc_id1, doc_id2))
+                            else:
+                                candidate_pairs.add((doc_id2, doc_id1))
+    
+    logger.info(f"   {len(candidate_pairs):,} Kandidatenpaare generiert")
+    
+    # ================================================================
+    # SCHRITT 4: Jaccard-Similarity prüfen und Cluster bilden
+    # ================================================================
+    union_find = UnionFind()
+    verified_pairs = []
+    
+    for doc_id1, doc_id2 in candidate_pairs:
+        shingles1 = doc_shingles.get(doc_id1)
+        shingles2 = doc_shingles.get(doc_id2)
+        
+        if shingles1 is None or shingles2 is None:
+            continue
+        
+        # Early Exit: Prüfe ob Jaccard-Threshold überhaupt erreichbar
+        min_size = min(len(shingles1), len(shingles2))
+        max_size = max(len(shingles1), len(shingles2))
+        
+        if max_size > 0:
+            max_possible = min_size / max_size
+            if max_possible < similarity_threshold:
+                continue
+        
+        # Berechne Jaccard-Similarity
+        similarity = _jaccard_similarity(shingles1, shingles2)
+        
+        if similarity >= similarity_threshold:
+            verified_pairs.append((doc_id1, doc_id2, similarity))
+            union_find.union(doc_id1, doc_id2)
+    
+    logger.info(f"   {len(verified_pairs)} verifizierte Near-Duplicate-Paare")
+    
+    # ================================================================
+    # SCHRITT 5: Cluster extrahieren und Canonical wählen
+    # ================================================================
+    raw_clusters = union_find.get_clusters()
+    
+    # Nur Cluster mit > 1 Element sind relevant
+    duplicate_clusters = {k: v for k, v in raw_clusters.items() if len(v) > 1}
+    
+    # Mapping doc_id -> doc für schnellen Zugriff
+    id_to_doc = {doc.get(id_key): doc for doc in documents}
+    
+    # Pro Cluster: Canonical wählen, Rest als Duplikate markieren
+    canonical_doc_ids = set()
+    removed_doc_ids = set()
+    cluster_info = []  # Für Excel-Report
+    
+    for cluster_idx, (root, member_ids) in enumerate(sorted(duplicate_clusters.items()), 1):
+        member_docs = [id_to_doc[mid] for mid in member_ids if mid in id_to_doc]
+        
+        if len(member_docs) < 2:
+            continue
+        
+        # Wähle Canonical
+        canonical = _select_canonical_url(member_docs, id_key=id_key)
+        canonical_id = canonical.get(id_key)
+        canonical_doc_ids.add(canonical_id)
+        
+        # Rest sind Duplikate
+        for doc in member_docs:
+            doc_id = doc.get(id_key)
+            if doc_id != canonical_id:
+                removed_doc_ids.add(doc_id)
+                # Annotiere für spätere Dokumentation
+                doc['_kept_doc_id'] = canonical_id
+                doc['_near_duplicate_of'] = canonical.get('url', '')
+        
+        cluster_info.append({
+            'cluster_idx': cluster_idx,
+            'canonical_id': canonical_id,
+            'canonical_url': canonical.get('url', ''),
+            'member_ids': member_ids,
+            'size': len(member_docs)
+        })
+    
+    logger.info(f"   {len(duplicate_clusters)} Cluster mit {len(removed_doc_ids)} zu entfernenden Dokumenten")
+    
+    # ================================================================
+    # SCHRITT 6: Unique und Removed Listen erstellen
+    # ================================================================
+    unique_documents = []
+    removed_documents = []
+    
+    for doc in documents:
+        doc_id = doc.get(id_key)
+        if doc_id in removed_doc_ids:
+            removed_documents.append(doc)
+        else:
+            unique_documents.append(doc)
+    
+    # ================================================================
+    # SCHRITT 7: Statistiken
+    # ================================================================
+    stats = {
+        "total": len(documents),
+        "unique": len(unique_documents),
+        "duplicates_removed": len(removed_documents),
+        "clusters": len(duplicate_clusters),
+        "candidate_pairs": len(candidate_pairs),
+        "verified_pairs": len(verified_pairs),
+        "reduction_percent": (len(removed_documents) / len(documents) * 100) if documents else 0,
+        "shingle_k": shingle_k,
+        "similarity_threshold": similarity_threshold,
+        "min_words": min_words,
+        "_cluster_info": cluster_info  # Für Excel-Report
+    }
+    
+    logger.info(
+        f"Near-Dedup: {stats['total']} → {stats['unique']} Dokumente "
+        f"({stats['duplicates_removed']} entfernt, {stats['reduction_percent']:.1f}%)"
+    )
+    
+    return unique_documents, removed_documents, stats
+
+
+def create_near_dedup_excel(unique_docs: list, removed_docs: list, near_dedup_stats: dict,
+                            output_path: str = None) -> str:
+    """
+    Erstelle Excel-Übersicht für Near-Deduplication.
+    
+    Formatierung analog zu create_dedup_excel():
+    - Übersicht: Header mit Stage-Tabelle und Content-Type-Statistik
+    - Near-Duplicate-Cluster: Kompakte Darstellung mit Canonical und Members
+    - Entfernte Dokumente: Alle entfernten Docs mit Stichproben-Markierung
+    - Stichprobe: Nur entfernte Docs zur manuellen Prüfung
+    
+    Args:
+        unique_docs: Liste der behaltenen Dokumente
+        removed_docs: Liste der entfernten Near-Duplicates
+        near_dedup_stats: Statistiken aus deduplicate_documents_near()
+        output_path: Optional: Pfad für Excel-Datei
+    
+    Returns:
+        Pfad zur erstellten Excel-Datei
+    """
+    import pandas as pd
+    from pathlib import Path
+    from datetime import datetime
+    import random
+    
+    if output_path is None:
+        excel_path = Path("src/advanced_rag/data/near_deduplication_overview.xlsx")
+    else:
+        excel_path = Path(output_path)
+    
+    excel_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n   📊 Erstelle Near-Deduplication Excel: {excel_path}")
+    
+    all_docs = unique_docs + removed_docs
+    
+    # Berechne Content-Type Statistiken
+    html_original = sum(1 for d in all_docs if d.get('content_type') == 'html')
+    html_unique = sum(1 for d in unique_docs if d.get('content_type') == 'html')
+    html_removed = html_original - html_unique
+    pdf_original = sum(1 for d in all_docs if d.get('content_type') == 'pdf')
+    pdf_unique = sum(1 for d in unique_docs if d.get('content_type') == 'pdf')
+    pdf_removed = pdf_original - pdf_unique
+    
+    cluster_info = near_dedup_stats.get('_cluster_info', [])
+    
+    # ================================================================
+    # Sheet 1: Übersicht (mit Header und Formatierung)
+    # ================================================================
+    overview_rows = [
+        ['🔍 Near-Deduplication Pipeline - Übersicht', '', '', '', '', '', ''],
+        [f'Erstellt am: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', ''],
+        ['Parameter', 'Wert', '', '', '', '', ''],
+        ['Shingle-Größe (k)', near_dedup_stats.get('shingle_k', 5), '', '', '', '', ''],
+        ['Similarity-Threshold', near_dedup_stats.get('similarity_threshold', 0.95), '', '', '', '', ''],
+        ['Min. Wörter', near_dedup_stats.get('min_words', 120), '', '', '', '', ''],
+        ['Kandidatenpaare', f"{near_dedup_stats.get('candidate_pairs', 0):,}", '', '', '', '', ''],
+        ['Verifizierte Paare', near_dedup_stats.get('verified_pairs', 0), '', '', '', '', ''],
+        ['', '', '', '', '', '', ''],
+        ['Stage', 'Name', 'Input', 'Output', 'Entfernt', 'Reduktion %', 'Cluster'],
+        [2, 'Near-Deduplication', near_dedup_stats['total'], near_dedup_stats['unique'], 
+         near_dedup_stats['duplicates_removed'], f"{near_dedup_stats['reduction_percent']:.1f}%", 
+         near_dedup_stats['clusters']],
+        ['', '', '', '', '', '', ''],
+        ['📁 Statistik nach Content-Type', '', '', '', '', '', ''],
+        ['Content-Type', 'Original', 'Nach Dedup', 'Entfernt', 'Reduktion %', '', ''],
+        ['HTML', html_original, html_unique, html_removed, 
+         f"{html_removed/html_original*100:.1f}%" if html_original > 0 else '0%', '', ''],
+        ['PDF', pdf_original, pdf_unique, pdf_removed,
+         f"{pdf_removed/pdf_original*100:.1f}%" if pdf_original > 0 else '0%', '', ''],
+    ]
+    df_overview = pd.DataFrame(overview_rows)
+    
+    # ================================================================
+    # Sheet 2: Near-Duplicate-Cluster (kompakte Darstellung)
+    # ================================================================
+    clusters_rows = [
+        ['🔗 Near-Duplicate-Cluster (Stage 2)', '', '', '', '', ''],
+        [f'Gesamt: {len(cluster_info)} Cluster mit {len(removed_docs)} entfernten Dokumenten', '', '', '', '', ''],
+        ['', '', '', '', '', ''],
+        ['Cluster', 'Canonical Doc ID', 'Canonical URL', 'Anzahl Docs', 'Member IDs', 'Content-Types'],
+    ]
+    
+    # Mapping doc_id -> doc
+    id_to_doc = {doc.get('doc_id'): doc for doc in all_docs}
+    
+    for info in cluster_info:
+        member_ids_str = ', '.join(str(mid) for mid in info['member_ids'])
+        member_docs = [id_to_doc.get(mid) for mid in info['member_ids'] if mid in id_to_doc]
+        content_types = ', '.join(set(d.get('content_type', '').upper() for d in member_docs if d))
+        
+        clusters_rows.append([
+            info['cluster_idx'],
+            info['canonical_id'],
+            info['canonical_url'][:80] + ('...' if len(info['canonical_url']) > 80 else ''),
+            info['size'],
+            member_ids_str,
+            content_types
+        ])
+    
+    df_clusters = pd.DataFrame(clusters_rows)
+    
+    # ================================================================
+    # Sheet 3: Entfernte Dokumente (mit Stichproben-Markierung)
+    # ================================================================
+    # Stichprobe bestimmen (deterministisch mit seed=42)
+    random.seed(42)
+    
+    sample_size = min(20, len(removed_docs))
+    sample_indices = set(random.sample(range(len(removed_docs)), sample_size)) if removed_docs else set()
+    
+    removed_rows = [
+        ['🗑️ Alle entfernten Near-Duplicate-Dokumente', '', '', '', '', '', '', '', ''],
+        [f'Stichprobe: {len(sample_indices)} Dokumente (Seed: 42)', '', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', '', ''],
+        ['Stichprobe', 'Stage', 'Cluster', 'Doc ID', 'Content-Type', 'Entfernte URL', 'Titel', 'Zeichen', 'Ersetzt durch URL'],
+    ]
+    
+    for idx, doc in enumerate(removed_docs):
+        doc_id = doc.get('doc_id')
+        is_sample = idx in sample_indices
+        
+        # Finde Cluster-Index
+        cluster_idx = 0
+        for info in cluster_info:
+            if doc_id in info['member_ids']:
+                cluster_idx = info['cluster_idx']
+                break
+        
+        removed_rows.append([
+            '✓ PRÜFEN' if is_sample else '',
+            'Near-Deduplication',
+            cluster_idx,
+            doc_id,
+            doc.get('content_type', '').upper(),
+            doc.get('url', ''),
+            (doc.get('title', '') or '')[:60],
+            len(doc.get('text', '')),
+            doc.get('_near_duplicate_of', '')
+        ])
+    
+    df_removed = pd.DataFrame(removed_rows)
+    
+    # ================================================================
+    # Sheet 4: Stichprobe (nur entfernte Docs zur manuellen Prüfung)
+    # ================================================================
+    sample_docs = [removed_docs[i] for i in sorted(sample_indices)]
+    
+    sample_rows = [
+        ['🔍 Stichprobe zur manuellen Überprüfung', '', '', '', '', ''],
+        [f'Seed: 42 | Stichprobe: {len(sample_docs)} von {len(removed_docs)} Dokumenten', '', '', '', '', ''],
+        ['Bitte überprüfen Sie, ob die entfernten Dokumente tatsächlich Near-Duplicates der Canonical-Dokumente sind.', '', '', '', '', ''],
+        ['', '', '', '', '', ''],
+        ['#', 'Typ', 'Doc ID', 'Entfernte URL', 'Ersetzt durch URL', 'Korrekt? (J/N)', 'Anmerkung'],
+    ]
+    
+    for i, doc in enumerate(sample_docs, 1):
+        sample_rows.append([
+            i,
+            doc.get('content_type', '').upper(),
+            doc.get('doc_id', ''),
+            doc.get('url', ''),
+            doc.get('_near_duplicate_of', ''),
+            '',  # Korrekt? (J/N) - leer für manuelle Eingabe
+            ''   # Anmerkung - leer für manuelle Eingabe
+        ])
+    
+    df_sample = pd.DataFrame(sample_rows)
+    
+    # Speichere Excel
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        df_overview.to_excel(writer, sheet_name='Übersicht', index=False, header=False)
+        df_clusters.to_excel(writer, sheet_name='Near-Duplicate-Cluster', index=False, header=False)
+        df_removed.to_excel(writer, sheet_name='Entfernte Dokumente', index=False, header=False)
+        df_sample.to_excel(writer, sheet_name='Stichprobe', index=False, header=False)
+        
+        # ================================================================
+        # Formatierungen anwenden (wie im Template)
+        # ================================================================
+        wb = writer.book
+        
+        # Farben definieren (wie im Template)
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')  # Dunkelblau
+        total_fill = PatternFill(start_color='8FAADC', end_color='8FAADC', fill_type='solid')   # Hellblau
+        sample_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')  # Gelb
+        header_font = Font(bold=True, color='FFFFFF')  # Weiß
+        total_font = Font(bold=True)
+        
+        # --- Sheet 1: Übersicht ---
+        ws_overview = wb['Übersicht']
+        ws_overview.cell(row=1, column=1).font = Font(bold=True)
+        # Parameter-Header
+        for col in range(1, 3):
+            cell = ws_overview.cell(row=4, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        # Stage-Header
+        for col in range(1, 8):
+            cell = ws_overview.cell(row=11, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        # Statistik-Titel
+        ws_overview.cell(row=14, column=1).font = Font(bold=True)
+        # Content-Type Header
+        for col in range(1, 6):
+            cell = ws_overview.cell(row=15, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        # --- Sheet 2: Cluster ---
+        ws_clusters = wb['Near-Duplicate-Cluster']
+        ws_clusters.cell(row=1, column=1).font = Font(bold=True)
+        for col in range(1, 7):
+            cell = ws_clusters.cell(row=4, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        # --- Sheet 3: Entfernte Dokumente ---
+        ws_removed = wb['Entfernte Dokumente']
+        ws_removed.cell(row=1, column=1).font = Font(bold=True)
+        for col in range(1, 10):
+            cell = ws_removed.cell(row=4, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        # Gelbe Markierung für Stichproben-Zeilen
+        for row_idx in range(5, ws_removed.max_row + 1):
+            if ws_removed.cell(row=row_idx, column=1).value == '✓ PRÜFEN':
+                for col in range(1, 10):
+                    ws_removed.cell(row=row_idx, column=col).fill = sample_fill
+        
+        # --- Sheet 4: Stichprobe ---
+        ws_sample = wb['Stichprobe']
+        ws_sample.cell(row=1, column=1).font = Font(bold=True)
+        for col in range(1, 8):
+            cell = ws_sample.cell(row=5, column=col)
+            cell.fill = header_fill
+            cell.font = header_font
+        # Hellgrüne Eingabefelder
+        input_fill = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+        for row_idx in range(6, ws_sample.max_row + 1):
+            if ws_sample.cell(row=row_idx, column=1).value:
+                ws_sample.cell(row=row_idx, column=6).fill = input_fill
+                ws_sample.cell(row=row_idx, column=7).fill = input_fill
+    
+    print(f"   ✅ Excel erstellt: {len(cluster_info)} Cluster, {len(removed_docs)} entfernt, {len(sample_docs)} in Stichprobe")
+    
+    return str(excel_path)
+
+
+# ============================================================================
 # ENTRY POINT FÜR DEMO
 # ============================================================================
 

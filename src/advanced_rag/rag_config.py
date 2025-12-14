@@ -38,7 +38,7 @@ class RAGConfig:
     # ============================================================================
     enable_semantic_chunking: bool = False
     enable_content_cleaning: bool = False
-    enable_deduplication: bool = False
+    enable_deduplication: bool = False  # Aktiviert Exact + Near Deduplication
     enable_multi_collection: bool = False
     enable_result_aggregation: bool = False
     enable_distance_conversion: bool = False
@@ -68,9 +68,14 @@ class RAGConfig:
     content_cleaning_remove_html: bool = True
     content_cleaning_normalize_whitespace: bool = True
     
-    # Deduplication
+    # Deduplication (Exact)
     deduplication_similarity_threshold: float = 0.85
     deduplication_shingle_size: int = 3
+    
+    # Near-Deduplication (Document-Level)
+    near_deduplication_shingle_k: int = 5
+    near_deduplication_similarity_threshold: float = 0.95
+    near_deduplication_min_words: int = 120
     
     # ============================================================================
     # RETRIEVAL HYPERPARAMETER
@@ -143,8 +148,16 @@ class RAGConfig:
     
     @property
     def use_deduplication(self) -> bool:
-        """Pre-Retrieval: Deduplication aktiv?"""
+        """Pre-Retrieval: Deduplication (Exact + Near) aktiv?"""
         return (not self.naive_setup) and self.enable_deduplication
+    
+    @property
+    def use_near_deduplication(self) -> bool:
+        """Pre-Retrieval: Near-Deduplication (Document-Level) aktiv?
+        
+        Automatisch aktiviert wenn Deduplication aktiviert ist.
+        """
+        return self.use_deduplication  # Near-Dedup ist Teil von Deduplication
     
     @property
     def use_multi_collection_search(self) -> bool:
@@ -247,7 +260,7 @@ class RAGConfig:
             # === INDIVIDUAL FEATURE FLAGS ===
             enable_semantic_chunking=_get_bool_env("ENABLE_SEMANTIC_CHUNKING", True),
             enable_content_cleaning=_get_bool_env("ENABLE_CONTENT_CLEANING", False),
-            enable_deduplication=_get_bool_env("ENABLE_DEDUPLICATION", False),
+            enable_deduplication=_get_bool_env("ENABLE_DEDUPLICATION", False),  # Aktiviert Exact + Near
             enable_multi_collection=_get_bool_env("ENABLE_MULTI_COLLECTION", False),
             enable_result_aggregation=_get_bool_env("ENABLE_RESULT_AGGREGATION", False),
             enable_distance_conversion=_get_bool_env("ENABLE_DISTANCE_CONVERSION", False),
@@ -274,6 +287,11 @@ class RAGConfig:
             
             deduplication_similarity_threshold=_get_float_env("DEDUPLICATION_SIMILARITY_THRESHOLD", 0.85),
             deduplication_shingle_size=_get_int_env("DEDUPLICATION_SHINGLE_SIZE", 3),
+            
+            # Near-Deduplication (Document-Level)
+            near_deduplication_shingle_k=_get_int_env("NEAR_DEDUPLICATION_SHINGLE_K", 5),
+            near_deduplication_similarity_threshold=_get_float_env("NEAR_DEDUPLICATION_SIMILARITY_THRESHOLD", 0.95),
+            near_deduplication_min_words=_get_int_env("NEAR_DEDUPLICATION_MIN_WORDS", 120),
             
             # === RETRIEVAL HYPERPARAMETER ===
             multi_collection_k_per_collection=_get_int_env("MULTI_COLLECTION_K_PER_COLLECTION", 3),
