@@ -1,3 +1,0 @@
-Faithfulness: 0.507
-Context Recall: 0.76
-Context Precision: 0.627
