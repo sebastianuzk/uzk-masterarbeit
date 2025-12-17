@@ -74,7 +74,7 @@ class RAGConfig:
     
     # Near-Deduplication (Document-Level)
     near_deduplication_shingle_k: int = 5
-    near_deduplication_similarity_threshold: float = 0.95
+    near_deduplication_similarity_threshold: float = 0.90
     near_deduplication_min_words: int = 120
     
     # ============================================================================
@@ -290,7 +290,7 @@ class RAGConfig:
             
             # Near-Deduplication (Document-Level)
             near_deduplication_shingle_k=_get_int_env("NEAR_DEDUPLICATION_SHINGLE_K", 5),
-            near_deduplication_similarity_threshold=_get_float_env("NEAR_DEDUPLICATION_SIMILARITY_THRESHOLD", 0.95),
+            near_deduplication_similarity_threshold=_get_float_env("NEAR_DEDUPLICATION_SIMILARITY_THRESHOLD", 0.90),
             near_deduplication_min_words=_get_int_env("NEAR_DEDUPLICATION_MIN_WORDS", 120),
             
             # === RETRIEVAL HYPERPARAMETER ===

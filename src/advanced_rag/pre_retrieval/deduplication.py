@@ -174,61 +174,6 @@ def compute_normalized_hash(text: str) -> str:
     return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
 
 
-def demo_normalization():
-    """
-    Demonstriert die Normalisierung mit Beispieltexten.
-    
-    Zeigt Original und normalisierten Text für verschiedene Fälle.
-    """
-    test_cases = [
-        # Typografische Varianten
-        ('Anführungszeichen', 
-         '„Dies ist ein Test" und «noch einer»'),
-        
-        # Bindestriche
-        ('Bindestriche', 
-         'Hin- und Herfahrt – mit Em-Dash — und mehr'),
-        
-        # Aufzählungen
-        ('Bullet-Liste', 
-         '- Punkt 1\n* Punkt 2\n• Punkt 3\n+ Punkt 4'),
-        
-        # Nummerierte Liste
-        ('Nummerierte Liste', 
-         '1. Erster Punkt\n2. Zweiter Punkt\na) Unterpunkt\nb) Noch einer'),
-        
-        # Markdown-Überschriften
-        ('Markdown-Headings', 
-         '# Überschrift 1\n## Überschrift 2\n### Überschrift 3'),
-        
-        # Dekorative Linien
-        ('Dekorative Linien', 
-         'Text davor\n--------------------\nText danach\n====================\nEnde'),
-        
-        # Geschützte Leerzeichen
-        ('Geschützte Leerzeichen', 
-         'Wort\u00A0mit\u00A0NBSP\u00A0Zeichen'),
-        
-        # Gemischter Fall
-        ('Gemischter Fall', 
-         '## „Studienordnung" 2024\n- Punkt 1: Hin- und Rückfahrt\n- Punkt 2: 30 LP erforderlich\n----\nWeiterer Text'),
-    ]
-    
-    print("=" * 80)
-    print("DEMO: Text-Normalisierung für Exact-Deduplication")
-    print("=" * 80)
-    
-    for name, original in test_cases:
-        normalized = normalize_text(original)
-        print(f"\n📝 {name}:")
-        print(f"   Original:    {repr(original)}")
-        print(f"   Normalisiert: {repr(normalized)}")
-    
-    print("\n" + "=" * 80)
-    print("✅ Demo abgeschlossen")
-    print("=" * 80)
-
-
 # ============================================================================
 # EXACT-DEDUPLICATION AUF DOKUMENT-EBENE
 # ============================================================================
@@ -1003,14 +948,14 @@ def deduplicate_documents_near(
     text_key: str = 'text',
     id_key: str = 'doc_id',
     shingle_k: int = 5,
-    similarity_threshold: float = 0.95,
+    similarity_threshold: float = 0.90,
     min_words: int = 120
 ) -> tuple[list[dict], list[dict], dict]:
     """
     Near-Deduplication auf Dokument-Ebene (nach Exact-Dedup, vor Chunking).
     
     Findet inhaltlich nahezu identische Dokumente mittels Wort-Shingling und
-    Jaccard-Ähnlichkeit. Unterschiedliche Prüfungsordnungen bleiben erhalten.
+    Jaccard-Ähnlichkeit.
     
     Vergleicht nur Dokumente mit gleichem content_type (HTML↔HTML, PDF↔PDF).
     Verwendet Size-Bucketing zur Reduzierung der Kandidatenpaare.
@@ -1021,7 +966,7 @@ def deduplicate_documents_near(
         text_key: Schlüssel für den Textinhalt (default: 'text')
         id_key: Schlüssel für die Dokument-ID (default: 'doc_id')
         shingle_k: Größe der Wort-Shingles (default: 5)
-        similarity_threshold: Schwellwert für Near-Duplicate (default: 0.95)
+        similarity_threshold: Schwellwert für Content Near-Duplicate (default: 0.90)
         min_words: Minimale Wortanzahl für Vergleich (default: 120)
     
     Returns:
@@ -1032,8 +977,8 @@ def deduplicate_documents_near(
     
     Example:
         >>> docs = [
-        ...     {"doc_id": "1", "text": "...", "content_type": "html"},
-        ...     {"doc_id": "2", "text": "...", "content_type": "html"},  # Near-dup!
+        ...     {"doc_id": "1", "text": "...", "title": "PO BWL 2024", "content_type": "html"},
+        ...     {"doc_id": "2", "text": "...", "title": "PO BWL 2024", "content_type": "html"},  # Near-dup!
         ... ]
         >>> unique, removed, stats = deduplicate_documents_near(docs)
     """
@@ -1118,6 +1063,9 @@ def deduplicate_documents_near(
     union_find = UnionFind()
     verified_pairs = []
     
+    # Mapping doc_id -> doc für schnellen Zugriff
+    id_to_doc = {doc.get(id_key): doc for doc in documents}
+    
     for doc_id1, doc_id2 in candidate_pairs:
         shingles1 = doc_shingles.get(doc_id1)
         shingles2 = doc_shingles.get(doc_id2)
@@ -1134,11 +1082,11 @@ def deduplicate_documents_near(
             if max_possible < similarity_threshold:
                 continue
         
-        # Berechne Jaccard-Similarity
-        similarity = _jaccard_similarity(shingles1, shingles2)
+        # Berechne Content Jaccard-Similarity
+        content_similarity = _jaccard_similarity(shingles1, shingles2)
         
-        if similarity >= similarity_threshold:
-            verified_pairs.append((doc_id1, doc_id2, similarity))
+        if content_similarity >= similarity_threshold:
+            verified_pairs.append((doc_id1, doc_id2, content_similarity))
             union_find.union(doc_id1, doc_id2)
     
     logger.info(f"   {len(verified_pairs)} verifizierte Near-Duplicate-Paare")
@@ -1151,8 +1099,7 @@ def deduplicate_documents_near(
     # Nur Cluster mit > 1 Element sind relevant
     duplicate_clusters = {k: v for k, v in raw_clusters.items() if len(v) > 1}
     
-    # Mapping doc_id -> doc für schnellen Zugriff
-    id_to_doc = {doc.get(id_key): doc for doc in documents}
+    # id_to_doc wurde bereits in SCHRITT 4 erstellt
     
     # Pro Cluster: Canonical wählen, Rest als Duplikate markieren
     canonical_doc_ids = set()
@@ -1282,7 +1229,7 @@ def create_near_dedup_excel(unique_docs: list, removed_docs: list, near_dedup_st
         ['', '', '', '', '', '', ''],
         ['Parameter', 'Wert', '', '', '', '', ''],
         ['Shingle-Größe (k)', near_dedup_stats.get('shingle_k', 5), '', '', '', '', ''],
-        ['Similarity-Threshold', near_dedup_stats.get('similarity_threshold', 0.95), '', '', '', '', ''],
+        ['Content-Similarity-Threshold', near_dedup_stats.get('similarity_threshold', 0.90), '', '', '', '', ''],
         ['Min. Wörter', near_dedup_stats.get('min_words', 120), '', '', '', '', ''],
         ['Kandidatenpaare', f"{near_dedup_stats.get('candidate_pairs', 0):,}", '', '', '', '', ''],
         ['Verifizierte Paare', near_dedup_stats.get('verified_pairs', 0), '', '', '', '', ''],
@@ -1424,16 +1371,16 @@ def create_near_dedup_excel(unique_docs: list, removed_docs: list, near_dedup_st
             cell = ws_overview.cell(row=4, column=col)
             cell.fill = header_fill
             cell.font = header_font
-        # Stage-Header
+        # Stage-Header (verschoben um 2 Zeilen wegen neuer Titel-Parameter)
         for col in range(1, 8):
-            cell = ws_overview.cell(row=11, column=col)
+            cell = ws_overview.cell(row=13, column=col)
             cell.fill = header_fill
             cell.font = header_font
         # Statistik-Titel
-        ws_overview.cell(row=14, column=1).font = Font(bold=True)
+        ws_overview.cell(row=16, column=1).font = Font(bold=True)
         # Content-Type Header
         for col in range(1, 6):
-            cell = ws_overview.cell(row=15, column=col)
+            cell = ws_overview.cell(row=17, column=col)
             cell.fill = header_fill
             cell.font = header_font
         
@@ -1472,14 +1419,6 @@ def create_near_dedup_excel(unique_docs: list, removed_docs: list, near_dedup_st
                 ws_sample.cell(row=row_idx, column=6).fill = input_fill
                 ws_sample.cell(row=row_idx, column=7).fill = input_fill
     
-    print(f"   ✅ Excel erstellt: {len(cluster_info)} Cluster, {len(removed_docs)} entfernt, {len(sample_docs)} in Stichprobe")
+    print(f"   ✅ Excel erstellt: {len(cluster_info)} Cluster, {len(removed_docs)} entfernt")
     
     return str(excel_path)
-
-
-# ============================================================================
-# ENTRY POINT FÜR DEMO
-# ============================================================================
-
-if __name__ == "__main__":
-    demo_normalization()
