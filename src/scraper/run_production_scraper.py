@@ -23,6 +23,7 @@ from tqdm import tqdm
 import time
 from datetime import datetime
 import pandas as pd
+import numpy as np
 
 # Scraper Utils
 from src.scraper.utils.checkpoint_manager import CheckpointManager
@@ -832,13 +833,17 @@ def run_production_scraper():
         
         print(f"   ✅ {len(all_chunks):,} Chunks gesammelt")
         
-        # Batch-Embedding mit Progress Bar
+        # Batch-Embedding mit Progress Bar (MIT NORMALISIERUNG für echte Cosine-Similarity)
         all_embeddings = []
         with tqdm(total=len(all_chunks), desc=f"   🤖 Embeddings", unit="chunk") as pbar:
             for i in range(0, len(all_chunks), BATCH_SIZE):
                 batch = all_chunks[i:i + BATCH_SIZE]
                 embeddings = embedding_model.encode(batch, show_progress_bar=False)
-                all_embeddings.extend(embeddings.tolist())
+                # Normalisiere Embeddings für echte Cosine-Similarity
+                # L2-Distanz auf normalisierten Vektoren = sqrt(2 * (1 - cosine_sim))
+                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+                normalized_embeddings = embeddings / norms
+                all_embeddings.extend(normalized_embeddings.tolist())
                 pbar.update(len(batch))
         
         # Batch-Speicherung in ChromaDB (mit Größenlimit)

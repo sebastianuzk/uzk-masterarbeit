@@ -16,6 +16,7 @@ Features:
 import os
 import json
 import hashlib
+import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Union
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -177,7 +178,10 @@ class SentenceTransformerProvider(EmbeddingProvider):
     
     def encode(self, texts: List[str]) -> List[List[float]]:
         embeddings = self.model.encode(texts, convert_to_tensor=False)
-        return embeddings.tolist()
+        # Normalisiere Embeddings für echte Cosine-Similarity
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        normalized_embeddings = embeddings / norms
+        return normalized_embeddings.tolist()
     
     def get_dimension(self) -> int:
         return self.dimension

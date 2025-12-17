@@ -7,6 +7,7 @@ Komplette Advanced-Retrieval-Logik inkl. Client-Management.
 """
 import logging
 from typing import List, Dict, Any, Optional
+import numpy as np
 import chromadb
 from pathlib import Path
 from langsmith import traceable
@@ -136,7 +137,10 @@ def advanced_retrieve(query: str, k_per_collection: int = 3) -> List[Dict[str, A
     from sentence_transformers import SentenceTransformer
     from config.settings import SENTENCE_TRANSFORMER_MODEL
     embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
-    query_embedding = embedding_model.encode([query]).tolist()[0]
+    raw_embedding = embedding_model.encode([query])
+    # Normalisiere Query-Embedding für echte Cosine-Similarity
+    normalized_embedding = raw_embedding / np.linalg.norm(raw_embedding, axis=1, keepdims=True)
+    query_embedding = normalized_embedding.tolist()[0]
     
     # Multi-Collection Searcher
     searcher = MultiCollectionSearcher(

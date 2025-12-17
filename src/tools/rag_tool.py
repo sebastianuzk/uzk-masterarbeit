@@ -10,6 +10,7 @@ Die Techniken werden optional geladen, basierend auf RAGConfig.
 
 import logging
 from typing import Any, Dict, List, Optional
+import numpy as np
 
 from langchain.tools import BaseTool
 from langsmith import traceable
@@ -164,7 +165,10 @@ class UniversityRAGTool(BaseTool):
         try:
             # Erstelle Query-Embedding mit dem gleichen Modell wie beim Scraping
             embedding_model = self._get_embedding_model()
-            query_embedding = embedding_model.encode([query]).tolist()
+            raw_embedding = embedding_model.encode([query])
+            # Normalisiere Query-Embedding (wie bei Indexierung) für echte Cosine-Similarity
+            normalized_embedding = raw_embedding / np.linalg.norm(raw_embedding, axis=1, keepdims=True)
+            query_embedding = normalized_embedding.tolist()
             
             results = collection.query(
                 query_embeddings=query_embedding,
