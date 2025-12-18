@@ -10,6 +10,12 @@ Evaluiert den Chatbot mit RAGAS-Framework:
 """
 
 import sys
+import warnings
+
+# Unterdrücke DeprecationWarnings von RAGAS (LangchainEmbeddingsWrapper ist deprecated,
+# aber notwendig für ResponseRelevancy mit lokalen HuggingFace-Embeddings in RAGAS 0.3.x)
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="ragas")
+
 import random
 import pandas as pd
 import numpy as np
@@ -28,10 +34,12 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from ragas import evaluate
-from ragas.metrics import faithfulness, context_recall, context_precision  # answer_relevancy benötigt Embeddings
+from ragas.metrics import faithfulness, context_recall, context_precision, SemanticSimilarity, ResponseRelevancy, ContextEntityRecall
 from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
+from ragas.embeddings import HuggingFaceEmbeddings, LangchainEmbeddingsWrapper
 from ragas.run_config import RunConfig
-from langchain_ollama import ChatOllama, OllamaEmbeddings
+from langchain_ollama import ChatOllama
+from langchain_huggingface import HuggingFaceEmbeddings as LangchainHFEmbeddings
 from langsmith import Client
 from config.settings import (
     OLLAMA_MODEL,
@@ -41,7 +49,8 @@ from config.settings import (
     RAGAS_EVAL_MODEL,
     TEMPERATURE,
     CONTEXT_WINDOW,
-    RANDOM_SEED
+    RANDOM_SEED,
+    SENTENCE_TRANSFORMER_MODEL
 )
 from src.agent.react_agent import create_react_agent
 
@@ -50,9 +59,9 @@ random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 
 
-def calculate_gold_doc_rank(context_hint: str, retrieved_urls: list) -> float:
+def calculate_RR_at5(context_hint: str, retrieved_urls: list) -> float:
     """
-    Berechnet den gold_doc_rank: An welcher Position erscheint die Referenz-URL?
+    Berechnet RR@5 (Reciprocal Rank): An welcher Position erscheint die Referenz-URL?
     
     Args:
         context_hint: Die erwartete Referenz-URL aus dem Testset
@@ -357,7 +366,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
 # KONFIGURATION
 # ============================================================================
 # Limit für Testfragen (None = alle, z.B. 5 für Test)
-TEST_LIMIT = None  # None = alle Fragen evaluieren
+TEST_LIMIT = 2  # None = alle Fragen evaluieren
 
 
 def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
@@ -383,19 +392,32 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
     print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
     
-    # Ollama Embeddings für answer_relevancy (später aktivieren)
-    # embeddings = OllamaEmbeddings(
-    #     model=OLLAMA_EMBEDDING_MODEL,
-    #     base_url=OLLAMA_BASE_URL
-    # )
-    # print(f"   Embeddings: {OLLAMA_EMBEDDING_MODEL} @ {OLLAMA_BASE_URL}")
+    # Embeddings für RAGAS-Metriken
+    # - SemanticSimilarity: Verwendet RAGAS HuggingFaceEmbeddings (embed_text Interface)
+    # - ResponseRelevancy: Benötigt LangChain-Interface (embed_query), daher LangchainEmbeddingsWrapper
+    ragas_embeddings = HuggingFaceEmbeddings(model=SENTENCE_TRANSFORMER_MODEL)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        langchain_embeddings = LangchainEmbeddingsWrapper(LangchainHFEmbeddings(model_name=SENTENCE_TRANSFORMER_MODEL))
+    print(f"   Embeddings: {SENTENCE_TRANSFORMER_MODEL} (für semantic_similarity, answer_relevancy)")
+    
+    # SemanticSimilarity mit RAGAS HuggingFaceEmbeddings
+    semantic_similarity = SemanticSimilarity(embeddings=ragas_embeddings)
+    
+    # ResponseRelevancy benötigt LangChain-Interface (embed_query/embed_documents)
+    response_relevancy = ResponseRelevancy(embeddings=langchain_embeddings)
+    
+    # ContextEntityRecall Metrik (misst Entitäten-Recall zwischen Referenz und Kontext)
+    context_entity_recall = ContextEntityRecall()
     
     # Standard RAGAS-Metriken
     metrics = [
-        faithfulness,       # Ist Antwort treu zum Kontext?
-        context_recall,     # Wurden alle relevanten Infos abgerufen?
-        context_precision   # Sind relevante Chunks höher gerankt?
-        # answer_relevancy  # Ist Antwort relevant zur Frage? (benötigt Embeddings)
+        faithfulness,           # Ist Antwort treu zum Kontext?
+        context_recall,         # Wurden alle relevanten Infos abgerufen?
+        context_precision,      # Sind relevante Chunks höher gerankt?
+        semantic_similarity,    # Semantische Ähnlichkeit zwischen Antwort und Referenz
+        context_entity_recall,  # Entitäten-Recall zwischen Referenz und Kontext
+        response_relevancy      # Relevanz der Antwort zur gestellten Frage
     ]
     print(f"   Metriken: {[m.name for m in metrics]}")
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
@@ -403,9 +425,11 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     
     # RunConfig für parallele Requests an Ollama
     # seed=RANDOM_SEED für Reproduzierbarkeit (RAGAS verwendet numpy RNG intern)
+    # timeout=240 für längere Metrik-Berechnungen (response_relevancy)
     run_config = RunConfig(
         max_workers=4,
-        seed=RANDOM_SEED
+        seed=RANDOM_SEED,
+        timeout=240
     )
     
     # Zeit messen für Evaluation
@@ -467,17 +491,27 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     else:
         results_df['retrieved_content_types'] = None
     
-    # gold_doc_rank berechnen (Position der Referenz-URL in retrieved contexts)
+    # RR_at5 berechnen (Reciprocal Rank: Position der Referenz-URL in retrieved contexts)
     if urls_list:
-        gold_doc_ranks = []
+        rr_at5_values = []
+        hit_at5_values = []
         for i in range(len(results_df)):
             context_hint = test_df['context_hint'].iloc[i] if i < len(test_df) else None
             retrieved_urls = urls_list[i] if i < len(urls_list) else []
-            rank = calculate_gold_doc_rank(context_hint, retrieved_urls)
-            gold_doc_ranks.append(rank)
-        results_df['gold_doc_rank'] = gold_doc_ranks
+            rr = calculate_RR_at5(context_hint, retrieved_urls)
+            rr_at5_values.append(rr)
+            hit_at5_values.append(1.0 if rr > 0 else 0.0)
+        results_df['RR_at5'] = rr_at5_values
+        results_df['hit_at5'] = hit_at5_values
     else:
-        results_df['gold_doc_rank'] = None
+        results_df['RR_at5'] = None
+        results_df['hit_at5'] = None
+    
+    # Latency als Kopie von response_time_seconds
+    if 'response_time_seconds' in results_df.columns:
+        results_df['latency'] = results_df['response_time_seconds']
+    else:
+        results_df['latency'] = None
     
     # ============================================================================
     # SOFORT SPEICHERN - Rohdaten CSV (bevor irgendwas schiefgehen kann)
@@ -496,10 +530,12 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     # Gesamtscores
     print("\n📈 Durchschnittliche Scores:")
     print("-" * 80)
-    for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
-        if metric in results_df.columns:
+    for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+        if metric in results_df.columns and results_df[metric].notna().any():
             avg = results_df[metric].mean()
-            print(f"   {metric:20s}: {avg:.3f}")
+            # Anzeigename für Zusammenfassung
+            display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+            print(f"   {display_name:20s}: {avg:.3f}")
     
     # Nach Kategorie (NaN ausfiltern)
     print("\n📁 Scores nach Kategorie:")
@@ -508,10 +544,11 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     for category in sorted(display_categories):
         cat_df = results_df[results_df['category'] == category]
         print(f"\n   {category}:")
-        for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
-            if metric in cat_df.columns:
+        for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+            if metric in cat_df.columns and cat_df[metric].notna().any():
                 avg = cat_df[metric].mean()
-                print(f"      {metric:20s}: {avg:.3f}")
+                display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                print(f"      {display_name:20s}: {avg:.3f}")
     
     # Nach Schwierigkeit
     print("\n⚡ Scores nach Schwierigkeit:")
@@ -520,10 +557,11 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         diff_df = results_df[results_df['difficulty'] == difficulty]
         if len(diff_df) > 0:
             print(f"\n   {difficulty.upper()}:")
-            for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
-                if metric in diff_df.columns:
+            for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+                if metric in diff_df.columns and diff_df[metric].notna().any():
                     avg = diff_df[metric].mean()
-                    print(f"      {metric:20s}: {avg:.3f}")
+                    display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                    print(f"      {display_name:20s}: {avg:.3f}")
     
     # Speichern in CSV (alle Spalten)
     output_path_csv = Path(__file__).parent / "data" / "ragas_results.csv"
@@ -554,10 +592,11 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if x else ''
         )
     
-    # CSV mit allen wichtigen Spalten (erweitert um response_time, urls, content_types und gold_doc_rank)
+    # CSV mit allen wichtigen Spalten (erweitert um response_time, urls, content_types und alle Metriken)
     csv_columns = ['id', 'category', 'difficulty', 'user_input', 'response', 
                    'reference', 'retrieved_contexts', 'retrieved_urls', 'retrieved_content_types',
-                   'faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank',
+                   'faithfulness', 'context_recall', 'context_precision', 'semantic_similarity',
+                   'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency',
                    'context_count', 'response_time_seconds']
     
     # Nur vorhandene Spalten verwenden
@@ -586,7 +625,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     # ============================================================================
     # DURCHSCHNITTE: Gesamt, pro Kategorie, pro Schwierigkeit, kombiniert
     # ============================================================================
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']
     
     # Gesamtdurchschnitt
     avg_row = {col: '' for col in csv_columns}
@@ -707,10 +746,18 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_details.column_dimensions['E'].width = 60  # response
         ws_details.column_dimensions['F'].width = 50  # reference
         ws_details.column_dimensions['G'].width = 40  # contexts
-        ws_details.column_dimensions['H'].width = 15  # faithfulness
-        ws_details.column_dimensions['I'].width = 15  # context_recall
-        ws_details.column_dimensions['J'].width = 17  # context_precision
-        ws_details.column_dimensions['K'].width = 15  # context_count
+        ws_details.column_dimensions['H'].width = 30  # retrieved_urls
+        ws_details.column_dimensions['I'].width = 20  # retrieved_content_types
+        ws_details.column_dimensions['J'].width = 13  # faithfulness
+        ws_details.column_dimensions['K'].width = 13  # context_recall
+        ws_details.column_dimensions['L'].width = 15  # context_precision
+        ws_details.column_dimensions['M'].width = 17  # semantic_similarity
+        ws_details.column_dimensions['N'].width = 20  # context_entity_recall
+        ws_details.column_dimensions['O'].width = 18  # answer_relevancy
+        ws_details.column_dimensions['P'].width = 10  # RR_at5
+        ws_details.column_dimensions['Q'].width = 10  # hit_at5
+        ws_details.column_dimensions['R'].width = 12  # context_count
+        ws_details.column_dimensions['S'].width = 15  # response_time_seconds
         
         # Sheet 2: Zusammenfassung
         ws_summary = wb.create_sheet("Zusammenfassung")
@@ -726,15 +773,17 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'A{row}'].font = Font(bold=True, size=12)
         row += 1
         
-        for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
-            if metric in results_df.columns:
+        for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+            if metric in results_df.columns and results_df[metric].notna().any():
                 avg = results_df[metric].mean()
-                ws_summary[f'A{row}'] = metric
+                # Anzeigename für Excel
+                display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                ws_summary[f'A{row}'] = display_name
                 ws_summary[f'B{row}'] = avg
                 ws_summary[f'B{row}'].number_format = '0.000'
                 
-                # Farbe basierend auf Score (gold_doc_rank hat andere Skala)
-                if metric != 'gold_doc_rank':
+                # Farbe basierend auf Score (nicht für latency)
+                if metric != 'latency':
                     if avg >= 0.8:
                         ws_summary[f'B{row}'].fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
                     elif avg >= 0.6:
@@ -755,8 +804,13 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'B{row}'] = "Faithfulness"
         ws_summary[f'C{row}'] = "Context Recall"
         ws_summary[f'D{row}'] = "Context Precision"
-        ws_summary[f'E{row}'] = "Gold Doc Rank"
-        for col in ['A', 'B', 'C', 'D', 'E']:
+        ws_summary[f'E{row}'] = "Semantic Similarity"
+        ws_summary[f'F{row}'] = "Context Entity Recall"
+        ws_summary[f'G{row}'] = "Answer Relevancy"
+        ws_summary[f'H{row}'] = "MRR@5"
+        ws_summary[f'I{row}'] = "Hit@5"
+        ws_summary[f'J{row}'] = "Latency"
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
             ws_summary[f'{col}{row}'].font = Font(bold=True)
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
@@ -767,10 +821,10 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             cat_df = results_df[results_df['category'] == category]
             ws_summary[f'A{row}'] = category
             
-            for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank'], 2):
+            for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency'], 1):
                 if metric in cat_df.columns:
                     avg = cat_df[metric].mean()
-                    col_letter = chr(65 + idx)  # B, C, D, E
+                    col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J
                     ws_summary[f'{col_letter}{row}'] = avg
                     ws_summary[f'{col_letter}{row}'].number_format = '0.000'
             
@@ -787,8 +841,13 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'B{row}'] = "Faithfulness"
         ws_summary[f'C{row}'] = "Context Recall"
         ws_summary[f'D{row}'] = "Context Precision"
-        ws_summary[f'E{row}'] = "Gold Doc Rank"
-        for col in ['A', 'B', 'C', 'D', 'E']:
+        ws_summary[f'E{row}'] = "Semantic Similarity"
+        ws_summary[f'F{row}'] = "Context Entity Recall"
+        ws_summary[f'G{row}'] = "Answer Relevancy"
+        ws_summary[f'H{row}'] = "MRR@5"
+        ws_summary[f'I{row}'] = "Hit@5"
+        ws_summary[f'J{row}'] = "Latency"
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
             ws_summary[f'{col}{row}'].font = Font(bold=True)
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
@@ -798,10 +857,10 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             if len(diff_df) > 0:
                 ws_summary[f'A{row}'] = difficulty.upper()
                 
-                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank'], 2):
+                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency'], 1):
                     if metric in diff_df.columns:
                         avg = diff_df[metric].mean()
-                        col_letter = chr(65 + idx)  # B, C, D, E
+                        col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J
                         ws_summary[f'{col_letter}{row}'] = avg
                         ws_summary[f'{col_letter}{row}'].number_format = '0.000'
                 
@@ -812,7 +871,12 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary.column_dimensions['B'].width = 15
         ws_summary.column_dimensions['C'].width = 18
         ws_summary.column_dimensions['D'].width = 18
-        ws_summary.column_dimensions['E'].width = 15
+        ws_summary.column_dimensions['E'].width = 20
+        ws_summary.column_dimensions['F'].width = 22
+        ws_summary.column_dimensions['G'].width = 18
+        ws_summary.column_dimensions['H'].width = 10
+        ws_summary.column_dimensions['I'].width = 10
+        ws_summary.column_dimensions['J'].width = 10
         
         # Speichern
         wb.save(output_path_excel)

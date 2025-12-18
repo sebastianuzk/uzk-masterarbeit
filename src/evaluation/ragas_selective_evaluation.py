@@ -30,7 +30,9 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from ragas import evaluate
-from ragas.metrics import faithfulness, context_recall, context_precision
+from ragas.metrics import faithfulness, context_recall, context_precision, SemanticSimilarity, NoiseSensitivity, ResponseRelevancy, ContextEntityRecall
+from ragas.embeddings import LangchainEmbeddingsWrapper
+from langchain_huggingface import HuggingFaceEmbeddings as LangchainHFEmbeddings
 from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
 from ragas.run_config import RunConfig
 from langchain_ollama import ChatOllama
@@ -43,14 +45,15 @@ from config.settings import (
     RAGAS_EVAL_MODEL,
     TEMPERATURE,
     CONTEXT_WINDOW,
-    RANDOM_SEED
+    RANDOM_SEED,
+    SENTENCE_TRANSFORMER_MODEL
 )
 from src.agent.react_agent import create_react_agent
 
 
-def calculate_gold_doc_rank(context_hint: str, retrieved_urls: list) -> float:
+def calculate_RR_at5(context_hint: str, retrieved_urls: list) -> float:
     """
-    Berechnet den gold_doc_rank: An welcher Position erscheint die Referenz-URL?
+    Berechnet RR@5 (Reciprocal Rank): An welcher Position erscheint die Referenz-URL?
     
     Args:
         context_hint: Die erwartete Referenz-URL aus dem Testset
@@ -97,7 +100,7 @@ np.random.seed(RANDOM_SEED)
 # ============================================================================
 # KONFIGURATION: Hier die Indizes eintragen (1-basiert wie in CSV)
 # ============================================================================
-SPECIFIC_INDICES = list(range(1, 21))  # IDs 1-20 für Mini-Evaluation
+SPECIFIC_INDICES = list(range(1, 3))  # IDs 1-20 für Mini-Evaluation
 AUTO_DETECT_FAILED = False  # Deaktiviert - wir evaluieren alle
 AUTO_DETECT_MISSING = False  # Deaktiviert - wir evaluieren alle
 REUSE_EXISTING_RESPONSES = True  # Bestehende Antworten wiederverwenden
@@ -138,7 +141,7 @@ def detect_failed_and_missing_indices(results_path: Path, testset_path: Path) ->
     df = df[~df['id'].astype(str).isin(['META', 'AVG'])]
     
     # Prüfe welche IDs NaN-Werte in den Metriken haben
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5']
     existing_ids = set()
     
     for _, row in df.iterrows():
@@ -182,7 +185,7 @@ def detect_missing_metrics_per_id(results_path: Path) -> dict:
     # Filtere META/AVG Zeilen aus
     df = df[~df['id'].astype(str).isin(['META', 'AVG'])]
     
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5']
     missing_metrics = {}
     
     for _, row in df.iterrows():
@@ -441,11 +444,29 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
     print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
     
+    # HuggingFace Embeddings für semantic_similarity und response_relevancy (gleiches Modell wie Vektordatenbank)
+    # Verwende LangchainEmbeddingsWrapper weil ResponseRelevancy intern embed_query() benötigt
+    lc_embeddings = LangchainHFEmbeddings(model_name=SENTENCE_TRANSFORMER_MODEL)
+    embeddings = LangchainEmbeddingsWrapper(lc_embeddings)
+    print(f"   Embeddings: {SENTENCE_TRANSFORMER_MODEL} (für semantic_similarity, response_relevancy)")
+    
+    # SemanticSimilarity Metrik mit HuggingFace Embeddings
+    semantic_similarity = SemanticSimilarity(embeddings=embeddings)
+    
+    # ResponseRelevancy Metrik - embeddings werden über evaluate() übergeben
+    response_relevancy = ResponseRelevancy()
+    
+    # ContextEntityRecall Metrik (misst Entitäten-Recall zwischen Referenz und Kontext)
+    context_entity_recall = ContextEntityRecall()
+    
     # Alle verfügbaren Metriken
     all_metrics = {
         'faithfulness': faithfulness,
         'context_recall': context_recall,
-        'context_precision': context_precision
+        'context_precision': context_precision,
+        'semantic_similarity': semantic_similarity,
+        'context_entity_recall': context_entity_recall,
+        'response_relevancy': response_relevancy
     }
     
     # Wähle nur die gewünschten Metriken
@@ -460,9 +481,10 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     
     # RunConfig mit erhöhtem Timeout für Ollama (lokale GPU kann langsam sein)
     # seed=RANDOM_SEED für Reproduzierbarkeit (RAGAS verwendet numpy RNG intern)
+    # timeout=240 für längere Metrik-Berechnungen (noise_sensitivity, response_relevancy)
     run_config = RunConfig(
         max_workers=1,  # Reduziert von 4 auf 2 für weniger GPU-Last
-        timeout=300,  # 5 Minuten Timeout pro Request
+        timeout=240,  # 4 Minuten Timeout pro Request
         max_retries=3,
         max_wait=30,  # Max 30 Sekunden warten zwischen Retries
         seed=RANDOM_SEED  # Seed für numpy RNG in RAGAS
@@ -472,10 +494,12 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     eval_start = time.time()
     
     # Evaluation durchführen
+    # llm und embeddings werden global übergeben für Metriken die keine eigenen haben
     results = evaluate(
         dataset, 
         metrics=metrics, 
         llm=llm,
+        embeddings=embeddings,
         run_config=run_config,
         raise_exceptions=False
     )
@@ -483,6 +507,12 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     evaluation_time = time.time() - eval_start
     
     results_df = results.to_pandas()
+    
+    # RAGAS benennt Metriken mit Mode-Suffix - wir normalisieren die Spaltennamen
+    column_mapping = {
+        'answer_relevancy': 'response_relevancy',  # Falls RAGAS answer_relevancy verwendet
+    }
+    results_df = results_df.rename(columns=column_mapping)
     
     print(f"\n✅ RAGAS-Evaluation abgeschlossen in {evaluation_time:.2f}s")
     print(f"   ⏱️ Durchschn. pro Sample: {evaluation_time/len(dataset.samples):.2f}s\n")
@@ -525,7 +555,7 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
     if urls_list:
         new_results_df['retrieved_urls'] = [str(urls) for urls in urls_list[:len(new_results_df)]]
     
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5']
     
     if results_path.exists():
         print("📂 Lade bestehende Ergebnisse...")
@@ -613,7 +643,8 @@ def merge_results_with_existing(new_results_df: pd.DataFrame, test_df: pd.DataFr
             # Sortiere nach ID und wähle nur die relevanten Spalten (erweitert um neue Spalten)
             available_cols = ['id', 'category', 'difficulty', 'user_input', 'response', 
                               'reference', 'retrieved_contexts', 'retrieved_urls',
-                              'faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank',
+                              'faithfulness', 'context_recall', 'context_precision', 'semantic_similarity',
+                              'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency',
                               'context_count', 'response_time_seconds']
             # Nur vorhandene Spalten verwenden
             cols_to_use = [col for col in available_cols if col in merged_df.columns]
@@ -649,17 +680,19 @@ def display_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
     for _, row in results_with_ids.iterrows():
         q_id = row['id']
         print(f"\n   ID {q_id}:")
-        for metric in ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']:
-            if metric in row:
-                print(f"      {metric:20s}: {row[metric]:.3f}")
+        for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+            if metric in row and pd.notna(row.get(metric)):
+                display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                print(f"      {display_name:20s}: {row[metric]:.3f}")
     
     # Durchschnittliche Scores
     print("\n📈 Durchschnittliche Scores (evaluierte Fragen):")
     print("-" * 80)
-    for metric in ['faithfulness', 'context_recall', 'context_precision']:
-        if metric in results_df.columns:
+    for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+        if metric in results_df.columns and results_df[metric].notna().any():
             avg = results_df[metric].mean()
-            print(f"   {metric:20s}: {avg:.3f}")
+            display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+            print(f"   {display_name:20s}: {avg:.3f}")
 
 
 def main():
@@ -764,13 +797,13 @@ def main():
         merged_df = merge_results_with_existing(results_df, test_df, only_fill_nan=only_fill_nan,
                                                  response_times=response_times, urls_list=urls_list)
         
-        # 6b. gold_doc_rank berechnen (Position der Referenz-URL in retrieved contexts)
-        print("\n📊 Berechne gold_doc_rank...")
+        # 6b. RR_at5, hit_at5, latency berechnen
+        print("\n📊 Berechne zusätzliche Metriken (RR_at5, hit_at5, latency)...")
         testset_path = Path(__file__).parent / "data" / "Testset.CSV"
         testset_full = pd.read_csv(testset_path, sep=';', encoding='utf-8')
         context_hints = {int(row['id']): row['context_hint'] for _, row in testset_full.iterrows()}
         
-        gold_doc_ranks = []
+        rr_at5_values = []
         for _, row in merged_df.iterrows():
             row_id = int(row['id'])
             context_hint = context_hints.get(row_id, '')
@@ -788,13 +821,23 @@ def main():
             else:
                 retrieved_urls = []
             
-            rank = calculate_gold_doc_rank(context_hint, retrieved_urls)
-            gold_doc_ranks.append(rank)
+            rr = calculate_RR_at5(context_hint, retrieved_urls)
+            rr_at5_values.append(rr)
         
-        merged_df['gold_doc_rank'] = gold_doc_ranks
-        valid_ranks = [r for r in gold_doc_ranks if r > 0]
-        print(f"   ✅ gold_doc_rank berechnet: {len(valid_ranks)}/{len(gold_doc_ranks)} Referenz-URLs gefunden")
-        print(f"   📈 Durchschnitt gold_doc_rank: {sum(gold_doc_ranks)/len(gold_doc_ranks):.3f}")
+        # RR_at5 (Reciprocal Rank)
+        merged_df['RR_at5'] = rr_at5_values
+        
+        # hit_at5: 1.0 wenn Gold-Doc in Top-5 gefunden wurde, sonst 0.0
+        merged_df['hit_at5'] = merged_df['RR_at5'].apply(lambda x: 1.0 if x > 0 else 0.0)
+        
+        # latency: Kopie von response_time_seconds
+        if 'response_time_seconds' in merged_df.columns:
+            merged_df['latency'] = merged_df['response_time_seconds']
+        
+        valid_ranks = [r for r in rr_at5_values if r > 0]
+        print(f"   ✅ RR_at5 berechnet: {len(valid_ranks)}/{len(rr_at5_values)} Referenz-URLs gefunden")
+        print(f"   📈 MRR@5: {sum(rr_at5_values)/len(rr_at5_values):.3f}")
+        print(f"   📈 Hit@5: {merged_df['hit_at5'].mean():.3f}")
         
         # 7. Ergebnisse anzeigen
         display_results(results_df, test_df)
@@ -873,7 +916,7 @@ def main():
         # ============================================================================
         # DURCHSCHNITTE: Gesamt, pro Kategorie, pro Schwierigkeit, kombiniert
         # ============================================================================
-        metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'gold_doc_rank']
+        metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']
         
         # Gesamtdurchschnitt
         avg_row = {col: '' for col in csv_columns}
