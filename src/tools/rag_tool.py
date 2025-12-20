@@ -87,9 +87,11 @@ class UniversityRAGTool(BaseTool):
         """Lazy-load des Embedding-Modells für Query-Encoding."""
         if self._embedding_model is None:
             from sentence_transformers import SentenceTransformer
-            from config.settings import SENTENCE_TRANSFORMER_MODEL
-            self._embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
-            logger.info(f"Embedding-Modell geladen: {SENTENCE_TRANSFORMER_MODEL}")
+            from config.settings import SENTENCE_TRANSFORMER_MODEL, EMBEDDING_MAX_SEQ_LENGTH
+            self._embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, trust_remote_code=True)
+            # Setze max_seq_length entsprechend der Konfiguration nur bei bge-m3 --> ansonsten Auskommentieren!
+            self._embedding_model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
+            logger.info(f"Embedding-Modell geladen: {SENTENCE_TRANSFORMER_MODEL} (max_seq_length={EMBEDDING_MAX_SEQ_LENGTH})")
         return self._embedding_model
     
     def _should_use_advanced(self) -> bool:

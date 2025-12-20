@@ -459,8 +459,10 @@ def run_production_scraper():
     
     # Embedding-Modell zuerst laden (wird von SemanticChunker benötigt)
     print("\n🤖 Lade Embedding-Modell...")
-    embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
-    print(f"   ✅ {SENTENCE_TRANSFORMER_MODEL}")
+    from config.settings import EMBEDDING_MAX_SEQ_LENGTH
+    embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, trust_remote_code=True)
+    embedding_model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
+    print(f"   ✅ {SENTENCE_TRANSFORMER_MODEL} (max_seq_length={EMBEDDING_MAX_SEQ_LENGTH})")
     
     content_cleaner = None
     chunker = None
@@ -799,7 +801,7 @@ def run_production_scraper():
     print()
     
     # Batch-Größe für Embeddings
-    BATCH_SIZE = 128
+    BATCH_SIZE = 512
     
     for collection_name, docs in docs_by_collection.items():
         # Überspringe fertige Collections
@@ -838,12 +840,14 @@ def run_production_scraper():
         with tqdm(total=len(all_chunks), desc=f"   🤖 Embeddings", unit="chunk") as pbar:
             for i in range(0, len(all_chunks), BATCH_SIZE):
                 batch = all_chunks[i:i + BATCH_SIZE]
-                embeddings = embedding_model.encode(batch, show_progress_bar=False)
-                # Normalisiere Embeddings für echte Cosine-Similarity
-                # L2-Distanz auf normalisierten Vektoren = sqrt(2 * (1 - cosine_sim))
-                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-                normalized_embeddings = embeddings / norms
-                all_embeddings.extend(normalized_embeddings.tolist())
+                # Optimiert: normalize_embeddings=True spart manuelle Normalisierung
+                embeddings = embedding_model.encode(
+                    batch, 
+                    show_progress_bar=False,
+                    normalize_embeddings=True,  # Schneller als manuelle Normalisierung
+                    convert_to_numpy=True
+                )
+                all_embeddings.extend(embeddings.tolist())
                 pbar.update(len(batch))
         
         # Batch-Speicherung in ChromaDB (mit Größenlimit)
@@ -905,7 +909,8 @@ def run_production_scraper():
     print(f"   • Übersprungen: {stats['skipped']:,}")
     
     print(f"\n📦 Erstellte Chunks: {stats['chunks']:,}")
-    print(f"   • Durchschnitt: {stats['chunks']/stats['total']:.1f} Chunks/Dokument")
+    if stats['total'] > 0:
+        print(f"   • Durchschnitt: {stats['chunks']/stats['total']:.1f} Chunks/Dokument")
     
     print(f"\n🗂️  Collections:")
     for collection_name, chunk_count in stats['collections'].items():

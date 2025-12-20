@@ -36,7 +36,7 @@ class RAGConfig:
     # Wenn naive_setup=True, sind alle deaktiviert.
     # Wenn naive_setup=False, können einzelne Features hier deaktiviert werden.
     # ============================================================================
-    enable_semantic_chunking: bool = False
+    enable_semantic_chunking: bool = True
     enable_content_cleaning: bool = False
     enable_deduplication: bool = False  # Aktiviert Exact + Near Deduplication
     enable_multi_collection: bool = False
@@ -56,7 +56,7 @@ class RAGConfig:
     # Semantic Chunking (Defaults aus rag.env)
     semantic_chunking_max_size: int = 1750
     semantic_chunking_min_size: int = 400
-    semantic_chunking_overlap: int = 200
+    semantic_chunking_overlap: int = 300
     semantic_chunking_similarity_threshold: float = 0.7  # Schwellwert für Themenwechsel
     
     # Naive Chunking (fallback wenn Semantic Chunking deaktiviert)

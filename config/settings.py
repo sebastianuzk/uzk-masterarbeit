@@ -15,8 +15,9 @@ class Settings:
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")  # Kleineres Modell für begrenzte RAM-Systeme
     
     # SentenceTransformer Embedding-Modell (für Vektordatenbank & Semantic Chunking)
-    # paraphrase-multilingual-MiniLM-L12-v2 für DE+EN Texte (384 Dimensionen)
-    SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+    # BAAI/bge-m3: Multilingual, 1024 Dimensionen, max 8192 Tokens (wir nutzen 1024) --> max Tokens nur für bge-m3 zu setzen, ansonsten auskommentieren!
+    SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "BAAI/bge-m3")
+    EMBEDDING_MAX_SEQ_LENGTH = int(os.getenv("EMBEDDING_MAX_SEQ_LENGTH", "1024"))
     
     # LLM Konfiguration (Chatbot UND Evaluation)
     # Temperature 0.0 für deterministische Antworten, CONTEXT_WINDOW als Fallback
@@ -26,7 +27,7 @@ class Settings:
     
     # RAGAS Evaluation: Separates Modell für Metrik-Berechnung
     # (nutzt gleiche LLM-Parameter: TEMPERATURE, CONTEXT_WINDOW, RANDOM_SEED)
-    RAGAS_EVAL_MODEL = os.getenv("RAGAS_EVAL_MODEL", "qwen2.5:7b")
+    RAGAS_EVAL_MODEL = os.getenv("RAGAS_EVAL_MODEL", "phi4-mini:3.8b")
     
     # Reproduzierbarkeit
     RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
@@ -85,6 +86,7 @@ settings = Settings()
 OLLAMA_MODEL = settings.OLLAMA_MODEL
 OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
 SENTENCE_TRANSFORMER_MODEL = settings.SENTENCE_TRANSFORMER_MODEL
+EMBEDDING_MAX_SEQ_LENGTH = settings.EMBEDDING_MAX_SEQ_LENGTH
 LANGSMITH_API_KEY = settings.LANGSMITH_API_KEY
 LANGSMITH_PROJECT = settings.LANGSMITH_PROJECT
 TEMPERATURE = settings.TEMPERATURE

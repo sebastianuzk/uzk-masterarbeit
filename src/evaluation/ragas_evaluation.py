@@ -38,7 +38,7 @@ from ragas.metrics import faithfulness, context_recall, context_precision, Seman
 from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
 from ragas.embeddings import HuggingFaceEmbeddings, LangchainEmbeddingsWrapper
 from ragas.run_config import RunConfig
-from langchain_ollama import ChatOllama
+from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings as LangchainHFEmbeddings
 from langsmith import Client
 from config.settings import (
@@ -199,6 +199,33 @@ def stop_ollama_model(model_name: str):
         print(f"   ⚠️ Fehler beim Stoppen von {model_name}: {e}")
 
 
+def stop_embedding_model():
+    """
+    Gibt das Embedding-Modell (SentenceTransformer) frei, um GPU/RAM-Speicher freizugeben.
+    Löscht alle gecachten Modell-Instanzen aus dem RAG-Tool.
+    """
+    import torch
+    
+    try:
+        # Lösche gecachte Embedding-Modelle aus dem RAG-Tool
+        from src.tools.rag_tool import UniversityRAGTool
+        
+        # Iteriere über alle Instanzen und lösche Embedding-Modelle
+        # Da _embedding_model ein Klassenattribut ist, setzen wir es auf None
+        UniversityRAGTool._embedding_model = None
+        
+        # Garbage Collection und CUDA Cache leeren
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        
+        print("   ✅ Embedding-Modell freigegeben (GPU/RAM-Speicher)")
+        
+    except Exception as e:
+        print(f"   ⚠️ Fehler beim Freigeben des Embedding-Modells: {e}")
+
+
 def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> tuple:
     """
     Generiert Chatbot-Antworten für alle Fragen und sammelt RAG-Kontexte.
@@ -280,7 +307,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         
         # Agent.chat() mit Timeout
         try:
-            with ThreadPoolExecutor(max_workers=1) as executor:
+            with ThreadPoolExecutor(max_workers=4) as executor:
                 future = executor.submit(agent.chat, question, session_id)
                 answer = future.result(timeout=TIMEOUT_SECONDS)
         except FuturesTimeoutError:
@@ -366,14 +393,14 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
 # KONFIGURATION
 # ============================================================================
 # Limit für Testfragen (None = alle, z.B. 5 für Test)
-TEST_LIMIT = 2  # None = alle Fragen evaluieren
+TEST_LIMIT = None  # None = alle Fragen evaluieren
 
 
 def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     """
     Führt RAGAS-Evaluation durch.
     Verwendet 3 Standard-RAGAS-Metriken: faithfulness, context_recall, context_precision.
-    (answer_relevancy auskommentiert - benötigt qwen3-embedding:8b)
+    (response_relevancy auskommentiert - benötigt qwen3-embedding:8b)
     
     Returns:
         Tuple (results_df, evaluation_time): DataFrame mit Ergebnissen und Evaluationszeit in Sekunden
@@ -393,16 +420,28 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
     
     # Embeddings für RAGAS-Metriken
-    # - SemanticSimilarity: Verwendet RAGAS HuggingFaceEmbeddings (embed_text Interface)
-    # - ResponseRelevancy: Benötigt LangChain-Interface (embed_query), daher LangchainEmbeddingsWrapper
-    ragas_embeddings = HuggingFaceEmbeddings(model=SENTENCE_TRANSFORMER_MODEL)
+    # - Wir nutzen Ollama embeddinggemma für schnelle Evaluation via Ollama-Server
+    # - Basiert auf Gemma, optimiert für Embeddings
+    RAGAS_EMBEDDING_MODEL = "embeddinggemma"
+    RAGAS_MAX_SEQ_LENGTH = 1024  # Kontextlänge für Embeddings
+    
+    # Ollama-Embeddings für alle RAGAS-Metriken
+    ollama_embeddings = OllamaEmbeddings(
+        model=RAGAS_EMBEDDING_MODEL,
+        base_url=OLLAMA_BASE_URL,
+        num_ctx=RAGAS_MAX_SEQ_LENGTH  # max_seq_length für Ollama
+    )
+    
+    # LangchainEmbeddingsWrapper für RAGAS-Kompatibilität
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        langchain_embeddings = LangchainEmbeddingsWrapper(LangchainHFEmbeddings(model_name=SENTENCE_TRANSFORMER_MODEL))
-    print(f"   Embeddings: {SENTENCE_TRANSFORMER_MODEL} (für semantic_similarity, answer_relevancy)")
+        langchain_embeddings = LangchainEmbeddingsWrapper(ollama_embeddings)
     
-    # SemanticSimilarity mit RAGAS HuggingFaceEmbeddings
-    semantic_similarity = SemanticSimilarity(embeddings=ragas_embeddings)
+    print(f"   Embeddings: {RAGAS_EMBEDDING_MODEL} @ {OLLAMA_BASE_URL} (max_seq_length={RAGAS_MAX_SEQ_LENGTH}, für semantic_similarity, response_relevancy)")
+    print(f"   (RAG verwendet: {SENTENCE_TRANSFORMER_MODEL})")
+    
+    # SemanticSimilarity mit Ollama-Embeddings (via LangChain-Wrapper)
+    semantic_similarity = SemanticSimilarity(embeddings=langchain_embeddings)
     
     # ResponseRelevancy benötigt LangChain-Interface (embed_query/embed_documents)
     response_relevancy = ResponseRelevancy(embeddings=langchain_embeddings)
@@ -423,13 +462,13 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
     print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
-    # RunConfig für parallele Requests an Ollama
-    # seed=RANDOM_SEED für Reproduzierbarkeit (RAGAS verwendet numpy RNG intern)
-    # timeout=240 für längere Metrik-Berechnungen (response_relevancy)
+    # RunConfig für Ollama-Evaluation
+    # max_workers=4: Ollama verarbeitet Requests sequentiell, parallele Worker verursachen Timeouts
+    # timeout=300: 5 Minuten pro Metrik-Berechnung (erhöht wegen LLM-Latenz)
     run_config = RunConfig(
         max_workers=4,
         seed=RANDOM_SEED,
-        timeout=240
+        timeout=300
     )
     
     # Zeit messen für Evaluation
@@ -753,7 +792,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_details.column_dimensions['L'].width = 15  # context_precision
         ws_details.column_dimensions['M'].width = 17  # semantic_similarity
         ws_details.column_dimensions['N'].width = 20  # context_entity_recall
-        ws_details.column_dimensions['O'].width = 18  # answer_relevancy
+        ws_details.column_dimensions['O'].width = 18  # response_relevancy
         ws_details.column_dimensions['P'].width = 10  # RR_at5
         ws_details.column_dimensions['Q'].width = 10  # hit_at5
         ws_details.column_dimensions['R'].width = 12  # context_count
@@ -972,10 +1011,11 @@ def main():
             # ====================================================================
             # CHATBOT-MODELL ENTLADEN (GPU-Speicher freigeben vor RAGAS)
             # ====================================================================
-            print("\n🧹 Räume GPU-Speicher auf (Chatbot-Modell entladen)...")
+            print("\n🧹 Räume GPU-Speicher auf (Chatbot + Embedding-Modell entladen)...")
             del agent  # Python-Referenz löschen
             gc.collect()  # Garbage Collection
-            stop_ollama_model(OLLAMA_MODEL)  # Modell via CLI stoppen
+            stop_ollama_model(OLLAMA_MODEL)  # LLM via CLI stoppen
+            stop_embedding_model()  # Embedding-Modell (BGE-M3) freigeben
             print()
         
         # 5. RAGAS-Evaluation (immer ausführen, jetzt mit Timing)

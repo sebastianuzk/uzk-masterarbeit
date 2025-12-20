@@ -135,8 +135,9 @@ def advanced_retrieve(query: str, k_per_collection: int = 3) -> List[Dict[str, A
     
     # Lade Embedding-Modell für Query-Encoding
     from sentence_transformers import SentenceTransformer
-    from config.settings import SENTENCE_TRANSFORMER_MODEL
-    embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL)
+    from config.settings import SENTENCE_TRANSFORMER_MODEL, EMBEDDING_MAX_SEQ_LENGTH
+    embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, trust_remote_code=True)
+    embedding_model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
     raw_embedding = embedding_model.encode([query])
     # Normalisiere Query-Embedding für echte Cosine-Similarity
     normalized_embedding = raw_embedding / np.linalg.norm(raw_embedding, axis=1, keepdims=True)

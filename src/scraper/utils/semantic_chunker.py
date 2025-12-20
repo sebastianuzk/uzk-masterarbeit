@@ -72,8 +72,10 @@ class SemanticChunker:
     def model(self) -> SentenceTransformer:
         """Lazy-Load des Embedding-Modells."""
         if self._model is None:
+            from config.settings import EMBEDDING_MAX_SEQ_LENGTH
             logger.info(f"Lade Embedding-Modell: {self._model_name}")
-            self._model = SentenceTransformer(self._model_name)
+            self._model = SentenceTransformer(self._model_name, trust_remote_code=True)
+            self._model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
         return self._model
     
     def _split_into_sentences(self, text: str) -> List[str]:

@@ -33,6 +33,7 @@ from ragas import evaluate
 from ragas.metrics import faithfulness, context_recall, context_precision, SemanticSimilarity, NoiseSensitivity, ResponseRelevancy, ContextEntityRecall
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from langchain_huggingface import HuggingFaceEmbeddings as LangchainHFEmbeddings
+from langchain_ollama import OllamaEmbeddings
 from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
 from ragas.run_config import RunConfig
 from langchain_ollama import ChatOllama
@@ -444,17 +445,25 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
     print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
     
-    # HuggingFace Embeddings für semantic_similarity und response_relevancy (gleiches Modell wie Vektordatenbank)
-    # Verwende LangchainEmbeddingsWrapper weil ResponseRelevancy intern embed_query() benötigt
-    lc_embeddings = LangchainHFEmbeddings(model_name=SENTENCE_TRANSFORMER_MODEL)
-    embeddings = LangchainEmbeddingsWrapper(lc_embeddings)
-    print(f"   Embeddings: {SENTENCE_TRANSFORMER_MODEL} (für semantic_similarity, response_relevancy)")
+    # HuggingFace Embeddings für semantic_similarity und response_relevancy
+    # Verwende Ollama embeddinggemma für schnelle Evaluation
+    RAGAS_EMBEDDING_MODEL = "embeddinggemma"
+    RAGAS_MAX_SEQ_LENGTH = 1024
     
-    # SemanticSimilarity Metrik mit HuggingFace Embeddings
+    ollama_embeddings = OllamaEmbeddings(
+        model=RAGAS_EMBEDDING_MODEL,
+        base_url=OLLAMA_BASE_URL,
+        num_ctx=RAGAS_MAX_SEQ_LENGTH
+    )
+    embeddings = LangchainEmbeddingsWrapper(ollama_embeddings)
+    print(f"   Embeddings: {RAGAS_EMBEDDING_MODEL} @ {OLLAMA_BASE_URL} (max_seq_length={RAGAS_MAX_SEQ_LENGTH}, für semantic_similarity, response_relevancy)")
+    print(f"   (RAG verwendet: {SENTENCE_TRANSFORMER_MODEL})")
+    
+    # SemanticSimilarity Metrik mit Embeddings
     semantic_similarity = SemanticSimilarity(embeddings=embeddings)
     
-    # ResponseRelevancy Metrik - embeddings werden über evaluate() übergeben
-    response_relevancy = ResponseRelevancy()
+    # ResponseRelevancy Metrik - benötigt explizit Embeddings für Relevanz-Berechnung
+    response_relevancy = ResponseRelevancy(embeddings=embeddings)
     
     # ContextEntityRecall Metrik (misst Entitäten-Recall zwischen Referenz und Kontext)
     context_entity_recall = ContextEntityRecall()
@@ -466,7 +475,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
         'context_precision': context_precision,
         'semantic_similarity': semantic_similarity,
         'context_entity_recall': context_entity_recall,
-        'response_relevancy': response_relevancy
+        'answer_relevancy': response_relevancy
     }
     
     # Wähle nur die gewünschten Metriken
@@ -483,7 +492,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     # seed=RANDOM_SEED für Reproduzierbarkeit (RAGAS verwendet numpy RNG intern)
     # timeout=240 für längere Metrik-Berechnungen (noise_sensitivity, response_relevancy)
     run_config = RunConfig(
-        max_workers=1,  # Reduziert von 4 auf 2 für weniger GPU-Last
+        max_workers=15,  # Reduziert von 4 auf 2 für weniger GPU-Last
         timeout=240,  # 4 Minuten Timeout pro Request
         max_retries=3,
         max_wait=30,  # Max 30 Sekunden warten zwischen Retries
@@ -508,11 +517,8 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     
     results_df = results.to_pandas()
     
-    # RAGAS benennt Metriken mit Mode-Suffix - wir normalisieren die Spaltennamen
-    column_mapping = {
-        'answer_relevancy': 'response_relevancy',  # Falls RAGAS answer_relevancy verwendet
-    }
-    results_df = results_df.rename(columns=column_mapping)
+    # RAGAS ResponseRelevancy Metrik heißt intern 'answer_relevancy'
+    # Wir behalten diesen Namen für Konsistenz mit RAGAS
     
     print(f"\n✅ RAGAS-Evaluation abgeschlossen in {evaluation_time:.2f}s")
     print(f"   ⏱️ Durchschn. pro Sample: {evaluation_time/len(dataset.samples):.2f}s\n")
@@ -693,6 +699,34 @@ def display_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
             avg = results_df[metric].mean()
             display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
             print(f"   {display_name:20s}: {avg:.3f}")
+    
+    # Nach Kategorie
+    if 'category' in results_df.columns:
+        print("\n📁 Scores nach Kategorie:")
+        print("-" * 80)
+        display_categories = [c for c in results_df['category'].unique() if pd.notna(c)]
+        for category in sorted(display_categories):
+            cat_df = results_df[results_df['category'] == category]
+            print(f"\n   {category}:")
+            for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+                if metric in cat_df.columns and cat_df[metric].notna().any():
+                    avg = cat_df[metric].mean()
+                    display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                    print(f"      {display_name:20s}: {avg:.3f}")
+    
+    # Nach Schwierigkeit
+    if 'difficulty' in results_df.columns:
+        print("\n⚡ Scores nach Schwierigkeit:")
+        print("-" * 80)
+        for difficulty in ['easy', 'medium', 'hard']:
+            diff_df = results_df[results_df['difficulty'] == difficulty]
+            if len(diff_df) > 0:
+                print(f"\n   {difficulty.upper()}:")
+                for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+                    if metric in diff_df.columns and diff_df[metric].notna().any():
+                        avg = diff_df[metric].mean()
+                        display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                        print(f"      {display_name:20s}: {avg:.3f}")
 
 
 def main():
@@ -839,7 +873,7 @@ def main():
         print(f"   📈 MRR@5: {sum(rr_at5_values)/len(rr_at5_values):.3f}")
         print(f"   📈 Hit@5: {merged_df['hit_at5'].mean():.3f}")
         
-        # 7. Ergebnisse anzeigen
+        # 7. Ergebnisse anzeigen (nur die neu evaluierten Fragen)
         display_results(results_df, test_df)
         
         # 8. Speichern in CSV
@@ -867,6 +901,48 @@ def main():
         # ============================================================================
         # Filtere nur echte Daten-Zeilen (keine META/AVG Zeilen)
         data_df = merged_df[~merged_df['id'].astype(str).isin(['META', 'AVG'])].copy()
+        
+        # ============================================================================
+        # ZUSAMMENFASSUNG DER GESAMTEN ERGEBNISSE (alle gemergten Daten)
+        # ============================================================================
+        print("\n" + "=" * 80)
+        print("📊 RAGAS-EVALUATION ERGEBNISSE (Gesamtübersicht)")
+        print("=" * 80)
+        
+        # Gesamtscores
+        print("\n📈 Durchschnittliche Scores (alle Fragen):")
+        print("-" * 80)
+        for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+            if metric in data_df.columns and data_df[metric].notna().any():
+                avg = data_df[metric].mean()
+                display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                print(f"   {display_name:20s}: {avg:.3f}")
+        
+        # Nach Kategorie
+        print("\n📁 Scores nach Kategorie:")
+        print("-" * 80)
+        display_categories = [c for c in data_df['category'].unique() if pd.notna(c)]
+        for category in sorted(display_categories):
+            cat_df = data_df[data_df['category'] == category]
+            print(f"\n   {category}:")
+            for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+                if metric in cat_df.columns and cat_df[metric].notna().any():
+                    avg = cat_df[metric].mean()
+                    display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                    print(f"      {display_name:20s}: {avg:.3f}")
+        
+        # Nach Schwierigkeit
+        print("\n⚡ Scores nach Schwierigkeit:")
+        print("-" * 80)
+        for difficulty in ['easy', 'medium', 'hard']:
+            diff_df = data_df[data_df['difficulty'] == difficulty]
+            if len(diff_df) > 0:
+                print(f"\n   {difficulty.upper()}:")
+                for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+                    if metric in diff_df.columns and diff_df[metric].notna().any():
+                        avg = diff_df[metric].mean()
+                        display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                        print(f"      {display_name:20s}: {avg:.3f}")
         
         csv_columns = list(merged_df.columns)
         metadata_rows = []
@@ -979,12 +1055,209 @@ def main():
         meta_df = pd.DataFrame(metadata_rows)
         final_df = pd.concat([data_df, meta_df], ignore_index=True)
         
-        # Speichere mit UTF-8-BOM für korrekte Umlaut-Darstellung
+        # ============================================================================
+        # 1. ROHDATEN SPEICHERN (ragas_results_raw.csv)
+        # ============================================================================
+        output_path_raw = Path(__file__).parent / "data" / "ragas_results_raw.csv"
+        try:
+            # Speichere nur Daten-Zeilen (ohne META/AVG) als Rohdaten
+            data_df.to_csv(output_path_raw, index=False, encoding='utf-8-sig')
+            print(f"\n💾 ROHDATEN GESPEICHERT: {output_path_raw}")
+        except Exception as e:
+            print(f"\n⚠️ Fehler beim Speichern der Rohdaten: {e}")
+        
+        # ============================================================================
+        # 2. HAUPT-CSV SPEICHERN (ragas_results.csv)
+        # ============================================================================
         final_df.to_csv(output_path_csv, index=False, encoding='utf-8-sig', sep=',', quoting=1)
+        
+        # ============================================================================
+        # 3. EXCEL SPEICHERN (ragas_results.xlsx)
+        # ============================================================================
+        output_path_excel = Path(__file__).parent / "data" / "ragas_results.xlsx"
+        
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.utils.dataframe import dataframe_to_rows
+            
+            wb = Workbook()
+            
+            # Sheet 1: Detaillierte Ergebnisse
+            ws_details = wb.active
+            ws_details.title = "Detaillierte Ergebnisse"
+            
+            # Header-Style
+            header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF", size=11)
+            
+            # Daten schreiben (nur echte Daten-Zeilen)
+            csv_columns = list(data_df.columns)
+            for r_idx, row in enumerate(dataframe_to_rows(data_df, index=False, header=True), 1):
+                for c_idx, value in enumerate(row, 1):
+                    cell = ws_details.cell(row=r_idx, column=c_idx, value=value)
+                    
+                    # Header formatieren
+                    if r_idx == 1:
+                        cell.fill = header_fill
+                        cell.font = header_font
+                        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                    else:
+                        # Metriken-Spalten farbig (dynamisch basierend auf Spaltenname)
+                        col_name = csv_columns[c_idx - 1] if c_idx <= len(csv_columns) else ''
+                        if col_name in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy']:
+                            if isinstance(value, (int, float)) and not pd.isna(value):
+                                if value >= 0.8:
+                                    cell.fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                                elif value >= 0.6:
+                                    cell.fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+                                else:
+                                    cell.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+                                cell.number_format = '0.000'
+                        
+                        # Text-Wrap für lange Texte
+                        if col_name in ['user_input', 'response', 'reference', 'retrieved_contexts']:
+                            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            
+            # Spaltenbreiten anpassen
+            ws_details.column_dimensions['A'].width = 8   # id
+            ws_details.column_dimensions['B'].width = 20  # category
+            ws_details.column_dimensions['C'].width = 12  # difficulty
+            ws_details.column_dimensions['D'].width = 50  # user_input
+            ws_details.column_dimensions['E'].width = 60  # response
+            ws_details.column_dimensions['F'].width = 50  # reference
+            ws_details.column_dimensions['G'].width = 40  # contexts
+            
+            # Sheet 2: Zusammenfassung
+            ws_summary = wb.create_sheet("Zusammenfassung")
+            
+            # Titel
+            ws_summary['A1'] = "📊 RAGAS-Evaluation Zusammenfassung"
+            ws_summary['A1'].font = Font(bold=True, size=14)
+            ws_summary.merge_cells('A1:D1')
+            
+            # Durchschnittliche Scores
+            row = 3
+            ws_summary[f'A{row}'] = "Durchschnittliche Scores"
+            ws_summary[f'A{row}'].font = Font(bold=True, size=12)
+            row += 1
+            
+            metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']
+            for metric in metric_cols:
+                if metric in data_df.columns and data_df[metric].notna().any():
+                    avg = data_df[metric].mean()
+                    display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                    ws_summary[f'A{row}'] = display_name
+                    ws_summary[f'B{row}'] = avg
+                    ws_summary[f'B{row}'].number_format = '0.000'
+                    
+                    # Farbe basierend auf Score (nicht für latency)
+                    if metric != 'latency':
+                        if avg >= 0.8:
+                            ws_summary[f'B{row}'].fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                        elif avg >= 0.6:
+                            ws_summary[f'B{row}'].fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+                        else:
+                            ws_summary[f'B{row}'].fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+                    row += 1
+            
+            # Nach Kategorie
+            row += 2
+            ws_summary[f'A{row}'] = "Scores nach Kategorie"
+            ws_summary[f'A{row}'].font = Font(bold=True, size=12)
+            row += 1
+            
+            # Header für Kategorie-Tabelle
+            ws_summary[f'A{row}'] = "Kategorie"
+            ws_summary[f'B{row}'] = "Faithfulness"
+            ws_summary[f'C{row}'] = "Context Recall"
+            ws_summary[f'D{row}'] = "Context Precision"
+            ws_summary[f'E{row}'] = "Semantic Similarity"
+            ws_summary[f'F{row}'] = "Context Entity Recall"
+            ws_summary[f'G{row}'] = "Answer Relevancy"
+            ws_summary[f'H{row}'] = "MRR@5"
+            ws_summary[f'I{row}'] = "Hit@5"
+            ws_summary[f'J{row}'] = "Latency"
+            for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
+                ws_summary[f'{col}{row}'].font = Font(bold=True)
+                ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+            row += 1
+            
+            # Kategorien mit allen Metriken
+            display_categories = [c for c in data_df['category'].unique() if pd.notna(c)]
+            for category in sorted(display_categories):
+                cat_df = data_df[data_df['category'] == category]
+                ws_summary[f'A{row}'] = category
+                
+                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency'], 1):
+                    if metric in cat_df.columns and cat_df[metric].notna().any():
+                        avg = cat_df[metric].mean()
+                        col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J
+                        ws_summary[f'{col_letter}{row}'] = avg
+                        ws_summary[f'{col_letter}{row}'].number_format = '0.000'
+                row += 1
+            
+            # Nach Schwierigkeit
+            row += 2
+            ws_summary[f'A{row}'] = "Scores nach Schwierigkeit"
+            ws_summary[f'A{row}'].font = Font(bold=True, size=12)
+            row += 1
+            
+            # Header für Schwierigkeit-Tabelle
+            ws_summary[f'A{row}'] = "Schwierigkeit"
+            ws_summary[f'B{row}'] = "Faithfulness"
+            ws_summary[f'C{row}'] = "Context Recall"
+            ws_summary[f'D{row}'] = "Context Precision"
+            ws_summary[f'E{row}'] = "Semantic Similarity"
+            ws_summary[f'F{row}'] = "Context Entity Recall"
+            ws_summary[f'G{row}'] = "Answer Relevancy"
+            ws_summary[f'H{row}'] = "MRR@5"
+            ws_summary[f'I{row}'] = "Hit@5"
+            ws_summary[f'J{row}'] = "Latency"
+            for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
+                ws_summary[f'{col}{row}'].font = Font(bold=True)
+                ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+            row += 1
+            
+            # Schwierigkeitsgrade mit allen Metriken
+            for difficulty in ['easy', 'medium', 'hard']:
+                diff_df = data_df[data_df['difficulty'] == difficulty]
+                if len(diff_df) > 0:
+                    ws_summary[f'A{row}'] = difficulty.upper()
+                    
+                    for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency'], 1):
+                        if metric in diff_df.columns and diff_df[metric].notna().any():
+                            avg = diff_df[metric].mean()
+                            col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J
+                            ws_summary[f'{col_letter}{row}'] = avg
+                            ws_summary[f'{col_letter}{row}'].number_format = '0.000'
+                    row += 1
+            
+            # Spaltenbreiten für Zusammenfassung
+            ws_summary.column_dimensions['A'].width = 30
+            ws_summary.column_dimensions['B'].width = 15
+            ws_summary.column_dimensions['C'].width = 18
+            ws_summary.column_dimensions['D'].width = 18
+            ws_summary.column_dimensions['E'].width = 20
+            ws_summary.column_dimensions['F'].width = 22
+            ws_summary.column_dimensions['G'].width = 18
+            ws_summary.column_dimensions['H'].width = 10
+            ws_summary.column_dimensions['I'].width = 10
+            ws_summary.column_dimensions['J'].width = 10
+            
+            # Speichern
+            wb.save(output_path_excel)
+            
+        except Exception as e:
+            print(f"⚠️  Warnung: Excel konnte nicht erstellt werden: {e}")
+            output_path_excel = None
         
         print("\n" + "=" * 80)
         print(f"💾 Ergebnisse gespeichert:")
-        print(f"   CSV: {output_path_csv}")
+        print(f"   CSV (Roh):  {output_path_raw}")
+        print(f"   CSV:        {output_path_csv}")
+        if output_path_excel:
+            print(f"   Excel:      {output_path_excel}")
         print("=" * 80 + "\n")
         
         print("✅ Evaluation erfolgreich abgeschlossen!\n")

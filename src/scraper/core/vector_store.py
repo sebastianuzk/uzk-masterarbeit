@@ -172,8 +172,11 @@ class SentenceTransformerProvider(EmbeddingProvider):
             raise ImportError("sentence-transformers is required but not installed")
         
         # Verwende zentrale Konfiguration als Default
+        from config.settings import EMBEDDING_MAX_SEQ_LENGTH
         model_name = model_name or SENTENCE_TRANSFORMER_MODEL
-        self.model = SentenceTransformer(model_name)
+        self.model = SentenceTransformer(model_name, trust_remote_code=True)
+        # max_seq_length nur für bge-m3 --> ansonsten auskommentieren!
+        self.model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
         self.dimension = self.model.get_sentence_embedding_dimension()
     
     def encode(self, texts: List[str]) -> List[List[float]]:

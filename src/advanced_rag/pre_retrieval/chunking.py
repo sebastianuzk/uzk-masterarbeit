@@ -77,13 +77,15 @@ class SemanticChunker:
             import sys
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
             try:
-                from config.settings import SENTENCE_TRANSFORMER_MODEL
+                from config.settings import SENTENCE_TRANSFORMER_MODEL, EMBEDDING_MAX_SEQ_LENGTH
                 model_name = SENTENCE_TRANSFORMER_MODEL
             except ImportError:
-                model_name = "paraphrase-multilingual-MiniLM-L12-v2"
+                model_name = "BAAI/bge-m3"
+                EMBEDDING_MAX_SEQ_LENGTH = 1024
             
             logger.info(f"Lade Embedding-Modell für Semantic Chunking: {model_name}")
-            self._embedding_model = SentenceTransformer(model_name)
+            self._embedding_model = SentenceTransformer(model_name, trust_remote_code=True)
+            self._embedding_model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
         return self._embedding_model
     
     def _split_into_sentences(self, text: str) -> List[str]:
