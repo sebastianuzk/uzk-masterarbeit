@@ -817,23 +817,37 @@ def run_production_scraper():
         
         # Sammle alle Chunks für Batch-Encoding
         all_chunks = []
-        chunk_metadata = []
+        chunk_doc_info = []  # Temporär: nur doc_info, token_count wird später hinzugefügt
         
         print(f"   📋 Sammle Chunks aus {len(docs)} Dokumenten...")
         for doc in tqdm(docs, desc=f"   📄 Chunks sammeln", leave=False):
             for i, chunk in enumerate(doc['chunks']):
                 all_chunks.append(chunk)
-                chunk_metadata.append({
+                chunk_doc_info.append({
                     'doc_id': doc['doc_id'],
                     'url': doc['url'],
                     'title': doc['title'],
                     'content_type': doc['content_type'],
                     'chunk_index': i,
                     'total_chunks': len(doc['chunks']),
+                    'char_count': len(chunk),
                     'chunk_id': f"{doc['content_type']}_{doc['doc_id']}_chunk_{i}"
                 })
         
         print(f"   ✅ {len(all_chunks):,} Chunks gesammelt")
+        
+        # Token-Zählung mit BGE-M3 Tokenizer (exakt für das verwendete Embedding-Modell)
+        print(f"   🔢 Zähle Tokens mit BGE-M3 Tokenizer...")
+        tokenizer = embedding_model.tokenizer
+        # Batch-Tokenisierung für Effizienz (ohne Padding, nur für Längenberechnung)
+        tokenized = tokenizer(all_chunks, add_special_tokens=False, truncation=False, padding=False)
+        token_counts = [len(ids) for ids in tokenized['input_ids']]
+        
+        # Kombiniere Metadaten mit Token-Counts
+        chunk_metadata = []
+        for info, token_count in zip(chunk_doc_info, token_counts):
+            info['token_count'] = token_count
+            chunk_metadata.append(info)
         
         # Batch-Embedding mit Progress Bar (MIT NORMALISIERUNG für echte Cosine-Similarity)
         all_embeddings = []
