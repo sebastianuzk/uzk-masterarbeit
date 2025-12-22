@@ -196,6 +196,111 @@ class SemanticChunker:
         
         return breakpoints
     
+    def _merge_small_chunks(self, raw_chunks: List[str]) -> List[str]:
+        """
+        Führe zu kleine Chunks mit vorherigem ODER nachfolgendem Chunk zusammen.
+        
+        Strategie:
+        1. Prüfe zuerst, ob Merging mit vorherigem Chunk möglich ist (max_size)
+        2. Falls nicht möglich, markiere für Merging mit nachfolgendem Chunk
+        3. Chunks die weder vor noch zurück gemergt werden können, bleiben separat
+        
+        Args:
+            raw_chunks: Liste von Chunks (einige können unter min_chunk_size sein)
+            
+        Returns:
+            Liste von gemergten Chunks (alle >= min_chunk_size oder nicht mergbar)
+        """
+        if not raw_chunks:
+            return []
+        
+        if len(raw_chunks) == 1:
+            return raw_chunks  # Einzelner Chunk - nichts zu mergen
+        
+        # Markiere Chunks für Forward-Merging (mit nachfolgendem Chunk)
+        # Index i bedeutet: Chunk i soll mit Chunk i+1 zusammengeführt werden
+        forward_merge_indices = set()
+        
+        # Erster Durchlauf: Identifiziere zu kleine Chunks und prüfe Merge-Optionen
+        for i, chunk in enumerate(raw_chunks):
+            if len(chunk) >= self.min_chunk_size:
+                continue  # Chunk ist groß genug
+            
+            # Chunk ist zu klein - versuche Merging
+            can_merge_backward = False
+            can_merge_forward = False
+            
+            # Prüfe Backward-Merge (mit vorherigem Chunk)
+            if i > 0:
+                prev_chunk = raw_chunks[i - 1]
+                combined_backward = len(prev_chunk) + len(chunk) + 1
+                if combined_backward <= self.max_chunk_size:
+                    can_merge_backward = True
+            
+            # Prüfe Forward-Merge (mit nachfolgendem Chunk)
+            if i < len(raw_chunks) - 1:
+                next_chunk = raw_chunks[i + 1]
+                combined_forward = len(chunk) + len(next_chunk) + 1
+                if combined_forward <= self.max_chunk_size:
+                    can_merge_forward = True
+            
+            # Entscheide Merge-Strategie: Backward bevorzugt, dann Forward
+            if can_merge_backward:
+                # Backward-Merge wird im zweiten Durchlauf direkt durchgeführt
+                pass  # Wird unten behandelt
+            elif can_merge_forward:
+                # Forward-Merge markieren
+                forward_merge_indices.add(i)
+                logger.debug(f"Chunk {i} ({len(chunk)} Zeichen) wird mit Chunk {i+1} gemergt (forward)")
+        
+        # Zweiter Durchlauf: Führe Merging durch
+        merged_chunks = []
+        i = 0
+        
+        while i < len(raw_chunks):
+            chunk = raw_chunks[i]
+            
+            # Prüfe ob dieser Chunk für Forward-Merge markiert ist
+            if i in forward_merge_indices:
+                # Merge mit nachfolgendem Chunk
+                if i + 1 < len(raw_chunks):
+                    next_chunk = raw_chunks[i + 1]
+                    merged = chunk + ' ' + next_chunk
+                    
+                    # Prüfe ob der gemergte Chunk noch zu klein ist
+                    if len(merged) < self.min_chunk_size and merged_chunks:
+                        # Versuche zusätzlich mit vorherigem zu mergen
+                        combined_with_prev = len(merged_chunks[-1]) + len(merged) + 1
+                        if combined_with_prev <= self.max_chunk_size:
+                            merged_chunks[-1] += ' ' + merged
+                            i += 2
+                            continue
+                    
+                    merged_chunks.append(merged)
+                    i += 2  # Überspringe den nachfolgenden Chunk (bereits gemergt)
+                    continue
+            
+            # Normaler Chunk oder Backward-Merge
+            if len(chunk) < self.min_chunk_size:
+                # Zu klein - versuche Backward-Merge
+                if merged_chunks:
+                    combined_size = len(merged_chunks[-1]) + len(chunk) + 1
+                    if combined_size <= self.max_chunk_size:
+                        merged_chunks[-1] += ' ' + chunk
+                        i += 1
+                        continue
+                
+                # Backward nicht möglich und Forward nicht markiert
+                # Chunk bleibt separat (lieber zu klein als Datenverlust)
+                merged_chunks.append(chunk)
+            else:
+                # Chunk ist groß genug
+                merged_chunks.append(chunk)
+            
+            i += 1
+        
+        return merged_chunks
+    
     def chunk_by_paragraphs(self, text: str) -> List[str]:
         """
         Teile Text semantisch basierend auf Embedding-Ähnlichkeit.
@@ -248,7 +353,8 @@ class SemanticChunker:
         breakpoints = self._find_breakpoints(embeddings)
         
         # 4. Chunks erstellen basierend auf Breakpoints
-        chunks = []
+        #    Kleine Chunks werden mit vorherigem ODER nachfolgendem Chunk zusammengeführt
+        raw_chunks = []  # Temporäre Liste vor dem Merging
         start_idx = 0
         
         # Füge End-Index hinzu
@@ -266,25 +372,18 @@ class SemanticChunker:
                 # Validiere jeden sub_chunk
                 for sub_chunk in sub_chunks:
                     if len(sub_chunk) <= self.max_chunk_size:
-                        chunks.append(sub_chunk)
+                        raw_chunks.append(sub_chunk)
                     else:
                         # Fallback: hart teilen
-                        chunks.extend(self._hard_split_text(sub_chunk))
-            elif len(chunk_text) >= self.min_chunk_size:
-                chunks.append(chunk_text)
-            elif chunks:
-                # Zu klein - füge zum vorherigen Chunk hinzu, ABER nur wenn dieser nicht zu groß wird
-                combined_size = len(chunks[-1]) + len(chunk_text) + 1
-                if combined_size <= self.max_chunk_size:
-                    chunks[-1] += ' ' + chunk_text
-                else:
-                    # Vorheriger Chunk würde zu groß - starte neuen Chunk trotz min_size
-                    chunks.append(chunk_text)
+                        raw_chunks.extend(self._hard_split_text(sub_chunk))
             else:
-                # Erster Chunk ist zu klein - speichere trotzdem
-                chunks.append(chunk_text)
+                # Chunk ist klein genug - speichere für späteres Merging
+                raw_chunks.append(chunk_text)
             
             start_idx = end_idx
+        
+        # 4b. Merging-Phase: Kleine Chunks mit vorherigem ODER nachfolgendem zusammenführen
+        chunks = self._merge_small_chunks(raw_chunks)
         
         # 5. Überlappung hinzufügen (optional)
         if self.overlap > 0 and len(chunks) > 1:
