@@ -616,7 +616,8 @@ def run_production_scraper():
         'skipped': 0,
         'collections': {name: 0 for name in collection_names},
         'errors': 0,
-        'chunk_lengths': []  # Sammle alle Chunk-Längen für Statistiken
+        'chunk_lengths': [],  # Sammle alle Chunk-Längen für Statistiken
+        'token_counts': []    # Sammle alle Token-Counts für Statistiken
     }
     
     # Sammle verarbeitete Dokumente nach Collection
@@ -899,6 +900,9 @@ def run_production_scraper():
         for info, token_count in zip(chunk_doc_info, token_counts):
             info['token_count'] = token_count
             chunk_metadata.append(info)
+        
+        # Sammle Token-Counts für globale Statistiken
+        stats['token_counts'].extend(token_counts)
         
         # Batch-Embedding mit Progress Bar (MIT NORMALISIERUNG für echte Cosine-Similarity)
         all_embeddings = []
@@ -1206,6 +1210,146 @@ def run_production_scraper():
     
     df_collections = pd.DataFrame(collection_stats)
     
+    # =========================================================================
+    # Chunk-Längen Verteilung (Zeichen)
+    # =========================================================================
+    chunk_lengths = stats['chunk_lengths']
+    if chunk_lengths:
+        chunk_lengths_array = np.array(chunk_lengths)
+        
+        # Grundstatistiken
+        chunk_dist_stats = {
+            'Statistik': [
+                'Gesamt Chunks',
+                'Minimum (Zeichen)',
+                'Maximum (Zeichen)',
+                'Durchschnitt (Zeichen)',
+                'Median (Zeichen)',
+                'Std. Abweichung (Zeichen)',
+                'Perzentil 10%',
+                'Perzentil 25%',
+                'Perzentil 50%',
+                'Perzentil 75%',
+                'Perzentil 90%',
+                'Perzentil 95%',
+                'Perzentil 99%'
+            ],
+            'Wert': [
+                len(chunk_lengths),
+                int(np.min(chunk_lengths_array)),
+                int(np.max(chunk_lengths_array)),
+                round(float(np.mean(chunk_lengths_array)), 1),
+                round(float(np.median(chunk_lengths_array)), 1),
+                round(float(np.std(chunk_lengths_array)), 1),
+                int(np.percentile(chunk_lengths_array, 10)),
+                int(np.percentile(chunk_lengths_array, 25)),
+                int(np.percentile(chunk_lengths_array, 50)),
+                int(np.percentile(chunk_lengths_array, 75)),
+                int(np.percentile(chunk_lengths_array, 90)),
+                int(np.percentile(chunk_lengths_array, 95)),
+                int(np.percentile(chunk_lengths_array, 99))
+            ]
+        }
+        df_chunk_dist_stats = pd.DataFrame(chunk_dist_stats)
+        
+        # Größenverteilung (Zeichen)
+        size_bins = [
+            (0, 200), (200, 400), (400, 600), (600, 800), (800, 1000),
+            (1000, 1200), (1200, 1400), (1400, 1600), (1600, 1800), (1800, 2000),
+            (2000, 2500), (2500, 3000), (3000, 5000), (5000, 10000), (10000, float('inf'))
+        ]
+        
+        size_distribution = []
+        for low, high in size_bins:
+            if high == float('inf'):
+                count = np.sum(chunk_lengths_array >= low)
+                label = f'>{low}'
+            else:
+                count = np.sum((chunk_lengths_array >= low) & (chunk_lengths_array < high))
+                label = f'{low}-{high}'
+            
+            percentage = round(count / len(chunk_lengths) * 100, 1)
+            size_distribution.append({
+                'Bereich (Zeichen)': label,
+                'Anzahl': int(count),
+                'Anteil (%)': percentage
+            })
+        
+        df_chunk_size_dist = pd.DataFrame(size_distribution)
+    else:
+        df_chunk_dist_stats = pd.DataFrame({'Statistik': ['Keine Daten'], 'Wert': [0]})
+        df_chunk_size_dist = pd.DataFrame({'Bereich (Zeichen)': [], 'Anzahl': [], 'Anteil (%)': []})
+    
+    # =========================================================================
+    # Token-Verteilung
+    # =========================================================================
+    token_counts_list = stats['token_counts']
+    if token_counts_list:
+        token_counts_array = np.array(token_counts_list)
+        
+        # Grundstatistiken
+        token_dist_stats = {
+            'Statistik': [
+                'Gesamt Chunks',
+                'Minimum (Tokens)',
+                'Maximum (Tokens)',
+                'Durchschnitt (Tokens)',
+                'Median (Tokens)',
+                'Std. Abweichung (Tokens)',
+                'Perzentil 10%',
+                'Perzentil 25%',
+                'Perzentil 50%',
+                'Perzentil 75%',
+                'Perzentil 90%',
+                'Perzentil 95%',
+                'Perzentil 99%'
+            ],
+            'Wert': [
+                len(token_counts_list),
+                int(np.min(token_counts_array)),
+                int(np.max(token_counts_array)),
+                round(float(np.mean(token_counts_array)), 1),
+                round(float(np.median(token_counts_array)), 1),
+                round(float(np.std(token_counts_array)), 1),
+                int(np.percentile(token_counts_array, 10)),
+                int(np.percentile(token_counts_array, 25)),
+                int(np.percentile(token_counts_array, 50)),
+                int(np.percentile(token_counts_array, 75)),
+                int(np.percentile(token_counts_array, 90)),
+                int(np.percentile(token_counts_array, 95)),
+                int(np.percentile(token_counts_array, 99))
+            ]
+        }
+        df_token_dist_stats = pd.DataFrame(token_dist_stats)
+        
+        # Token-Größenverteilung
+        token_bins = [
+            (0, 50), (50, 100), (100, 150), (150, 200), (200, 250),
+            (250, 300), (300, 350), (350, 400), (400, 450), (450, 500),
+            (500, 600), (600, 700), (700, 800), (800, 1000), (1000, float('inf'))
+        ]
+        
+        token_distribution = []
+        for low, high in token_bins:
+            if high == float('inf'):
+                count = np.sum(token_counts_array >= low)
+                label = f'>{low}'
+            else:
+                count = np.sum((token_counts_array >= low) & (token_counts_array < high))
+                label = f'{low}-{high}'
+            
+            percentage = round(count / len(token_counts_list) * 100, 1)
+            token_distribution.append({
+                'Bereich (Tokens)': label,
+                'Anzahl': int(count),
+                'Anteil (%)': percentage
+            })
+        
+        df_token_size_dist = pd.DataFrame(token_distribution)
+    else:
+        df_token_dist_stats = pd.DataFrame({'Statistik': ['Keine Daten'], 'Wert': [0]})
+        df_token_size_dist = pd.DataFrame({'Bereich (Tokens)': [], 'Anzahl': [], 'Anteil (%)': []})
+    
     # Speichere als Excel mit mehreren Sheets
     excel_path = Path("src/evaluation/data") / f"scraping_stats_{rag_mode}.xlsx"
     excel_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1214,6 +1358,14 @@ def run_production_scraper():
         df_stats.to_excel(writer, sheet_name='Übersicht', index=False)
         df_chunking.to_excel(writer, sheet_name='Chunking-Parameter', index=False)
         df_collections.to_excel(writer, sheet_name='Collections', index=False)
+        
+        # Chunk-Verteilung: Statistiken und Größenverteilung kombiniert
+        df_chunk_dist_stats.to_excel(writer, sheet_name='Chunk-Verteilung', index=False, startrow=0)
+        df_chunk_size_dist.to_excel(writer, sheet_name='Chunk-Verteilung', index=False, startrow=len(df_chunk_dist_stats) + 3)
+        
+        # Token-Verteilung: Statistiken und Größenverteilung kombiniert
+        df_token_dist_stats.to_excel(writer, sheet_name='Token-Verteilung', index=False, startrow=0)
+        df_token_size_dist.to_excel(writer, sheet_name='Token-Verteilung', index=False, startrow=len(df_token_dist_stats) + 3)
     
     print(f"   ✅ Statistiken gespeichert: {excel_path}")
     print("=" * 80)
