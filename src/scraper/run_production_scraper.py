@@ -376,13 +376,32 @@ def chunk_document(doc_dict, chunker=None, categorizer=None):
 
 
 def process_document(doc_id, url, title, content, content_type, 
-                     content_cleaner=None, chunker=None, deduplicator=None, categorizer=None):
+                     content_cleaner=None, chunker=None, deduplicator=None, categorizer=None,
+                     embedding_model=None):
     """
     Verarbeite ein einzelnes Dokument (ohne Embeddings).
     Respektiert individuelle Feature-Flags.
     
+    Args:
+        doc_id: Dokument-ID
+        url: Quell-URL  
+        title: Dokumenttitel
+        content: Komprimierter Inhalt (gzip)
+        content_type: 'html' oder 'pdf'
+        content_cleaner: Optional ContentCleaner
+        chunker: Optional SemanticChunker
+        deduplicator: Optional ContentDeduplicator
+        categorizer: Optional CollectionCategorizer
+        embedding_model: Optional SentenceTransformer - wenn gesetzt, werden Token-Counts berechnet
+    
     Returns:
-        dict mit Chunks und Metadaten oder None wenn übersprungen
+        dict mit Chunks und Metadaten oder None wenn übersprungen.
+        
+        Wenn embedding_model gesetzt:
+            chunks = Liste von dicts: {text, char_count, token_count, chunk_index}
+            + original_text_length, total_chunks
+        Sonst (Rückwärtskompatibilität):
+            chunks = Liste von Strings
     """
     try:
         # Dekomprimiere
@@ -398,41 +417,73 @@ def process_document(doc_id, url, title, content, content_type,
         if USE_CONTENT_CLEANING and content_cleaner is not None:
             cleaned_text = content_cleaner._clean_text(cleaned_text)
         
+        if not cleaned_text or len(cleaned_text.strip()) < 50:
+            return None
+        
         # Chunking: Semantic oder Naive
         if USE_SEMANTIC_CHUNKING and chunker is not None:
-            chunks = chunker.chunk_by_paragraphs(cleaned_text)
+            chunk_texts = chunker.chunk_by_paragraphs(cleaned_text)
         else:
             # Naive Chunking mit konfigurierbaren Parametern aus rag_config
-            chunks = naive_chunk_text(
+            chunk_texts = naive_chunk_text(
                 cleaned_text, 
                 chunk_size=rag_config.naive_chunking_max_size,
                 overlap=rag_config.naive_chunking_overlap
             )
         
         # Optional: Deduplication (nur für HTMLs)
-        if USE_DEDUPLICATION and deduplicator is not None and content_type == 'html' and len(chunks) > 0:
-            chunk_docs = [{"url": f"{url}#chunk_{i}", "content": chunk} for i, chunk in enumerate(chunks)]
+        if USE_DEDUPLICATION and deduplicator is not None and content_type == 'html' and len(chunk_texts) > 0:
+            chunk_docs = [{"url": f"{url}#chunk_{i}", "content": chunk} for i, chunk in enumerate(chunk_texts)]
             unique_chunks, _ = deduplicator.deduplicate_batch(chunk_docs)
-            chunks = [doc["content"] for doc in unique_chunks]
+            chunk_texts = [doc["content"] for doc in unique_chunks]
         
-        if len(chunks) == 0:
+        if len(chunk_texts) == 0:
             return None
         
         # Bestimme Collection (Multi-Collection oder Single)
         collection_name = get_collection_name(url, categorizer if USE_MULTI_COLLECTION else None)
         
-        return {
-            'doc_id': doc_id,
-            'url': url,
-            'title': title,
-            'content_type': content_type,
-            'chunks': chunks,
-            'collection_name': collection_name
-        }
+        # Token-Zählung wenn embedding_model übergeben
+        if embedding_model is not None:
+            tokenizer = embedding_model.tokenizer
+            tokenized = tokenizer(chunk_texts, add_special_tokens=False, truncation=False, padding=False)
+            token_counts = [len(ids) for ids in tokenized['input_ids']]
+            
+            # Erstelle Chunk-Dicts mit allen Metadaten
+            chunks = []
+            for i, (text, token_count) in enumerate(zip(chunk_texts, token_counts)):
+                chunks.append({
+                    'text': text,
+                    'char_count': len(text),
+                    'token_count': token_count,
+                    'chunk_index': i
+                })
+            
+            return {
+                'doc_id': doc_id,
+                'url': url,
+                'title': title,
+                'content_type': content_type,
+                'original_text_length': len(cleaned_text),
+                'chunks': chunks,
+                'total_chunks': len(chunks),
+                'collection_name': collection_name
+            }
+        else:
+            # Rückwärtskompatibilität: Chunks als Strings (ohne Token-Counts)
+            return {
+                'doc_id': doc_id,
+                'url': url,
+                'title': title,
+                'content_type': content_type,
+                'chunks': chunk_texts,
+                'collection_name': collection_name
+            }
         
     except Exception as e:
         print(f"\n⚠️  Fehler bei Dokument {doc_id}: {e}")
         return None
+
 
 def run_production_scraper():
     """Führe den produktiven Scraper-Run aus."""
