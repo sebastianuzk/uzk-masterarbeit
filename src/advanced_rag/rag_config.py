@@ -29,7 +29,7 @@ class RAGConfig:
     # ============================================================================
     # MASTER SWITCH (steuert ALLE Advanced-Techniken)
     # ============================================================================
-    naive_setup: bool = True  # False = Advanced RAG, True = Naive Baseline
+    naive_setup: bool = False  # False = Advanced RAG, True = Naive Baseline
     
     # ============================================================================
     # INDIVIDUAL FEATURE FLAGS (ermöglichen granulare Kontrolle)
@@ -57,7 +57,9 @@ class RAGConfig:
     semantic_chunking_max_size: int = 1750
     semantic_chunking_min_size: int = 400
     semantic_chunking_overlap: int = 300
-    semantic_chunking_similarity_threshold: float = 0.7  # Schwellwert für Themenwechsel
+    semantic_chunking_similarity_threshold: float = 0.4  # Schwellwert für Themenwechsel (static_threshold)
+    semantic_chunking_use_percentile: bool = False  # Wenn True: Percentile-Methode statt static_threshold
+    semantic_chunking_percentile: int = 20  # X-tes Perzentil für Breakpoints (nur wenn use_percentile=True)
     
     # Naive Chunking (fallback wenn Semantic Chunking deaktiviert)
     naive_chunking_max_size: int = 1750
@@ -276,6 +278,8 @@ class RAGConfig:
             semantic_chunking_min_size=_get_int_env("SEMANTIC_CHUNKING_MIN_SIZE", 400),
             semantic_chunking_overlap=_get_int_env("SEMANTIC_CHUNKING_OVERLAP", 200),
             semantic_chunking_similarity_threshold=_get_float_env("SEMANTIC_CHUNKING_SIMILARITY_THRESHOLD", 0.7),
+            semantic_chunking_use_percentile=_get_bool_env("SEMANTIC_CHUNKING_USE_PERCENTILE", False),
+            semantic_chunking_percentile=_get_int_env("SEMANTIC_CHUNKING_PERCENTILE", 10),
             
             # Naive Chunking (separate Parameter)
             naive_chunking_max_size=_get_int_env("NAIVE_CHUNKING_MAX_SIZE", 1750),
