@@ -162,7 +162,7 @@ def naive_extract_text_from_html(html: str) -> str:
         element.decompose()
     
     # 2. Entferne Layout-Elemente ohne semantischen Inhalt
-    for element in soup(['nav', 'footer', 'aside']):
+    for element in soup(['nav', 'header', 'footer', 'aside']):
         element.decompose()
     
     # 3. Entferne Elemente mit bestimmten Klassen/IDs (Navigation, Menüs, Sidebars)
@@ -532,9 +532,16 @@ def run_production_scraper():
             min_chunk_size=rag_config.semantic_chunking_min_size,
             overlap=rag_config.semantic_chunking_overlap,
             similarity_threshold=rag_config.semantic_chunking_similarity_threshold,
+            use_percentile=rag_config.semantic_chunking_use_percentile,
+            percentile=rag_config.semantic_chunking_percentile,
             embedding_model=embedding_model  # Übergebe das bereits geladene Modell
         )
-        print(f"   ✅ SemanticChunker (max={rag_config.semantic_chunking_max_size}, min={rag_config.semantic_chunking_min_size}, overlap={rag_config.semantic_chunking_overlap}, threshold={rag_config.semantic_chunking_similarity_threshold})")
+        # Zeige Breakpoint-Methode in der Ausgabe
+        if rag_config.semantic_chunking_use_percentile:
+            method_info = f"percentile={rag_config.semantic_chunking_percentile}th"
+        else:
+            method_info = f"threshold={rag_config.semantic_chunking_similarity_threshold}"
+        print(f"   ✅ SemanticChunker (max={rag_config.semantic_chunking_max_size}, min={rag_config.semantic_chunking_min_size}, overlap={rag_config.semantic_chunking_overlap}, {method_info})")
     else:
         print(f"   ❌ SemanticChunker (deaktiviert) → Naive Chunking (max={rag_config.naive_chunking_max_size}, overlap={rag_config.naive_chunking_overlap})")
     

@@ -33,6 +33,8 @@ class SemanticChunker:
         min_chunk_size: int = 400,
         overlap: int = 300,
         similarity_threshold: float = 0.65,
+        use_percentile: bool = False,
+        percentile: int = 10,
         embedding_model: Optional[Any] = None,
         debug_overlap: bool = False
     ):
@@ -49,11 +51,18 @@ class SemanticChunker:
                     Die letzten N Zeichen des vorherigen Chunks werden am Anfang
                     des nächsten Chunks wiederholt (am Satz-/Wortgrenze geschnitten).
             similarity_threshold: Schwellwert für Themenwechsel (Wertebereich 0.0-1.0).
+                                 Nur aktiv wenn use_percentile=False.
                                  Wenn die Cosine-Similarity zwischen zwei aufeinander-
                                  folgenden Sätzen UNTER diesem Wert liegt, wird eine
                                  Chunk-Grenze gesetzt. Niedrigerer Wert = weniger Splits,
                                  höherer Wert = mehr/kleinere Chunks.
                                  Empfohlen: 0.5-0.7 je nach Domäne.
+            use_percentile: Wenn True, wird die Perzentil-Methode verwendet.
+                           Wenn False, wird der statische similarity_threshold verwendet.
+            percentile: Das X-te Perzentil für Breakpoints (nur wenn use_percentile=True).
+                       Breakpoints werden gesetzt, wo die Similarity in den niedrigsten
+                       X% der Similarity-Werte des Dokuments liegt.
+                       Beispiel: percentile=10 → Breakpoints bei den niedrigsten 10%.
             embedding_model: SentenceTransformer Model (optional).
                             Wird lazy geladen wenn nicht angegeben.
             debug_overlap: Wenn True, wird '[...]' als Marker zwischen Overlap
@@ -64,6 +73,8 @@ class SemanticChunker:
         self.min_chunk_size = min_chunk_size
         self.overlap = overlap
         self.similarity_threshold = similarity_threshold
+        self.use_percentile = use_percentile
+        self.percentile = percentile
         self._embedding_model = embedding_model
         self.debug_overlap = debug_overlap
         
@@ -161,13 +172,32 @@ class SemanticChunker:
         
         return dot_product / (norm1 * norm2)
     
+    def _compute_all_similarities(self, embeddings: np.ndarray) -> List[float]:
+        """
+        Berechne Cosine-Similarity zwischen allen aufeinanderfolgenden Sätzen.
+        
+        Args:
+            embeddings: Sentence embeddings (shape: n_sentences x embedding_dim)
+            
+        Returns:
+            Liste von Similarity-Werten (Länge: n_sentences - 1)
+        """
+        if len(embeddings) <= 1:
+            return []
+        
+        similarities = []
+        for i in range(len(embeddings) - 1):
+            sim = self._cosine_similarity(embeddings[i], embeddings[i + 1])
+            similarities.append(sim)
+        
+        return similarities
+    
     def _find_breakpoints(self, embeddings: np.ndarray) -> List[int]:
         """
-        Finde Breakpoints basierend auf Similarity-Drops.
+        Finde Breakpoints basierend auf der konfigurierten Methode.
         
-        Für jedes Paar aufeinanderfolgender Sätze wird die Cosine-Similarity
-        berechnet. Wenn sim < self.similarity_threshold, wird ein Breakpoint
-        gesetzt (= Themenwechsel erkannt, neuer Chunk beginnt).
+        Dispatch-Methode: Ruft entweder _find_breakpoints_static_threshold()
+        oder _find_breakpoints_percentile() auf, je nach self.use_percentile.
         
         Args:
             embeddings: Sentence embeddings (shape: n_sentences x embedding_dim)
@@ -179,37 +209,92 @@ class SemanticChunker:
         if len(embeddings) <= 1:
             return []
         
+        # Berechne alle Similarities einmal (wird von beiden Methoden benötigt)
+        similarities = self._compute_all_similarities(embeddings)
+        
+        if self.use_percentile:
+            return self._find_breakpoints_percentile(similarities)
+        else:
+            return self._find_breakpoints_static_threshold(similarities)
+    
+    def _find_breakpoints_static_threshold(self, similarities: List[float]) -> List[int]:
+        """
+        Finde Breakpoints basierend auf statischem Similarity-Threshold.
+        
+        Original-Methode: Wenn sim < self.similarity_threshold, wird ein Breakpoint
+        gesetzt (= Themenwechsel erkannt, neuer Chunk beginnt).
+        
+        Args:
+            similarities: Liste von Similarity-Werten zwischen aufeinanderfolgenden Sätzen
+            
+        Returns:
+            Liste von Indizes wo neue Chunks beginnen sollten.
+        """
         breakpoints = []
-        similarities = []
         
-        # Berechne Similarity zwischen aufeinanderfolgenden Sätzen
-        for i in range(len(embeddings) - 1):
-            sim = self._cosine_similarity(embeddings[i], embeddings[i + 1])
-            similarities.append(sim)
-        
-        # Finde Stellen mit niedriger Similarity (= Themenwechsel)
         for i, sim in enumerate(similarities):
             if sim < self.similarity_threshold:
                 # Index i+1 ist der Start des neuen Themas
                 breakpoints.append(i + 1)
-                logger.debug(f"Breakpoint bei Satz {i+1}: Similarity={sim:.3f}")
+                logger.debug(f"[Static] Breakpoint bei Satz {i+1}: Similarity={sim:.3f} < threshold={self.similarity_threshold}")
         
+        logger.debug(f"[Static Threshold] {len(breakpoints)} Breakpoints gefunden (threshold={self.similarity_threshold})")
+        return breakpoints
+    
+    def _find_breakpoints_percentile(self, similarities: List[float]) -> List[int]:
+        """
+        Finde Breakpoints basierend auf Perzentil-Methode.
+        
+        Berechnet das X-te Perzentil der Similarity-Werte und setzt Breakpoints
+        dort, wo die Similarity unter diesem Perzentil-Schwellwert liegt.
+        
+        Vorteil: Adaptiv pro Dokument - findet die "tiefsten Einschnitte"
+        relativ zur Dokumentstruktur, unabhängig von absoluten Similarity-Werten.
+        
+        Args:
+            similarities: Liste von Similarity-Werten zwischen aufeinanderfolgenden Sätzen
+            
+        Returns:
+            Liste von Indizes wo neue Chunks beginnen sollten.
+        """
+        if not similarities:
+            return []
+        
+        # Berechne den Perzentil-Schwellwert dynamisch für dieses Dokument
+        percentile_threshold = np.percentile(similarities, self.percentile)
+        
+        logger.debug(
+            f"[Percentile] Similarities: min={min(similarities):.3f}, "
+            f"max={max(similarities):.3f}, mean={np.mean(similarities):.3f}, "
+            f"{self.percentile}th percentile={percentile_threshold:.3f}"
+        )
+        
+        breakpoints = []
+        
+        for i, sim in enumerate(similarities):
+            if sim <= percentile_threshold:
+                # Index i+1 ist der Start des neuen Themas
+                breakpoints.append(i + 1)
+                logger.debug(f"[Percentile] Breakpoint bei Satz {i+1}: Similarity={sim:.3f} < {self.percentile}th percentile={percentile_threshold:.3f}")
+        
+        logger.debug(f"[Percentile] {len(breakpoints)} Breakpoints gefunden ({self.percentile}th percentile={percentile_threshold:.3f})")
         return breakpoints
     
     def _merge_small_chunks(self, raw_chunks: List[str]) -> List[str]:
         """
-        Führe zu kleine Chunks mit vorherigem ODER nachfolgendem Chunk zusammen.
+        Führe zu kleine Chunks zusammen bis min_chunk_size erreicht ist.
         
         Strategie:
-        1. Prüfe zuerst, ob Merging mit vorherigem Chunk möglich ist (max_size)
-        2. Falls nicht möglich, markiere für Merging mit nachfolgendem Chunk
-        3. Chunks die weder vor noch zurück gemergt werden können, bleiben separat
+        1. Akkumuliere Chunks bis min_chunk_size erreicht ist
+        2. Sobald min_chunk_size erreicht: Speichere und starte neuen Akkumulator
+        3. Falls nächster Chunk auch < min_size: Prüfe ob Anhängen noch möglich (max_size)
+        4. Am Ende: Letzten Akkumulator mit vorherigem mergen falls zu klein
         
         Args:
             raw_chunks: Liste von Chunks (einige können unter min_chunk_size sein)
             
         Returns:
-            Liste von gemergten Chunks (alle >= min_chunk_size oder nicht mergbar)
+            Liste von gemergten Chunks (alle >= min_chunk_size oder nicht weiter mergbar)
         """
         if not raw_chunks:
             return []
@@ -217,87 +302,57 @@ class SemanticChunker:
         if len(raw_chunks) == 1:
             return raw_chunks  # Einzelner Chunk - nichts zu mergen
         
-        # Markiere Chunks für Forward-Merging (mit nachfolgendem Chunk)
-        # Index i bedeutet: Chunk i soll mit Chunk i+1 zusammengeführt werden
-        forward_merge_indices = set()
-        
-        # Erster Durchlauf: Identifiziere zu kleine Chunks und prüfe Merge-Optionen
-        for i, chunk in enumerate(raw_chunks):
-            if len(chunk) >= self.min_chunk_size:
-                continue  # Chunk ist groß genug
-            
-            # Chunk ist zu klein - versuche Merging
-            can_merge_backward = False
-            can_merge_forward = False
-            
-            # Prüfe Backward-Merge (mit vorherigem Chunk)
-            if i > 0:
-                prev_chunk = raw_chunks[i - 1]
-                combined_backward = len(prev_chunk) + len(chunk) + 1
-                if combined_backward <= self.max_chunk_size:
-                    can_merge_backward = True
-            
-            # Prüfe Forward-Merge (mit nachfolgendem Chunk)
-            if i < len(raw_chunks) - 1:
-                next_chunk = raw_chunks[i + 1]
-                combined_forward = len(chunk) + len(next_chunk) + 1
-                if combined_forward <= self.max_chunk_size:
-                    can_merge_forward = True
-            
-            # Entscheide Merge-Strategie: Backward bevorzugt, dann Forward
-            if can_merge_backward:
-                # Backward-Merge wird im zweiten Durchlauf direkt durchgeführt
-                pass  # Wird unten behandelt
-            elif can_merge_forward:
-                # Forward-Merge markieren
-                forward_merge_indices.add(i)
-                logger.debug(f"Chunk {i} ({len(chunk)} Zeichen) wird mit Chunk {i+1} gemergt (forward)")
-        
-        # Zweiter Durchlauf: Führe Merging durch
         merged_chunks = []
-        i = 0
+        current_accumulator = ""  # Akkumuliert Chunks bis min_size erreicht
         
-        while i < len(raw_chunks):
-            chunk = raw_chunks[i]
+        for i, chunk in enumerate(raw_chunks):
+            if not current_accumulator:
+                # Starte neuen Akkumulator
+                current_accumulator = chunk
+            else:
+                # Prüfe ob wir den Chunk anhängen können
+                combined_size = len(current_accumulator) + len(chunk) + 1  # +1 für Leerzeichen
+                
+                if combined_size <= self.max_chunk_size:
+                    # Anhängen möglich
+                    current_accumulator = current_accumulator + ' ' + chunk
+                else:
+                    # Würde max_size überschreiten - speichere akkumulierten Chunk
+                    merged_chunks.append(current_accumulator)
+                    current_accumulator = chunk
             
-            # Prüfe ob dieser Chunk für Forward-Merge markiert ist
-            if i in forward_merge_indices:
-                # Merge mit nachfolgendem Chunk
-                if i + 1 < len(raw_chunks):
+            # Prüfe ob Akkumulator jetzt groß genug ist
+            if len(current_accumulator) >= self.min_chunk_size:
+                # Akkumulator hat min_size erreicht
+                # Prüfe ob der nächste Chunk auch zu klein ist und angehängt werden müsste
+                if i < len(raw_chunks) - 1:
                     next_chunk = raw_chunks[i + 1]
-                    merged = chunk + ' ' + next_chunk
+                    next_combined = len(current_accumulator) + len(next_chunk) + 1
                     
-                    # Prüfe ob der gemergte Chunk noch zu klein ist
-                    if len(merged) < self.min_chunk_size and merged_chunks:
-                        # Versuche zusätzlich mit vorherigem zu mergen
-                        combined_with_prev = len(merged_chunks[-1]) + len(merged) + 1
-                        if combined_with_prev <= self.max_chunk_size:
-                            merged_chunks[-1] += ' ' + merged
-                            i += 2
-                            continue
-                    
-                    merged_chunks.append(merged)
-                    i += 2  # Überspringe den nachfolgenden Chunk (bereits gemergt)
-                    continue
-            
-            # Normaler Chunk oder Backward-Merge
-            if len(chunk) < self.min_chunk_size:
-                # Zu klein - versuche Backward-Merge
-                if merged_chunks:
-                    combined_size = len(merged_chunks[-1]) + len(chunk) + 1
-                    if combined_size <= self.max_chunk_size:
-                        merged_chunks[-1] += ' ' + chunk
-                        i += 1
+                    if len(next_chunk) < self.min_chunk_size and next_combined <= self.max_chunk_size:
+                        # Nächster Chunk ist zu klein - weiter akkumulieren
                         continue
                 
-                # Backward nicht möglich und Forward nicht markiert
-                # Chunk bleibt separat (lieber zu klein als Datenverlust)
-                merged_chunks.append(chunk)
+                # Akkumulator speichern und neu starten
+                merged_chunks.append(current_accumulator)
+                current_accumulator = ""
+        
+        # Finaler Akkumulator
+        if current_accumulator:
+            if len(current_accumulator) >= self.min_chunk_size:
+                # Groß genug - einfach speichern
+                merged_chunks.append(current_accumulator)
+            elif merged_chunks:
+                # Zu klein - versuche mit letztem gespeicherten Chunk zu mergen
+                combined_size = len(merged_chunks[-1]) + len(current_accumulator) + 1
+                if combined_size <= self.max_chunk_size:
+                    merged_chunks[-1] = merged_chunks[-1] + ' ' + current_accumulator
+                else:
+                    # Kann nicht mergen - speichere trotzdem (lieber zu klein als Datenverlust)
+                    merged_chunks.append(current_accumulator)
             else:
-                # Chunk ist groß genug
-                merged_chunks.append(chunk)
-            
-            i += 1
+                # Kein vorheriger Chunk zum Mergen - speichere trotzdem
+                merged_chunks.append(current_accumulator)
         
         return merged_chunks
     
