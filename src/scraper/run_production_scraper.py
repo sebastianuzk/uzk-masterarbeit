@@ -1177,21 +1177,33 @@ def run_production_scraper():
     
     # Erstelle DataFrame mit Chunking-Hyperparametern
     if USE_SEMANTIC_CHUNKING:
+        # Bestimme welche Methode verwendet wird
+        if rag_config.semantic_chunking_use_percentile:
+            method_name = f'Semantic Chunking (Percentile, {rag_config.semantic_chunking_percentile}th)'
+            threshold_or_percentile_label = 'Percentile'
+            threshold_or_percentile_value = f'{rag_config.semantic_chunking_percentile}th'
+        else:
+            method_name = f'Semantic Chunking (Static Threshold, {rag_config.semantic_chunking_similarity_threshold})'
+            threshold_or_percentile_label = 'Similarity Threshold'
+            threshold_or_percentile_value = rag_config.semantic_chunking_similarity_threshold
+        
         chunking_params = {
             'Parameter': [
                 'Chunking-Methode',
+                'Breakpoint-Methode',
+                threshold_or_percentile_label,
                 'Max Chunk Size',
                 'Min Chunk Size', 
                 'Overlap',
-                'Similarity Threshold',
                 'Embedding Model'
             ],
             'Wert': [
-                'Semantic Chunking (Embedding-basiert)',
+                method_name,
+                'Percentile' if rag_config.semantic_chunking_use_percentile else 'Static Threshold',
+                threshold_or_percentile_value,
                 rag_config.semantic_chunking_max_size,
                 rag_config.semantic_chunking_min_size,
                 rag_config.semantic_chunking_overlap,
-                rag_config.semantic_chunking_similarity_threshold,
                 rag_config.embedding_model_name
             ]
         }
