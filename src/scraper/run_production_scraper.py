@@ -536,7 +536,7 @@ def run_production_scraper():
         )
         print(f"   ✅ SemanticChunker (max={rag_config.semantic_chunking_max_size}, min={rag_config.semantic_chunking_min_size}, overlap={rag_config.semantic_chunking_overlap}, threshold={rag_config.semantic_chunking_similarity_threshold})")
     else:
-        print(f"   ❌ SemanticChunker (deaktiviert) → Naive Chunking ({rag_config.semantic_chunking_max_size}/{rag_config.semantic_chunking_overlap})")
+        print(f"   ❌ SemanticChunker (deaktiviert) → Naive Chunking (max={rag_config.naive_chunking_max_size}, overlap={rag_config.naive_chunking_overlap})")
     
     if USE_DEDUPLICATION:
         deduplicator = ContentDeduplicator(
@@ -906,18 +906,24 @@ def run_production_scraper():
         
         # Batch-Embedding mit Progress Bar (MIT NORMALISIERUNG für echte Cosine-Similarity)
         all_embeddings = []
-        with tqdm(total=len(all_chunks), desc=f"   🤖 Embeddings", unit="chunk") as pbar:
-            for i in range(0, len(all_chunks), BATCH_SIZE):
-                batch = all_chunks[i:i + BATCH_SIZE]
-                # Optimiert: normalize_embeddings=True spart manuelle Normalisierung
-                embeddings = embedding_model.encode(
-                    batch, 
-                    show_progress_bar=False,
-                    normalize_embeddings=True,  # Schneller als manuelle Normalisierung
-                    convert_to_numpy=True
-                )
-                all_embeddings.extend(embeddings.tolist())
-                pbar.update(len(batch))
+        print(f"   🤖 Erstelle Embeddings für {len(all_chunks):,} Chunks...")
+        sys.stdout.flush()
+        
+        for i in tqdm(range(0, len(all_chunks), BATCH_SIZE), 
+                      desc=f"   🤖 Embeddings", 
+                      unit="batch",
+                      total=(len(all_chunks) + BATCH_SIZE - 1) // BATCH_SIZE,
+                      file=sys.stdout,
+                      dynamic_ncols=True):
+            batch = all_chunks[i:i + BATCH_SIZE]
+            # Optimiert: normalize_embeddings=True spart manuelle Normalisierung
+            embeddings = embedding_model.encode(
+                batch, 
+                show_progress_bar=False,
+                normalize_embeddings=True,  # Schneller als manuelle Normalisierung
+                convert_to_numpy=True
+            )
+            all_embeddings.extend(embeddings.tolist())
         
         # Batch-Speicherung in ChromaDB (mit Größenlimit)
         # ChromaDB erlaubt max ~5000 Chunks pro add() - wir nutzen 5000 als Limit
