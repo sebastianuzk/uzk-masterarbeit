@@ -285,9 +285,9 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
     """
     Run a single evaluation scenario through the agent.
     
-    NOTE: This only evaluates tool SELECTION, not tool execution.
-    We call the LLM directly to get its tool choice without actually
-    executing the tools (which would require real credentials, etc.)
+    NOTE: For single-agent (ReactAgent), this only evaluates tool SELECTION by
+    calling the LLM directly. For multi-agent, we run the full agent and extract
+    tool calls from the response.
     """
     # Clear agent memory for fresh start
     agent.clear_memory()
@@ -296,47 +296,81 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
     start_time = time.time()
     
     try:
-        # Call the LLM directly with tools bound, but don't execute tools
-        # This evaluates whether the LLM selects the correct tool
-        from langchain_core.messages import HumanMessage, SystemMessage
+        # Check if this is a multi-agent system (doesn't have direct .llm access)
+        is_multi_agent = not hasattr(agent, 'llm')
         
-        # Get the LLM with tools bound
-        llm_with_tools = agent.llm.bind_tools(agent.tools)
-        
-        # Create message list
-        messages = [
-            agent.system_message,
-            HumanMessage(content=scenario.user_prompt)
-        ]
-        
-        # Invoke LLM to get tool selection (without executing tools)
-        response = llm_with_tools.invoke(messages)
-        
-        latency_ms = (time.time() - start_time) * 1000
-        
-        # Extract tool calls from the AIMessage response
-        tool_calls = []
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            for tc in response.tool_calls:
-                tool_calls.append(ToolCall(
-                    name=tc.get("name", ""),
-                    arguments=tc.get("args", {})
-                ))
-        
-        # Extract token usage from the response
-        input_tokens, output_tokens, total_tokens = 0, 0, 0
-        if hasattr(response, 'usage_metadata') and response.usage_metadata:
-            usage = response.usage_metadata
-            if isinstance(usage, dict):
-                input_tokens = usage.get('input_tokens', 0)
-                output_tokens = usage.get('output_tokens', 0)
-                total_tokens = usage.get('total_tokens', input_tokens + output_tokens)
-        elif hasattr(response, 'response_metadata') and response.response_metadata:
-            meta = response.response_metadata
-            if isinstance(meta, dict):
-                input_tokens = meta.get('prompt_eval_count', 0)
-                output_tokens = meta.get('eval_count', 0)
-                total_tokens = input_tokens + output_tokens
+        if is_multi_agent:
+            # For multi-agent: Run the full agent (orchestrator will route)
+            # and extract tool information from the specialized agent's execution
+            from langchain_core.messages import HumanMessage, SystemMessage
+            
+            # Run the agent - this returns the final response text
+            response_text = agent.chat(scenario.user_prompt)
+            
+            latency_ms = (time.time() - start_time) * 1000
+            
+            # Extract tool calls from the orchestrator's stored response
+            tool_calls = []
+            
+            if hasattr(agent, 'orchestrator') and agent.orchestrator.last_agent_response:
+                agent_response = agent.orchestrator.last_agent_response
+                
+                # Extract tool calls from all messages in the response
+                if "messages" in agent_response:
+                    for msg in agent_response["messages"]:
+                        if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                            for tc in msg.tool_calls:
+                                tool_calls.append(ToolCall(
+                                    name=tc.get("name", ""),
+                                    arguments=tc.get("args", {})
+                                ))
+            
+            # Token estimation for multi-agent (we don't have direct access)
+            input_tokens = len(scenario.user_prompt.split()) * 2  # Rough estimate
+            output_tokens = len(response_text.split()) * 2  # Rough estimate
+            total_tokens = input_tokens + output_tokens
+            
+        else:
+            # For single-agent (ReactAgent): Call LLM directly with tools bound
+            from langchain_core.messages import HumanMessage, SystemMessage
+            
+            # Get the LLM with tools bound
+            llm_with_tools = agent.llm.bind_tools(agent.tools)
+            
+            # Create message list
+            messages = [
+                agent.system_message,
+                HumanMessage(content=scenario.user_prompt)
+            ]
+            
+            # Invoke LLM to get tool selection (without executing tools)
+            response = llm_with_tools.invoke(messages)
+            
+            latency_ms = (time.time() - start_time) * 1000
+            
+            # Extract tool calls from the AIMessage response
+            tool_calls = []
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tc in response.tool_calls:
+                    tool_calls.append(ToolCall(
+                        name=tc.get("name", ""),
+                        arguments=tc.get("args", {})
+                    ))
+            
+            # Extract token usage from the response
+            input_tokens, output_tokens, total_tokens = 0, 0, 0
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                usage = response.usage_metadata
+                if isinstance(usage, dict):
+                    input_tokens = usage.get('input_tokens', 0)
+                    output_tokens = usage.get('output_tokens', 0)
+                    total_tokens = usage.get('total_tokens', input_tokens + output_tokens)
+            elif hasattr(response, 'response_metadata') and response.response_metadata:
+                meta = response.response_metadata
+                if isinstance(meta, dict):
+                    input_tokens = meta.get('prompt_eval_count', 0)
+                    output_tokens = meta.get('eval_count', 0)
+                    total_tokens = input_tokens + output_tokens
         
         # Evaluate
         result = evaluate_scenario(scenario, tool_calls, latency_ms)
@@ -384,7 +418,8 @@ def run_evaluation(
     model_name: Optional[str] = None,
     output_dir: str = "data/eval_results",
     max_scenarios: Optional[int] = None,
-    verbose: bool = True
+    verbose: bool = True,
+    agent_mode: str = "single"
 ) -> EvaluationReport:
     """
     Run the full evaluation suite.
@@ -394,21 +429,24 @@ def run_evaluation(
         output_dir: Directory for output files
         max_scenarios: Limit number of scenarios (for testing)
         verbose: Print progress
+        agent_mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem
     
     Returns:
         EvaluationReport with all results
     """
     from config.settings import settings
-    from src.agent.react_agent import ReactAgent
+    from src.agent import create_agent
     
     # Get model info
     actual_model = model_name or settings.OLLAMA_MODEL
+    mode_label = "Multi-Agent" if agent_mode == "multi" else "Single-Agent"
     
     if verbose:
         print("=" * 60)
         print("Tool Evaluation Suite")
         print("=" * 60)
         print(f"Model: {actual_model}")
+        print(f"Agent Mode: {mode_label}")
         print(f"Output: {output_dir}")
         print()
     
@@ -427,16 +465,17 @@ def run_evaluation(
     
     # Initialize agent
     if verbose:
-        print("Initializing agent...")
+        print(f"Initializing {mode_label}...")
     
     # Override model in settings if specified
     if model_name:
         settings.OLLAMA_MODEL = model_name
     
-    agent = ReactAgent()
+    agent = create_agent(mode=agent_mode)
     
     if verbose:
-        print(f"Agent ready with {len(agent.tools)} tools")
+        tools_count = len(agent.get_available_tools())
+        print(f"Agent ready with {tools_count} tools")
         print()
     
     # Run evaluation
@@ -479,6 +518,7 @@ def run_evaluation(
         evaluation_config={
             "max_scenarios": max_scenarios,
             "output_dir": output_dir,
+            "agent_mode": agent_mode,
         }
     )
     
@@ -487,6 +527,7 @@ def run_evaluation(
         print("=" * 60)
         print("RESULTS SUMMARY")
         print("=" * 60)
+        print(f"Agent Mode: {mode_label}")
         print(f"Total scenarios: {metrics.total_scenarios}")
         print(f"Exact match rate: {metrics.exact_match_rate:.1%}")
         print(f"Mean F1: {metrics.mean_f1:.3f} (±{metrics.std_f1:.3f})")
@@ -674,6 +715,9 @@ def main():
                         help="Export format (default: all)")
     parser.add_argument("--export-dir", type=str, default="data/eval_scenarios",
                         help="Directory for exported scenarios")
+    parser.add_argument("--agent-mode", type=str, default="single",
+                        choices=["single", "multi"],
+                        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem (default: single)")
     
     args = parser.parse_args()
     
@@ -687,7 +731,8 @@ def main():
             model_name=args.model,
             output_dir=args.output_dir,
             max_scenarios=args.max_scenarios,
-            verbose=not args.quiet
+            verbose=not args.quiet,
+            agent_mode=args.agent_mode
         )
 
 

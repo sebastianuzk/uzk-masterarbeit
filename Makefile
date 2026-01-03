@@ -7,8 +7,20 @@ help:
 	@echo "🚀 WiSo Chatbot CI/CD Commands"
 	@echo "================================================"
 	@echo ""
+	@echo "Agent Modes:"
+	@echo "  make run            - Run CLI with Single-Agent"
+	@echo "  make run-multi      - Run CLI with Multi-Agent"
+	@echo "  make ui             - Run Streamlit UI with Single-Agent"
+	@echo "  make ui-multi       - Run Streamlit UI with Multi-Agent"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test           - Run all tests (Single-Agent)"
+	@echo "  make test-multi     - Run all tests (Multi-Agent)"
+	@echo "  make test-fast      - Run only fast unit tests"
+	@echo "  make test-integration       - Integration tests (Single-Agent)"
+	@echo "  make test-integration-multi - Integration tests (Multi-Agent)"
+	@echo ""
 	@echo "Local Development:"
-	@echo "  make test           - Run all tests"
 	@echo "  make build          - Verify build"
 	@echo "  make deploy-local   - Deploy locally (no Docker)"
 	@echo "  make pipeline       - Run full CI/CD pipeline locally"
@@ -27,21 +39,30 @@ help:
 	@echo "  make clean          - Clean temporary files"
 	@echo "  make logs           - Show deployment logs"
 
-# Run tests
+# Run tests (single-agent, default)
 test:
-	@echo "🧪 Running tests..."
+	@echo "🧪 Running tests (Single-Agent)..."
 	@source .venv/bin/activate && python -m pytest tests/ -v
+
+# Run tests with multi-agent
+test-multi:
+	@echo "🧪 Running tests (Multi-Agent)..."
+	@source .venv/bin/activate && python -m pytest tests/ -v --agent-mode=multi
 
 # Run only fast unit tests
 test-fast:
 	@echo "⚡ Running fast unit tests..."
 	@source .venv/bin/activate && python -m pytest tests/unit/ -v
 
-# Run integration tests
+# Run integration tests (single-agent)
 test-integration:
-	@echo "🔗 Running integration tests..."
+	@echo "🔗 Running integration tests (Single-Agent)..."
 	@source .venv/bin/activate && python -m pytest tests/integration/ -v -m "not slow"
 
+# Run integration tests (multi-agent)
+test-integration-multi:
+	@echo "🔗 Running integration tests (Multi-Agent)..."
+	@source .venv/bin/activate && python -m pytest tests/integration/ -v -m "not slow" --agent-mode=multi
 # Run LLM quality tests
 test-llm:
 	@echo "🤖 Running LLM quality tests..."
@@ -136,6 +157,26 @@ setup: install
 
 # Quick start
 start: deploy-local
+
+# Run CLI with single agent (default)
+run:
+	@echo "🤖 Starting Single-Agent CLI..."
+	@source .venv/bin/activate && python main.py
+
+# Run CLI with multi-agent
+run-multi:
+	@echo "🎭 Starting Multi-Agent CLI..."
+	@source .venv/bin/activate && python main.py --agent-mode multi
+
+# Run Streamlit UI with single agent
+ui:
+	@echo "🌐 Starting Single-Agent Streamlit UI..."
+	@source .venv/bin/activate && python main.py --ui
+
+# Run Streamlit UI with multi-agent
+ui-multi:
+	@echo "🎭 Starting Multi-Agent Streamlit UI..."
+	@source .venv/bin/activate && python main.py --ui --agent-mode multi
 
 # Status check
 status:

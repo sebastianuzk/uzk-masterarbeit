@@ -23,18 +23,37 @@ curl http://localhost:11434/api/tags
 ollama serve
 ```
 
+## Agent-Modi
+
+Die Tests unterstützen sowohl den **Single-Agent** als auch den **Multi-Agent** Modus.
+Standardmäßig wird der Single-Agent verwendet.
+
+```bash
+# Single-Agent (Standard)
+pytest tests/ -v
+
+# Multi-Agent
+pytest tests/ -v --agent-mode=multi
+```
+
 ## Tests ausführen
 
 ### ⚡ Schnelle Tests (Empfohlen)
 ```bash
-# Alle Tests OHNE langsame LLM-Tests (~30-40 Sekunden)
+# Single-Agent (Standard)
 pytest tests/ -v -m "not slow"
+
+# Multi-Agent
+pytest tests/ -v -m "not slow" --agent-mode=multi
 ```
 
 ### 🐌 Alle Tests (inkl. langsame LLM-Tests)
 ```bash
-# Alle Tests inkl. langsame Tests (2-5 Minuten)
+# Single-Agent
 pytest tests/ -v
+
+# Multi-Agent
+pytest tests/ -v --agent-mode=multi
 ```
 
 ### 🎯 Spezifische Test-Kategorien
@@ -42,8 +61,11 @@ pytest tests/ -v
 # Nur Unit-Tests
 pytest tests/unit/ -v
 
-# Nur Integration-Tests
+# Nur Integration-Tests (Single-Agent)
 pytest tests/integration/ -v
+
+# Nur Integration-Tests (Multi-Agent)
+pytest tests/integration/ -v --agent-mode=multi
 
 # Nur LLM-Tests (schnelle)
 pytest tests/llm/ -v -m "not slow"
@@ -51,8 +73,20 @@ pytest tests/llm/ -v -m "not slow"
 # Nur langsame Tests
 pytest tests/ -v -m "slow"
 
+# Nur Agent-Tests
+pytest tests/ -v -m "agent"
+
 # Spezifischer Test
-pytest tests/integration/test_agent.py::TestReactAgent::test_simple_chat -v
+pytest tests/integration/test_agent.py::TestAgentInitialization::test_agent_initialization -v
+```
+
+### 📊 Evaluierung
+```bash
+# Evaluierung mit Single-Agent
+python -m tests.eval.run_evaluation
+
+# Evaluierung mit Multi-Agent
+python -m tests.eval.run_evaluation --agent-mode=multi
 ```
 
 ## Test-Kategorien

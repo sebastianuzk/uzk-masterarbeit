@@ -1,5 +1,10 @@
 """
 Pytest Configuration and Fixtures
+
+Supports testing both single-agent and multi-agent systems via command line:
+    pytest tests/                           # Default: single-agent
+    pytest tests/ --agent-mode=single       # Explicit single-agent
+    pytest tests/ --agent-mode=multi        # Multi-agent system
 """
 import pytest
 import sys
@@ -12,8 +17,59 @@ sys.path.insert(0, str(project_root))
 
 
 # ============================================================================
+# COMMAND LINE OPTIONS
+# ============================================================================
+
+def pytest_addoption(parser):
+    """Füge custom Command-Line-Optionen hinzu"""
+    parser.addoption(
+        "--agent-mode",
+        action="store",
+        default="single",
+        choices=["single", "multi"],
+        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem (default: single)"
+    )
+
+
+# ============================================================================
 # GLOBAL FIXTURES
 # ============================================================================
+
+@pytest.fixture(scope="session")
+def agent_mode(request):
+    """Gibt den gewählten Agent-Mode zurück"""
+    return request.config.getoption("--agent-mode")
+
+
+@pytest.fixture(scope="session")
+def agent_factory(agent_mode):
+    """
+    Factory-Fixture für Agenten basierend auf dem gewählten Mode.
+    
+    Usage in tests:
+        def test_something(agent_factory):
+            agent = agent_factory()
+            response = agent.chat("Hello")
+    """
+    from src.agent import create_agent
+    
+    def _create_agent():
+        return create_agent(mode=agent_mode)
+    
+    return _create_agent
+
+
+@pytest.fixture(scope="function")
+def agent(agent_factory):
+    """
+    Fixture das einen frischen Agenten für jeden Test erstellt.
+    
+    Usage in tests:
+        def test_something(agent):
+            response = agent.chat("Hello")
+    """
+    return agent_factory()
+
 
 @pytest.fixture(scope="session")
 def project_root_path():
@@ -70,6 +126,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "llm: LLM Quality Tests"
     )
+    config.addinivalue_line(
+        "markers", "agent: Tests that use the agent (affected by --agent-mode)"
+    )
 
 
 # ============================================================================
@@ -101,9 +160,12 @@ def pytest_collection_modifyitems(config, items):
 @pytest.hookimpl(tryfirst=True)
 def pytest_report_header(config):
     """Füge custom Header zum Test-Report hinzu"""
+    agent_mode = config.getoption("--agent-mode", default="single")
+    mode_label = "Multi-Agent" if agent_mode == "multi" else "Single-Agent"
     return [
         "Uzk Masterarbeit - Chatbot Agent Tests",
-        f"Project Root: {project_root}"
+        f"Project Root: {project_root}",
+        f"Agent Mode: {mode_label} ({agent_mode})"
     ]
 
 
