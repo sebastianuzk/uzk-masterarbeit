@@ -176,6 +176,7 @@ class BaseSpecializedAgent(ABC):
     def clear_memory(self) -> None:
         """Lösche die Konversationshistorie."""
         self.memory = []
+        self.last_agent_response = None
     
     def get_routing_info(self) -> Dict[str, Any]:
         """

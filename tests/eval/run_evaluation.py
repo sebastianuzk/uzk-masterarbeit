@@ -418,7 +418,7 @@ def run_evaluation(
     
     Args:
         model_name: Optional model name override
-        output_dir: Directory for output files
+        output_dir: Directory for output files (will be organized by agent mode)
         max_scenarios: Limit number of scenarios (for testing)
         verbose: Print progress
         agent_mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem
@@ -433,13 +433,17 @@ def run_evaluation(
     actual_model = model_name or settings.OLLAMA_MODEL
     mode_label = "Multi-Agent" if agent_mode == "multi" else "Single-Agent"
     
+    # Organize output by agent mode: data/eval_results/single_agent/ or data/eval_results/multi_agent/
+    mode_subdir = "multi_agent" if agent_mode == "multi" else "single_agent"
+    actual_output_dir = f"{output_dir}/{mode_subdir}"
+    
     if verbose:
         print("=" * 60)
         print("Tool Evaluation Suite")
         print("=" * 60)
         print(f"Model: {actual_model}")
         print(f"Agent Mode: {mode_label}")
-        print(f"Output: {output_dir}")
+        print(f"Output: {actual_output_dir}")
         print()
     
     # Load scenarios
@@ -509,7 +513,7 @@ def run_evaluation(
         aggregated_metrics=metrics,
         evaluation_config={
             "max_scenarios": max_scenarios,
-            "output_dir": output_dir,
+            "output_dir": actual_output_dir,
             "agent_mode": agent_mode,
         }
     )
@@ -543,7 +547,7 @@ def run_evaluation(
         print()
     
     # Save report
-    save_report(report, output_dir)
+    save_report(report, actual_output_dir)
     
     return report
 
