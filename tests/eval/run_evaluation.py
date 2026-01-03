@@ -300,34 +300,26 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
         is_multi_agent = not hasattr(agent, 'llm')
         
         if is_multi_agent:
-            # For multi-agent: Run the full agent (orchestrator will route)
-            # and extract tool information from the specialized agent's execution
+            # For multi-agent: Use get_tool_selection to test routing + tool selection
+            # without actually executing the tools (same as single-agent approach)
             from langchain_core.messages import HumanMessage, SystemMessage
             
-            # Run the agent - this returns the final response text
-            response_text = agent.chat(scenario.user_prompt)
+            # Get tool selection without execution
+            tool_selection = agent.get_tool_selection(scenario.user_prompt)
             
             latency_ms = (time.time() - start_time) * 1000
             
-            # Extract tool calls from the orchestrator's stored response
+            # Convert to ToolCall objects
             tool_calls = []
+            for tc in tool_selection:
+                tool_calls.append(ToolCall(
+                    name=tc.get("name", ""),
+                    arguments=tc.get("args", {})
+                ))
             
-            if hasattr(agent, 'orchestrator') and agent.orchestrator.last_agent_response:
-                agent_response = agent.orchestrator.last_agent_response
-                
-                # Extract tool calls from all messages in the response
-                if "messages" in agent_response:
-                    for msg in agent_response["messages"]:
-                        if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                            for tc in msg.tool_calls:
-                                tool_calls.append(ToolCall(
-                                    name=tc.get("name", ""),
-                                    arguments=tc.get("args", {})
-                                ))
-            
-            # Token estimation for multi-agent (we don't have direct access)
+            # Token estimation for multi-agent
             input_tokens = len(scenario.user_prompt.split()) * 2  # Rough estimate
-            output_tokens = len(response_text.split()) * 2  # Rough estimate
+            output_tokens = len(tool_calls) * 10  # Rough estimate
             total_tokens = input_tokens + output_tokens
             
         else:

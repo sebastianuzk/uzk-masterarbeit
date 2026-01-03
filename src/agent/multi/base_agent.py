@@ -189,3 +189,47 @@ class BaseSpecializedAgent(ABC):
             "description": self.description,
             "tools": self.get_tool_names(),
         }
+    
+    def get_tool_selection(self, message: str, context: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Ermittle welche Tools für eine Nachricht ausgewählt würden (ohne Ausführung).
+        
+        Diese Methode ist für Evaluierung gedacht - sie ruft das LLM auf um
+        Tool-Auswahl zu prüfen, führt aber die Tools nicht aus.
+        
+        Args:
+            message: Die zu verarbeitende Nachricht
+            context: Optionaler Kontext vom Orchestrator
+        
+        Returns:
+            Liste der ausgewählten Tool-Calls (name, args)
+        """
+        try:
+            full_message = message
+            if context:
+                full_message = f"[Kontext vom Orchestrator: {context}]\n\n{message}"
+            
+            # LLM mit Tools binden (ohne Ausführung)
+            llm_with_tools = self.llm.bind_tools(self.tools)
+            
+            # Nachricht erstellen
+            from langchain_core.messages import HumanMessage
+            messages = [self.system_message, HumanMessage(content=full_message)]
+            
+            # LLM aufrufen
+            response = llm_with_tools.invoke(messages)
+            
+            # Tool-Calls extrahieren
+            tool_calls = []
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tc in response.tool_calls:
+                    tool_calls.append({
+                        "name": tc.get("name", ""),
+                        "args": tc.get("args", {})
+                    })
+            
+            return tool_calls
+            
+        except Exception as e:
+            print(f"Fehler bei Tool-Auswahl im {self.name}: {str(e)}")
+            return []

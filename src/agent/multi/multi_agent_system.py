@@ -78,6 +78,22 @@ class MultiAgentSystem:
             Dict mit Agenten-Informationen
         """
         return self.orchestrator.get_agent_info()
+    
+    def get_tool_selection(self, message: str) -> List[Dict[str, Any]]:
+        """
+        Ermittle Tool-Auswahl ohne Ausführung (für Evaluierung).
+        
+        Diese Methode führt das Routing durch und fragt den spezialisierten
+        Agenten welche Tools er auswählen würde, ohne sie auszuführen.
+        
+        Args:
+            message: Die Nutzeranfrage
+            
+        Returns:
+            Liste der ausgewählten Tool-Calls
+        """
+        agent_name, tool_calls = self.orchestrator.get_tool_selection(message)
+        return tool_calls
 
 
 def create_multi_agent_system() -> MultiAgentSystem:

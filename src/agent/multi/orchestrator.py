@@ -232,11 +232,11 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
                 context=context
             )
             
-        except (json.JSONDecodeError, KeyError) as e:
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
             # Fallback: Versuche Agent-Namen aus Text zu extrahieren
             print(f"⚠️  Fehler beim Parsen der Routing-Entscheidung: {e}")
             
-            response_lower = response_text.lower() if 'response_text' in dir() else ""
+            response_lower = response_text.lower() if response_text else ""
             
             if "klips" in response_lower:
                 return RoutingDecision(
@@ -322,8 +322,41 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
     def clear_memory(self) -> None:
         """Lösche die Konversationshistorie aller Agenten."""
         self.memory = []
+        self.last_routed_agent = None
+        self.last_agent_response = None
         for agent in self.agents.values():
             agent.clear_memory()
+    
+    def get_tool_selection(self, message: str) -> tuple:
+        """
+        Ermittle Routing und Tool-Auswahl ohne Tool-Ausführung (für Evaluierung).
+        
+        Args:
+            message: Die Nutzeranfrage
+            
+        Returns:
+            Tuple von (agent_name, tool_calls)
+        """
+        try:
+            # 1. Routing-Entscheidung treffen
+            routing = self._route_query(message)
+            print(f"🎯 Routing zu: {routing.agent_name} ({routing.reasoning})")
+            
+            self.last_routed_agent = routing.agent_name
+            
+            # 2. Spezialisierten Agenten für Tool-Auswahl fragen (ohne Ausführung)
+            agent = self.agents.get(routing.agent_name)
+            if not agent:
+                return routing.agent_name, []
+            
+            # Tool-Auswahl ohne Ausführung
+            tool_calls = agent.get_tool_selection(message, context=routing.context)
+            
+            return routing.agent_name, tool_calls
+            
+        except Exception as e:
+            print(f"❌ Fehler bei Tool-Auswahl: {str(e)}")
+            return "Wissens-Agent", []
     
     def get_memory_summary(self) -> Dict[str, Any]:
         """Gebe Zusammenfassung des Memory zurück."""
