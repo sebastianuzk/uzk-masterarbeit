@@ -294,8 +294,7 @@ class ConfirmationAgent:
         # 1. Prüfe erforderliche Parameter
         for param in required_params:
             value = args.get(param)
-            # Prüfe ob Wert fehlt: None oder leerer String
-            # Beachte: False und 0 sind valide Werte, wenn explizit gesetzt
+            # Prüfe ob Wert fehlt: None oder leerer String (False und 0 sind gültige Werte)
             if value is None or (isinstance(value, str) and not value.strip()):
                 missing_params.append(param)
         
