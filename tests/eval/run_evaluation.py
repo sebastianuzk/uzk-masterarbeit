@@ -37,6 +37,14 @@ from tests.eval.runner import (
 from tests.eval.evaluation import ToolCall, GoldStandard, ArgumentMatchMode
 
 
+# Token estimation constants for multi-agent systems
+# These are rough approximations since we don't have direct access to the LLM tokenizer
+# Average English word ~1.3 tokens, we use 2 as conservative upper bound
+AVG_TOKENS_PER_WORD = 2
+# Average tool call generates ~10 tokens in the response (name + args structure)
+AVG_TOKENS_PER_TOOL_CALL = 10
+
+
 def load_scenarios_from_tests() -> list[EvaluationScenario]:
     """
     Load evaluation scenarios from the test files.
@@ -320,8 +328,9 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
                 ))
             
             # Token estimation for multi-agent
-            input_tokens = len(scenario.user_prompt.split()) * 2  # Rough estimate
-            output_tokens = len(tool_calls) * 10  # Rough estimate
+            # Using conservative constants defined at module level
+            input_tokens = len(scenario.user_prompt.split()) * AVG_TOKENS_PER_WORD
+            output_tokens = len(tool_calls) * AVG_TOKENS_PER_TOOL_CALL
             total_tokens = input_tokens + output_tokens
             
         else:

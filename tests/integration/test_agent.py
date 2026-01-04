@@ -79,10 +79,20 @@ class TestAgentMemory:
         assert memory_info["total_messages"] == 0
     
     def test_clear_memory(self, agent):
-        """Teste Memory löschen"""
+        """Teste Memory löschen nach Konversation"""
+        # Füge erst etwas zum Memory hinzu
+        agent.chat("Hallo, wie geht es dir?")
+        
+        # Überprüfe, dass Memory nicht leer ist
+        memory_info_before = agent.get_memory_summary()
+        assert memory_info_before["total_messages"] > 0
+        
+        # Lösche Memory
         agent.clear_memory()
-        memory_info = agent.get_memory_summary()
-        assert memory_info["total_messages"] == 0
+        
+        # Überprüfe, dass Memory jetzt leer ist
+        memory_info_after = agent.get_memory_summary()
+        assert memory_info_after["total_messages"] == 0
     
     def test_memory_after_chat(self, agent):
         """Teste Memory nach Chat"""
