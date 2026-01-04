@@ -8,7 +8,6 @@ Verwendung:
     pytest tests/integration/test_system_.py --agent-mode=multi # Multi-Agent
 """
 import os
-import sys
 import pytest
 
 # Markiere alle Tests in dieser Datei als slow, integration und agent
@@ -34,7 +33,7 @@ def skip_if_ollama_unavailable():
         response = requests.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3)
         if response.status_code != 200:
             pytest.skip("Ollama-Server nicht erreichbar")
-    except:
+    except Exception:
         pytest.skip("Ollama-Server nicht erreichbar")
 
 

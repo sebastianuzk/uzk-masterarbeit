@@ -8,7 +8,6 @@ Bietet gemeinsame Funktionalität für alle spezialisierten Agenten:
 - Agent-Erstellung mit LangGraph
 """
 
-import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +17,7 @@ from langchain_ollama import ChatOllama
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
 
 from config.settings import settings
+from src.agent.multi.llm_utils import create_llm
 
 
 class BaseSpecializedAgent(ABC):
@@ -30,15 +30,15 @@ class BaseSpecializedAgent(ABC):
     - Kann Anfragen in seinem Bereich bearbeiten
     """
     
-    def __init__(self, share_llm: Optional[ChatOllama] = None):
+    def __init__(self, shared_llm: Optional[ChatOllama] = None):
         """
         Initialisiere den spezialisierten Agenten.
         
         Args:
-            share_llm: Optional geteilte LLM-Instanz für Ressourceneffizienz
+            shared_llm: Optionale geteilte LLM-Instanz für Ressourceneffizienz
         """
         # LLM initialisieren oder teilen
-        self.llm = share_llm if share_llm else self._create_llm()
+        self.llm = shared_llm if shared_llm else create_llm()
         
         # Tools für diesen Agenten erstellen
         self.tools = self._create_tools()
@@ -77,39 +77,6 @@ class BaseSpecializedAgent(ABC):
     def _get_system_prompt(self) -> str:
         """Erstelle den System-Prompt für diesen Agenten."""
         pass
-    
-    def _create_llm(self) -> ChatOllama:
-        """
-        Erstelle eine LLM-Instanz mit optimierten Einstellungen.
-        
-        Returns:
-            Konfigurierte ChatOllama-Instanz
-        """
-        # Context-Size nach Modellgröße
-        MODEL_CTX_SIZES = {
-            "0.5b": 2048,
-            "1b": 4096,
-            "3b": 8192,
-            "8b": 8192,
-            "20b": 16384,
-            "70b": 16384,
-        }
-        
-        model_lower = settings.OLLAMA_MODEL.lower()
-        ctx_size = 8192  # Standard
-        for size_key, ctx_value in MODEL_CTX_SIZES.items():
-            if size_key in model_lower:
-                ctx_size = ctx_value
-                break
-        
-        return ChatOllama(
-            model=settings.OLLAMA_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=settings.TEMPERATURE,
-            num_ctx=ctx_size,
-            timeout=settings.REQUEST_TIMEOUT,
-            keep_alive=settings.OLLAMA_KEEP_ALIVE,
-        )
     
     def process(self, message: str, context: Optional[str] = None) -> str:
         """

@@ -27,6 +27,7 @@ from .base_agent import BaseSpecializedAgent
 from .klips_agent import KlipsAgent
 from .email_agent import EmailAgent
 from .knowledge_agent import KnowledgeAgent
+from .llm_utils import create_llm
 
 
 class RoutingDecision(BaseModel):
@@ -72,7 +73,7 @@ class OrchestratorAgent:
             print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
         
         # Shared LLM für alle Agenten (Ressourceneffizienz)
-        self.shared_llm = self._create_llm()
+        self.shared_llm = create_llm(verbose=True)
         
         # Spezialisierte Agenten initialisieren
         self.agents: Dict[str, BaseSpecializedAgent] = {}
@@ -87,35 +88,6 @@ class OrchestratorAgent:
         
         print(f"🎭 Orchestrator bereit mit {len(self.agents)} spezialisierten Agenten")
     
-    def _create_llm(self) -> ChatOllama:
-        """Erstelle die shared LLM-Instanz."""
-        MODEL_CTX_SIZES = {
-            "0.5b": 2048,
-            "1b": 4096,
-            "3b": 8192,
-            "8b": 8192,
-            "20b": 16384,
-            "70b": 16384,
-        }
-        
-        model_lower = settings.OLLAMA_MODEL.lower()
-        ctx_size = 8192
-        for size_key, ctx_value in MODEL_CTX_SIZES.items():
-            if size_key in model_lower:
-                ctx_size = ctx_value
-                break
-        
-        print(f"🤖 Initialisiere ChatOllama mit Modell: {settings.OLLAMA_MODEL} (ctx_size={ctx_size})")
-        
-        return ChatOllama(
-            model=settings.OLLAMA_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=settings.TEMPERATURE,
-            num_ctx=ctx_size,
-            timeout=settings.REQUEST_TIMEOUT,
-            keep_alive=settings.OLLAMA_KEEP_ALIVE,
-        )
-    
     def _initialize_agents(self) -> None:
         """Initialisiere alle spezialisierten Agenten."""
         agent_classes: List[Type[BaseSpecializedAgent]] = [
@@ -126,7 +98,7 @@ class OrchestratorAgent:
         
         for agent_class in agent_classes:
             try:
-                agent = agent_class(share_llm=self.shared_llm)
+                agent = agent_class(shared_llm=self.shared_llm)
                 self.agents[agent.name] = agent
             except Exception as e:
                 print(f"⚠️  Fehler beim Initialisieren von {agent_class.__name__}: {e}")

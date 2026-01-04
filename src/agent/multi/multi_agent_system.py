@@ -33,7 +33,13 @@ class MultiAgentSystem:
             
         Returns:
             Die Antwort des Systems
+            
+        Raises:
+            ValueError: Wenn die Nachricht leer oder None ist
         """
+        if not message or not message.strip():
+            raise ValueError("Die Nachricht darf nicht leer sein")
+        
         if session_id is None:
             session_id = str(uuid.uuid4())
         
