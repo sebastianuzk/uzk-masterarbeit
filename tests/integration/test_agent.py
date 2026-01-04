@@ -9,6 +9,7 @@ Verwendung:
     pytest tests/integration/test_agent.py --agent-mode=multi # Multi-Agent
 """
 import os
+import sys
 import pytest
 
 # Markiere alle Tests in dieser Datei als slow, integration und agent
