@@ -295,6 +295,9 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
     # Measure latency
     start_time = time.time()
     
+    # Import langchain messages at the top of the function
+    from langchain_core.messages import HumanMessage, SystemMessage
+    
     try:
         # Check if this is a multi-agent system (doesn't have direct .llm access)
         is_multi_agent = not hasattr(agent, 'llm')
@@ -302,7 +305,6 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
         if is_multi_agent:
             # For multi-agent: Use get_tool_selection to test routing + tool selection
             # without actually executing the tools (same as single-agent approach)
-            from langchain_core.messages import HumanMessage, SystemMessage
             
             # Get tool selection without execution
             tool_selection = agent.get_tool_selection(scenario.user_prompt)
@@ -324,7 +326,6 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
             
         else:
             # For single-agent (ReactAgent): Call LLM directly with tools bound
-            from langchain_core.messages import HumanMessage, SystemMessage
             
             # Get the LLM with tools bound
             llm_with_tools = agent.llm.bind_tools(agent.tools)

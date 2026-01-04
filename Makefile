@@ -63,6 +63,7 @@ test-integration:
 test-integration-multi:
 	@echo "🔗 Running integration tests (Multi-Agent)..."
 	@source .venv/bin/activate && python -m pytest tests/integration/ -v -m "not slow" --agent-mode=multi
+
 # Run LLM quality tests
 test-llm:
 	@echo "🤖 Running LLM quality tests..."

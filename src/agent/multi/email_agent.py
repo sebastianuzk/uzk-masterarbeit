@@ -25,9 +25,9 @@ class EmailAgent(BaseSpecializedAgent):
     von E-Mails und Support-Kommunikation zusammenhängen.
     """
     
-    def __init__(self, share_llm: Optional[ChatOllama] = None):
+    def __init__(self, shared_llm: Optional[ChatOllama] = None):
         """Initialisiere den Email-Agenten."""
-        super().__init__(share_llm)
+        super().__init__(shared_llm)
         print(f"✅ {self.name} initialisiert mit {len(self.tools)} Tools")
     
     @property

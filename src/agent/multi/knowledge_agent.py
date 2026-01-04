@@ -29,9 +29,9 @@ class KnowledgeAgent(BaseSpecializedAgent):
     erfordern.
     """
     
-    def __init__(self, share_llm: Optional[ChatOllama] = None):
+    def __init__(self, shared_llm: Optional[ChatOllama] = None):
         """Initialisiere den Knowledge-Agenten."""
-        super().__init__(share_llm)
+        super().__init__(shared_llm)
         print(f"✅ {self.name} initialisiert mit {len(self.tools)} Tools")
     
     @property
