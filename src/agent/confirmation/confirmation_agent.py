@@ -16,11 +16,11 @@ Kritische Tools, die Bestätigung erfordern:
 
 import os
 import uuid
-import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+import logging
+from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langchain_ollama import ChatOllama
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
@@ -37,6 +37,10 @@ from src.tools.klips import (
 )
 from src.tools.rag_tool import create_university_rag_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
+
+
+# Logger für Confirmation Agent
+logger = logging.getLogger(__name__)
 
 
 # Tools die eine Bestätigung vor der Ausführung erfordern
@@ -226,16 +230,32 @@ class ConfirmationAgent:
             if validation_result["confirmed"]:
                 # 2. Bei erfolgreicher Validierung: Tool ausführen
                 agent_ref.confirmed_count += 1
+                logger.info(f"Tool '{tool_name}' bestätigt und wird ausgeführt")
                 print(f"  ✅ Bestätigt: {tool_name}")
                 
                 try:
                     result = original_tool.invoke(kwargs)
+                    logger.info(f"Tool '{tool_name}' erfolgreich ausgeführt")
                     return result
+                except ValueError as e:
+                    # Validierungsfehler (z.B. ungültige Eingabewerte)
+                    logger.warning(f"Validierungsfehler bei Tool '{tool_name}': {str(e)}")
+                    return f"Validierungsfehler: {str(e)}"
+                except ConnectionError as e:
+                    # Netzwerkfehler
+                    logger.error(f"Netzwerkfehler bei Tool '{tool_name}': {str(e)}")
+                    return f"Netzwerkfehler: Das System ist momentan nicht erreichbar."
                 except Exception as e:
+                    # Unerwartete Fehler - vollständig loggen für Debugging
+                    logger.error(
+                        f"Unerwarteter Fehler bei Tool-Ausführung '{tool_name}': {str(e)}",
+                        exc_info=True
+                    )
                     return f"Fehler bei Tool-Ausführung: {str(e)}"
             else:
                 # 3. Bei fehlgeschlagener Validierung: Fehler zurückgeben
                 agent_ref.rejected_count += 1
+                logger.warning(f"Tool '{tool_name}' abgelehnt: {validation_result['reason']}")
                 print(f"  ❌ Abgelehnt: {tool_name} - {validation_result['reason']}")
                 
                 return (
@@ -274,7 +294,12 @@ class ConfirmationAgent:
         # 1. Prüfe erforderliche Parameter
         for param in required_params:
             value = args.get(param)
+            # Prüfe ob Wert fehlt: None, leerer String oder nicht gesetzt
+            # Beachte: False und 0 sind valide Werte, wenn explizit gesetzt
             if value is None or (isinstance(value, str) and not value.strip()):
+                missing_params.append(param)
+            elif param not in args:
+                # Parameter wurde gar nicht übergeben
                 missing_params.append(param)
         
         # 2. Prüfe Format-Validierungen
@@ -420,14 +445,15 @@ Antworte in der Sprache des Nutzers (Deutsch/Englisch)."""
     
     def get_confirmation_stats(self) -> Dict[str, Any]:
         """Gebe Statistiken zur Bestätigungslogik zurück."""
+        confirmation_rate = 0
+        if self.confirmation_count > 0:
+            confirmation_rate = self.confirmed_count / self.confirmation_count
+        
         return {
             "total_confirmations": self.confirmation_count,
             "confirmed": self.confirmed_count,
             "rejected": self.rejected_count,
-            "confirmation_rate": (
-                self.confirmed_count / self.confirmation_count 
-                if self.confirmation_count > 0 else 0
-            ),
+            "confirmation_rate": confirmation_rate,
             "last_confirmation": self.last_confirmation_result
         }
     
