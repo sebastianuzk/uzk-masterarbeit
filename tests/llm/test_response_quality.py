@@ -1,9 +1,17 @@
 """
 LLM Response Quality Tests - Testet die Qualität und Korrektheit der Modellantworten
+
+Unterstützt Single-Agent und Multi-Agent Modi via pytest Fixtures.
+
+Verwendung:
+    pytest tests/llm/test_response_quality.py                    # Single-Agent (default)
+    pytest tests/llm/test_response_quality.py --agent-mode=multi # Multi-Agent
 """
 import pytest
 
-pytestmark = [pytest.mark.llm, pytest.mark.slow]  # Markiere alle Tests in dieser Datei als LLM-Tests und slow
+# Markiere alle Tests in dieser Datei als LLM-Tests, slow und agent
+pytestmark = [pytest.mark.llm, pytest.mark.slow, pytest.mark.agent]
+
 import sys
 import os
 from typing import List, Dict
@@ -12,19 +20,17 @@ from typing import List, Dict
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from src.agent.react_agent import ReactAgent
 from config.settings import settings
 
 
 class TestLLMResponseQuality:
     """Test-Klasse für die Qualität der LLM-Antworten"""
     
-    @pytest.fixture(scope="class")
-    def agent(self, ollama_available):
-        """Agent-Fixture für alle Tests (verwendet automatisch schnelles Modell)"""
+    @pytest.fixture(autouse=True)
+    def skip_if_ollama_unavailable(self, ollama_available):
+        """Überspringe wenn Ollama nicht verfügbar"""
         if not ollama_available:
             pytest.skip("Ollama-Server nicht erreichbar")
-        return ReactAgent()
     
     # ========================================================================
     # FAKTENTREUE & KONVERSATIONSFLUSS - KOMBINIERT

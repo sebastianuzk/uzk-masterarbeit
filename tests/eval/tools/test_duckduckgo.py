@@ -101,7 +101,7 @@ class TestSearchMedium:
         MEDIUM: Search need implied but not explicitly stated.
         """
         user_prompt = """
-        Was sind die aktuellen Öffnungszeiten der Uni-Bibliothek Köln?
+        Suche im Internet nach den aktuellen Öffnungszeiten der Uni-Bibliothek Köln.
         """
         
         gold = GoldStandard(
@@ -119,7 +119,7 @@ class TestSearchMedium:
         MEDIUM: Complex, multi-part search request.
         """
         user_prompt = """
-        Finde Informationen über die Zulassungsvoraussetzungen und 
+        Such im Internet nach Informationen über die Zulassungsvoraussetzungen und 
         Bewerbungsfristen für den Masterstudiengang Informatik an der Uni Köln.
         """
         
@@ -227,7 +227,7 @@ class TestSearchHard:
         MEDIUM: Search for comparison information.
         """
         user_prompt = """
-        Finde einen Vergleich zwischen der Uni Köln und der Uni Bonn 
+        Suche online nach einem Vergleich zwischen der Uni Köln und der Uni Bonn 
         bezüglich des Informatik-Studiums.
         """
         

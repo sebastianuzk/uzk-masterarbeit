@@ -2,28 +2,59 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Start Streamlit App",
+			"label": "Start Streamlit App (Single-Agent)",
 			"type": "shell",
-			"command": "& \"${workspaceFolder}\\Masterarbeit\\Scripts\\python.exe\" -m streamlit run src/ui/streamlit_app.py",
+			"command": "source .venv/bin/activate && python main.py --ui",
 			"isBackground": true,
 			"problemMatcher": [],
-			"group": "build"
+			"group": "build",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			}
 		},
 		{
-			"label": "Run Main Script",
+			"label": "Start Streamlit App (Multi-Agent)",
 			"type": "shell",
-			"command": "& \"${workspaceFolder}\\Masterarbeit\\Scripts\\python.exe\" main.py",
+			"command": "source .venv/bin/activate && python main.py --ui --agent-mode multi",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			}
+		},
+		{
+			"label": "Run CLI (Single-Agent)",
+			"type": "shell",
+			"command": "source .venv/bin/activate && python main.py",
 			"group": "build",
 			"isBackground": false,
-			"problemMatcher": []
+			"problemMatcher": [],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			}
+		},
+		{
+			"label": "Run CLI (Multi-Agent)",
+			"type": "shell",
+			"command": "source .venv/bin/activate && python main.py --agent-mode multi",
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": [],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			}
 		},
 		{
 			"label": "Run Tests",
 			"type": "shell",
-			"command": "& \"${workspaceFolder}\\Masterarbeit\\Scripts\\python.exe\" -m pytest tests/",
+			"command": "source .venv/bin/activate && python -m pytest tests/",
 			"group": "test",
 			"isBackground": false,
-			"problemMatcher": []
+			"problemMatcher": [],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			}
 		}
 	]
 }

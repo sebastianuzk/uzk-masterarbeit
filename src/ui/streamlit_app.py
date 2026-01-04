@@ -1,6 +1,15 @@
 """
 Streamlit Web Interface für den Autonomen Chatbot-Agenten
+
+Unterstützt zwei Agent-Modi:
+- Single-Agent: Ursprünglicher ReactAgent mit allen Tools
+- Multi-Agent: Orchestriertes System mit spezialisierten Agenten
+
+Start mit Agent-Mode:
+    streamlit run src/ui/streamlit_app.py -- --agent-mode multi
+    streamlit run src/ui/streamlit_app.py -- --agent-mode single
 """
+import argparse
 import streamlit as st
 import sys
 import os
@@ -10,15 +19,41 @@ import uuid
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from src.agent.react_agent import create_react_agent
+from src.agent import create_agent
 from config.settings import settings
+
+
+def get_agent_mode() -> str:
+    """
+    Ermittle den Agent-Mode aus den Kommandozeilenargumenten.
+    
+    Returns:
+        "single" oder "multi"
+    """
+    # Parse CLI arguments (nach --)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--agent-mode",
+        type=str,
+        choices=["single", "multi"],
+        default="single",
+        help="Agent-Modus: 'single' für ReactAgent, 'multi' für Multi-Agent-System"
+    )
+    
+    # Nur eigene Argumente parsen, Rest ignorieren (für Streamlit)
+    args, _ = parser.parse_known_args()
+    return args.agent_mode
 
 
 def initialize_session_state():
     """Initialisiere Session State"""
+    # Agent-Mode ermitteln
+    if 'agent_mode' not in st.session_state:
+        st.session_state.agent_mode = get_agent_mode()
+    
     if 'agent' not in st.session_state:
         try:
-            st.session_state.agent = create_react_agent()
+            st.session_state.agent = create_agent(mode=st.session_state.agent_mode)
             st.session_state.initialized = True
         except Exception as e:
             st.session_state.initialized = False
@@ -81,9 +116,23 @@ def display_sidebar():
     with st.sidebar:
         st.title("🔧 Einstellungen")
         
+        # Agent-Mode anzeigen
+        agent_mode = st.session_state.get('agent_mode', 'single')
+        if agent_mode == "multi":
+            st.info("🎭 **Multi-Agent Modus**")
+        else:
+            st.info("🤖 **Single-Agent Modus**")
+        
         # Agent-Informationen
         if st.session_state.get('initialized', False):
             st.success("✅ Agent initialisiert")
+            
+            # Multi-Agent: Zeige verfügbare Agenten
+            if agent_mode == "multi" and hasattr(st.session_state.agent, 'get_available_agents'):
+                st.subheader("🎭 Verfügbare Agenten")
+                agents = st.session_state.agent.get_available_agents()
+                for agent_name in agents:
+                    st.write(f"• {agent_name}")
             
             # Verfügbare Tools
             st.subheader("🛠️ Verfügbare Tools")

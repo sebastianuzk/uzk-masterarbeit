@@ -1,9 +1,17 @@
 """
 LLM RAG Quality Tests - Testet die Qualität der RAG-basierten Antworten
+
+Unterstützt Single-Agent und Multi-Agent Modi via pytest Fixtures.
+
+Verwendung:
+    pytest tests/llm/test_rag_quality.py                    # Single-Agent (default)
+    pytest tests/llm/test_rag_quality.py --agent-mode=multi # Multi-Agent
 """
 import pytest
 
-pytestmark = [pytest.mark.llm, pytest.mark.slow]  # Markiere alle Tests in dieser Datei als LLM-Tests und slow
+# Markiere alle Tests in dieser Datei als LLM-Tests, slow und agent
+pytestmark = [pytest.mark.llm, pytest.mark.slow, pytest.mark.agent]
+
 import sys
 import os
 from typing import List, Dict
@@ -12,7 +20,6 @@ from typing import List, Dict
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from src.agent.react_agent import ReactAgent
 from src.tools.rag_tool import create_university_rag_tool
 from config.settings import settings
 
@@ -20,12 +27,11 @@ from config.settings import settings
 class TestLLMRAGQuality:
     """Test-Klasse für RAG-spezifische Antwort-Qualität"""
     
-    @pytest.fixture(scope="class")
-    def agent(self, ollama_available):
-        """Agent-Fixture für alle Tests (verwendet automatisch schnelles Modell)"""
+    @pytest.fixture(autouse=True)
+    def skip_if_ollama_unavailable(self, ollama_available):
+        """Überspringe wenn Ollama nicht verfügbar"""
         if not ollama_available:
             pytest.skip("Ollama-Server nicht erreichbar")
-        return ReactAgent()
     
     @pytest.fixture(scope="class")
     def rag_tool(self):

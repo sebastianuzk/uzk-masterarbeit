@@ -3,6 +3,12 @@ Integration Tests für RAG über den Agenten
 ==========================================
 Testet ob der Agent das RAG-Tool korrekt nutzt.
 
+Unterstützt Single-Agent und Multi-Agent Modi via pytest Fixtures.
+
+Verwendung:
+    pytest tests/integration/tools/test_agent_rag.py                    # Single-Agent
+    pytest tests/integration/tools/test_agent_rag.py --agent-mode=multi # Multi-Agent
+
 HINWEIS: Diese Tests verwenden das gpt-oss:20b Modell für bessere Ergebnisse.
 """
 import os
@@ -32,17 +38,13 @@ def has_vector_db():
 
 
 # Überspringe alle Tests wenn Ollama nicht verfügbar ist
-pytestmark = pytest.mark.skipif(
-    not ollama_available(),
-    reason="Ollama-Server nicht erreichbar"
-)
+pytestmark = [
+    pytest.mark.skipif(not ollama_available(), reason="Ollama-Server nicht erreichbar"),
+    pytest.mark.agent
+]
 
 
-@pytest.fixture
-def agent():
-    """Erstellt einen Agent für die Tests"""
-    from src.agent.react_agent import ReactAgent
-    return ReactAgent()
+# Note: We use the global 'agent' fixture from conftest.py which respects --agent-mode
 
 
 @pytest.mark.integration
@@ -69,9 +71,7 @@ class TestAgentRAGSearch:
     
     def test_agent_answers_fristen_question(self, agent):
         """Test: Agent beantwortet Fristenfrage"""
-        from src.agent.react_agent import ReactAgent
-        test_agent = ReactAgent()
-        response = test_agent.chat("Wann sind die Bewerbungsfristen für das Wintersemester?")
+        response = agent.chat("Wann sind die Bewerbungsfristen für das Wintersemester?")
         
         assert isinstance(response, str)
         assert len(response) > 0
