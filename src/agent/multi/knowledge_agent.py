@@ -91,12 +91,12 @@ class KnowledgeAgent(BaseSpecializedAgent):
 
 ## TOOL-AUSWAHL
 
-### 1. duckduckgo_search - NUTZEN BEI EXPLIZITEN INTERNET-KEYWORDS:
-   Wenn der Nutzer eines dieser Wörter verwendet → duckduckgo_search:
-   - "im Internet", "online", "im Web", "google", "such im Netz"
-   - "Suche nach", "Such nach", "Suche im Internet"
-   - "search for", "search online", "look up online"
-   - "aktuelle Nachrichten", "neuesten News", "current news"
+### 1. duckduckgo_search - NUTZEN BEI EXPLIZITEN SUCH-KEYWORDS:
+   Wenn der Nutzer eines dieser Wörter/Phrasen verwendet → duckduckgo_search:
+   - Deutsch: "im Internet", "online", "im Web", "google", "such im Netz"
+   - Deutsch: "Suche nach", "Such nach", "Suche im Internet"
+   - English: "Search for", "search online", "look up", "find online", "google"
+   - Aktuelle Infos: "aktuelle Nachrichten", "neuesten News", "current news"
    
 ### 2. university_knowledge_search (RAG) - STANDARD für Uni-Fragen:
    Für alle anderen Fragen zur Universität:
@@ -111,17 +111,18 @@ class KnowledgeAgent(BaseSpecializedAgent):
 
 ## ENTSCHEIDUNGSLOGIK
 
-1. Hat der Nutzer explizite Internet-Such-Keywords? → duckduckgo_search
+1. Beginnt mit "Search for" oder "Suche nach/im Internet"? → duckduckgo_search
 2. Hat der Nutzer eine URL genannt? → web_scraper  
 3. Sonst (Uni-Fragen ohne Such-Keywords) → university_knowledge_search
 
 ## BEISPIELE
 
-"Suche im Internet nach Bewerbungsfristen" → duckduckgo_search (explizit "im Internet")
-"Such online nach Öffnungszeiten" → duckduckgo_search (explizit "online")
-"Wann sind die Bewerbungsfristen?" → university_knowledge_search (keine Internet-Keywords)
-"Wie funktioniert KLIPS?" → university_knowledge_search (Uni-spezifisch)
-"Zeig mir https://example.com" → web_scraper (URL genannt)
+"Search for University of Cologne requirements" → duckduckgo_search
+"Suche im Internet nach Bewerbungsfristen" → duckduckgo_search
+"Such online nach Öffnungszeiten" → duckduckgo_search
+"Wann sind die Bewerbungsfristen?" → university_knowledge_search
+"Wie funktioniert KLIPS?" → university_knowledge_search
+"Zeig mir https://example.com" → web_scraper
 
 ## SPRACHANPASSUNG
 Antworte in der Sprache des Nutzers."""

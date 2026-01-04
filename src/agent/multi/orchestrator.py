@@ -154,11 +154,12 @@ Analysiere die Nutzeranfrage und entscheide, welcher spezialisierte Agent sie be
 ## ROUTING-REGELN
 
 1. **KLIPS-Agent** wählen bei:
-   - Account-Registrierung, Anmeldung
-   - Studienbewerbung
+   - Account-Registrierung, Anmeldung, Konto erstellen
+   - Studienbewerbung, Studiengang bewerben
    - Passwort-Änderung
    - Adress-Änderung
-   - Kurs- oder Lehrveranstaltungsfragen mit Kursnummern
+   - Kurse, Veranstaltungen, Lehrveranstaltungen, Kursnummern (z.B. "Kurs 14530")
+   - ALLES was KLIPS2 betrifft
 
 2. **Email-Agent** wählen bei:
    - Expliziter Bitte, eine E-Mail zu senden
@@ -166,10 +167,10 @@ Analysiere die Nutzeranfrage und entscheide, welcher spezialisierte Agent sie be
    - Kontaktaufnahme mit dem Support
 
 3. **Wissens-Agent** wählen bei:
-   - Allgemeine Fragen über die Universität
-   - Informationen zu Studiengängen, Fristen, Prüfungen
-   - Fragen, die Recherche erfordern
-   - Web-Suche oder Webseiten-Inhalte
+   - Allgemeine Fragen OHNE KLIPS-Bezug
+   - Web-Suche mit Schlüsselwörtern: "im Internet", "online", "suche nach", "recherchiere"
+   - Webseiten-Inhalte extrahieren (URLs)
+   - NUR wenn kein anderer Agent passt
 
 ## ANTWORTFORMAT
 Antworte NUR mit einem JSON-Objekt in diesem Format:
@@ -183,6 +184,46 @@ Antworte NUR mit einem JSON-Objekt in diesem Format:
 
 WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
     
+    def _keyword_pre_route(self, message: str) -> Optional[RoutingDecision]:
+        """
+        Schnelles Keyword-basiertes Pre-Routing ohne LLM-Aufruf.
+        
+        Spart LLM-Tokens für eindeutige Fälle.
+        Returns None wenn LLM-Routing benötigt wird.
+        """
+        msg_lower = message.lower()
+        
+        # KLIPS-Keywords (sehr spezifisch)
+        klips_keywords = [
+            "klips", "registrier", "anmeld", "konto erstellen",
+            "bewerb", "studienbewerbung", "studiengang",
+            "passwort änder", "password", "neues passwort",
+            "adresse änder", "neue adresse", "umgezogen",
+            "kurs ", "veranstaltung", "lehrveranstaltung", "kursnummer",
+            "semester", "einschreib"
+        ]
+        
+        for keyword in klips_keywords:
+            if keyword in msg_lower:
+                return RoutingDecision(
+                    agent_name="KLIPS-Agent",
+                    reasoning=f"Keyword-Match: '{keyword}'",
+                    context=None
+                )
+        
+        # Email-Keywords
+        email_keywords = ["e-mail send", "email send", "mail schick", "mail schreib", "sende eine e-mail", "sende eine mail"]
+        for keyword in email_keywords:
+            if keyword in msg_lower:
+                return RoutingDecision(
+                    agent_name="Email-Agent",
+                    reasoning=f"Keyword-Match: '{keyword}'",
+                    context=None
+                )
+        
+        # Kein eindeutiger Match - LLM-Routing benötigt
+        return None
+    
     def _route_query(self, message: str) -> RoutingDecision:
         """
         Entscheide, welcher Agent die Anfrage bearbeiten soll.
@@ -193,6 +234,12 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
         Returns:
             RoutingDecision mit gewähltem Agenten und Begründung
         """
+        # Versuche erst schnelles Keyword-Routing
+        pre_route = self._keyword_pre_route(message)
+        if pre_route:
+            print(f"⚡ Pre-Routing: {pre_route.agent_name} ({pre_route.reasoning})")
+            return pre_route
+        
         routing_prompt = self._get_routing_prompt()
         
         messages = [
