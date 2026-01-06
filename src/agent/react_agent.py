@@ -104,20 +104,6 @@ Weniger als 6? → Frage nach was fehlt! KEIN Tool-Aufruf!
 - send_email: subject, body
 
 Antworte in der Sprache des Nutzers."""
-"Max Müller, m, 15.03.99, max@test.de, DE" → 6/6 ✓ → Tool aufrufen
-"Thomas Klein, männlich, 12.04.1996, Deutschland" → 5/6 ✗ E-Mail fehlt! → NACHFRAGEN
-
-## ANDERE TOOLS
-
-- klips2_apply_study: username, password, semester, degree_type, study_program
-- klips2_change_address: username, password, street, zip_code, city
-- klips2_change_password: username, password, new_password
-- klips2_get_course_details: course_id
-- university_knowledge_search, duckduckgo_search: query
-- web_scraper: url (mit http://)
-- send_email: subject, body
-
-Antworte in der Sprache des Nutzers."""
 
         # Erstelle React Agent mit kompaktem System-Prompt
         self.agent = create_langgraph_agent(
