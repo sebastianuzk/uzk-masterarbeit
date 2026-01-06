@@ -164,8 +164,12 @@ class ChangeAddressToolCall(BaseModel):
     @classmethod
     def validate_zip(cls, v):
         v = v.strip()
-        if not re.match(r'^\d{4,5}$', v):
-            raise ValueError("PLZ muss 4-5 Ziffern haben")
+        # Erlaube internationale Postleitzahlen/ZIP-Codes:
+        # - 2 bis 10 Zeichen
+        # - Buchstaben, Ziffern, Leerzeichen oder Bindestrich
+        # Beispiele: "50678" (DE), "1010" (AT), "SW1A 1AA" (UK), "K1A 0B1" (CA)
+        if not re.match(r'^[A-Za-z0-9][A-Za-z0-9 \-]{1,9}$', v):
+            raise ValueError("Postleitzahl/ZIP muss 2-10 Zeichen (Buchstaben, Ziffern, Leerzeichen oder '-') enthalten")
         return v
 
 
