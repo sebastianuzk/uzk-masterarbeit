@@ -72,7 +72,7 @@ class ReactAgent:
         # Initialisiere Tools (einschließlich E-Mail-Tool)
         self.tools = self._create_tools()
         
-        # V4: Checklist-Ansatz mit expliziter Zählung
+        # System-Prompt mit expliziter Checklist-Logik für Pflichtfelder
         system_prompt = """Du bist ein KI-Assistent für KLIPS 2.0 der Universität zu Köln.
 
 ## PFLICHTFELD-CHECKLISTE FÜR klips2_register

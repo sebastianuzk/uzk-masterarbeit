@@ -26,8 +26,8 @@ def pytest_addoption(parser):
         "--agent-mode",
         action="store",
         default="single",
-        choices=["single", "multi", "confirmation"],
-        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem, 'confirmation' for ConfirmationAgent (default: single)"
+        choices=["single", "multi", "confirmation", "constrained"],
+        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem, 'confirmation' for ConfirmationAgent, 'constrained' for ConstrainedAgent (default: single)"
     )
 
 
