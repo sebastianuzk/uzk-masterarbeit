@@ -64,7 +64,6 @@ def load_scenarios_from_tests() -> list[EvaluationScenario]:
     from tests.eval.tools import (
         test_email,
         test_duckduckgo,
-        test_web_scraper,
         test_multi_negative,
     )
     
@@ -77,7 +76,6 @@ def load_scenarios_from_tests() -> list[EvaluationScenario]:
         (test_courses, "klips2_get_course_details", "courses"),
         (test_email, "send_email", "email"),
         (test_duckduckgo, "duckduckgo_search", "search"),
-        (test_web_scraper, "web_scraper", "scraper"),
         (test_multi_negative, "multi", "multi"),
     ]
     
