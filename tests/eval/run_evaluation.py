@@ -441,10 +441,20 @@ def run_evaluation(
     
     # Get model info
     actual_model = model_name or settings.OLLAMA_MODEL
-    mode_label = "Multi-Agent" if agent_mode == "multi" else "Single-Agent"
     
-    # Organize output by agent mode: data/eval_results/single_agent/ or data/eval_results/multi_agent/
-    mode_subdir = "multi_agent" if agent_mode == "multi" else "single_agent"
+    # Mode label and subdirectory for output organization
+    mode_labels = {
+        "single": "Single-Agent",
+        "multi": "Multi-Agent",
+        "confirmation": "Confirmation-Agent"
+    }
+    mode_subdirs = {
+        "single": "single_agent",
+        "multi": "multi_agent",
+        "confirmation": "confirmation_agent"
+    }
+    mode_label = mode_labels.get(agent_mode, "Single-Agent")
+    mode_subdir = mode_subdirs.get(agent_mode, "single_agent")
     actual_output_dir = f"{output_dir}/{mode_subdir}"
     
     if verbose:
@@ -722,8 +732,8 @@ def main():
     parser.add_argument("--export-dir", type=str, default="data/eval_scenarios",
                         help="Directory for exported scenarios")
     parser.add_argument("--agent-mode", type=str, default="single",
-                        choices=["single", "multi"],
-                        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem (default: single)")
+                        choices=["single", "multi", "confirmation"],
+                        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem, 'confirmation' for ConfirmationAgent (default: single)")
     
     args = parser.parse_args()
     
