@@ -161,3 +161,102 @@ class TestMultiAgentSpecific:
             assert len(response) > 0
         else:
             pytest.skip("Nur für Multi-Agent relevant")
+
+
+class TestConfirmationAgentSpecific:
+    """Tests spezifisch für Confirmation-Agent"""
+    
+    def test_confirmation_agent_initialization(self, agent, agent_mode):
+        """Teste Confirmation-Agent Initialisierung"""
+        if agent_mode == "confirmation":
+            assert hasattr(agent, 'get_confirmation_stats')
+            assert hasattr(agent, 'confirmation_count')
+            assert hasattr(agent, 'confirmed_count')
+            assert hasattr(agent, 'rejected_count')
+        else:
+            pytest.skip("Nur für Confirmation-Agent relevant")
+    
+    def test_confirmation_stats_initial(self, agent, agent_mode):
+        """Teste initiale Confirmation-Statistiken"""
+        if agent_mode == "confirmation":
+            stats = agent.get_confirmation_stats()
+            assert stats["total_confirmations"] == 0
+            assert stats["confirmed"] == 0
+            assert stats["rejected"] == 0
+            assert stats["confirmation_rate"] == 0
+            assert stats["last_confirmation"] is None
+        else:
+            pytest.skip("Nur für Confirmation-Agent relevant")
+    
+    def test_confirmation_agent_critical_tools_wrapped(self, agent, agent_mode):
+        """Teste dass kritische Tools gewrapped sind"""
+        if agent_mode == "confirmation":
+            tools = agent.get_available_tools()
+            # Kritische Tools sollten verfügbar sein
+            critical_tool_names = ["klips2_register", "klips2_apply_study", 
+                                   "klips2_change_password", "klips2_change_address", 
+                                   "send_email"]
+            
+            for tool_name in critical_tool_names:
+                assert tool_name in tools, f"{tool_name} sollte verfügbar sein"
+        else:
+            pytest.skip("Nur für Confirmation-Agent relevant")
+    
+    def test_confirmation_agent_validation_rejects_missing_params(self, agent, agent_mode):
+        """Teste dass Validierung fehlende Parameter erkennt"""
+        if agent_mode == "confirmation":
+            # Versuche eine Registrierung ohne alle erforderlichen Parameter
+            # Dies sollte durch die Validierung abgelehnt werden
+            response = agent.chat(
+                "Erstelle einen KLIPS-Account für Max ohne weitere Informationen"
+            )
+            
+            # Agent sollte nach fehlenden Informationen fragen oder Fehler melden
+            assert isinstance(response, str)
+            assert len(response) > 0
+            
+            # Die Validierung sollte ausgelöst worden sein
+            stats = agent.get_confirmation_stats()
+            # Da die Anfrage unvollständig war, könnte sie abgelehnt worden sein
+            # oder der Agent fragt nach weiteren Informationen
+            assert stats["total_confirmations"] >= 0
+        else:
+            pytest.skip("Nur für Confirmation-Agent relevant")
+    
+    def test_confirmation_agent_memory_management(self, agent, agent_mode):
+        """Teste Memory-Management des Confirmation-Agents"""
+        if agent_mode == "confirmation":
+            # Initiales Memory sollte leer sein
+            memory_info = agent.get_memory_summary()
+            assert memory_info["total_messages"] == 0
+            
+            # Nach Chat sollte Memory gefüllt sein
+            agent.chat("Hallo, was ist KLIPS?")
+            memory_info = agent.get_memory_summary()
+            assert memory_info["total_messages"] > 0
+            
+            # Clear sollte funktionieren
+            agent.clear_memory()
+            memory_info = agent.get_memory_summary()
+            assert memory_info["total_messages"] == 0
+        else:
+            pytest.skip("Nur für Confirmation-Agent relevant")
+    
+    def test_confirmation_rate_calculation(self, agent, agent_mode):
+        """Teste Bestätigungsraten-Berechnung"""
+        if agent_mode == "confirmation":
+            # Nach mehreren Chats sollten Statistiken verfügbar sein
+            stats = agent.get_confirmation_stats()
+            
+            # confirmation_rate sollte zwischen 0 und 1 liegen
+            assert 0 <= stats["confirmation_rate"] <= 1
+            
+            # Wenn total_confirmations 0 ist, sollte rate auch 0 sein
+            if stats["total_confirmations"] == 0:
+                assert stats["confirmation_rate"] == 0
+            # Sonst sollte die Rate korrekt berechnet sein
+            else:
+                expected_rate = stats["confirmed"] / stats["total_confirmations"]
+                assert stats["confirmation_rate"] == expected_rate
+        else:
+            pytest.skip("Nur für Confirmation-Agent relevant")

@@ -734,8 +734,8 @@ def main():
     parser.add_argument("--export-dir", type=str, default="data/eval_scenarios",
                         help="Directory for exported scenarios")
     parser.add_argument("--agent-mode", type=str, default="single",
-                        choices=["single", "multi", "confirmation", "constrained"],
-                        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem, 'confirmation' for ConfirmationAgent, 'constrained' for ConstrainedAgent (default: single)")
+                        choices=["single", "multi", "confirmation", "constrained", "confirmation"],
+                        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem, 'confirmation' for ConfirmationAgent, 'constrained' for ConstrainedAgent, 'confirmation' for ConfirmationAgent (default: single)")
     
     args = parser.parse_args()
     
