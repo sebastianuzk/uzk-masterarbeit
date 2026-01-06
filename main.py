@@ -45,9 +45,9 @@ Beispiele:
     parser.add_argument(
         "--agent-mode",
         type=str,
-        choices=["single", "multi"],
+        choices=["single", "multi", "confirmation", "constrained"],
         default="single",
-        help="Agent-Modus: 'single' für ReactAgent, 'multi' für Multi-Agent-System (default: single)"
+        help="Agent-Modus: 'single' für ReactAgent, 'multi' für Multi-Agent-System, 'confirmation' für ConfirmationAgent, 'constrained' für ConstrainedAgent (default: single)"
     )
     
     parser.add_argument(

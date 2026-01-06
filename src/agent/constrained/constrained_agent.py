@@ -164,8 +164,12 @@ class ChangeAddressToolCall(BaseModel):
     @classmethod
     def validate_zip(cls, v):
         v = v.strip()
-        if not re.match(r'^\d{4,5}$', v):
-            raise ValueError("PLZ muss 4-5 Ziffern haben")
+        # Erlaube internationale Postleitzahlen/ZIP-Codes:
+        # - 2 bis 10 Zeichen
+        # - Buchstaben, Ziffern, Leerzeichen oder Bindestrich
+        # Beispiele: "50678" (DE), "1010" (AT), "SW1A 1AA" (UK), "K1A 0B1" (CA)
+        if not re.match(r'^[A-Za-z0-9 -]{2,10}$', v):
+            raise ValueError("Postleitzahl/ZIP muss 2-10 Zeichen (Buchstaben, Ziffern, Leerzeichen oder '-') enthalten")
         return v
 
 
@@ -470,7 +474,7 @@ Lasse optionale Felder weg wenn nicht vorhanden."""
         
         try:
             return json.loads(json_str)
-        except:
+        except json.JSONDecodeError:
             return None
     
     def _execute_tool(self, tool_name: str, args: Dict[str, Any]) -> str:
@@ -499,7 +503,10 @@ Lasse optionale Felder weg wenn nicht vorhanden."""
             if session_id is None:
                 session_id = str(uuid.uuid4())
             
-            human_message = HumanMessage(content=message)
+            human_message = HumanMessage(
+                content=message,
+                additional_kwargs={"session_id": session_id},
+            )
             self.memory.append(human_message)
             
             if len(self.memory) > settings.MEMORY_SIZE:
@@ -615,6 +622,52 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
     def clear_memory(self):
         """Lösche Konversationshistorie."""
         self.memory = []
+    
+    def get_memory_summary(self) -> Dict[str, Any]:
+        """
+        Gebe eine Zusammenfassung des aktuellen Konversationsspeichers zurück.
+
+        Rückgabeformat ist kompatibel zu anderen Agenten:
+        - total_messages: Gesamtanzahl aller Nachrichten
+        - human_messages: Anzahl der HumanMessage-Nachrichten
+        - ai_messages: Anzahl der AIMessage-Nachrichten
+        - last_messages: Liste der letzten Nachrichten (max. 5) als einfache Dicts
+        """
+        messages = self.memory
+
+        total_messages = len(messages)
+        human_messages = sum(1 for m in messages if isinstance(m, HumanMessage))
+        ai_messages = sum(1 for m in messages if isinstance(m, AIMessage))
+
+        # Formatiere die letzten Nachrichten in ein einfaches, serialisierbares Format
+        last_raw = messages[-5:] if total_messages > 5 else messages
+        last_messages: List[Dict[str, Any]] = []
+        for m in last_raw:
+            # Versuche, Rolle/Typ und Inhalt möglichst konsistent zu extrahieren
+            role: str
+            if isinstance(m, HumanMessage):
+                role = "human"
+            elif isinstance(m, AIMessage):
+                role = "ai"
+            elif isinstance(m, SystemMessage):
+                role = "system"
+            else:
+                role = getattr(m, "type", "unknown")
+
+            content = getattr(m, "content", None)
+            last_messages.append(
+                {
+                    "role": role,
+                    "content": content,
+                }
+            )
+
+        return {
+            "total_messages": total_messages,
+            "human_messages": human_messages,
+            "ai_messages": ai_messages,
+            "last_messages": last_messages,
+        }
     
     def get_stats(self) -> Dict[str, Any]:
         """Gebe Statistiken über Schema-Validierungen zurück."""
