@@ -261,5 +261,89 @@ class TestEmailHard:
         # Tool should still be called - it will use default recipient
         assert gold.required_tools == ["send_email"]
 
+    def test_email_12_follow_up_email(self):
+        """
+        MEDIUM: Request to send follow-up email.
+        """
+        user_prompt = """
+        Schicke eine Nachfolge-E-Mail mit Betreff "Erinnerung: Terminanfrage" 
+        und frage erneut nach einem Termin für nächste Woche.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["send_email"],
+            required_arguments={
+                "send_email": {
+                    "subject": "Erinnerung: Terminanfrage"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["send_email"]
 
-# Total: 11 scenarios
+    def test_email_13_thank_you_email(self):
+        """
+        MEDIUM: Request to send thank you email.
+        """
+        user_prompt = """
+        Verfasse eine Dankes-E-Mail mit dem Betreff "Vielen Dank für das Gespräch"
+        und bedanke dich für das informative Beratungsgespräch.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["send_email"],
+            required_arguments={
+                "send_email": {
+                    "subject": "Vielen Dank für das Gespräch"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["send_email"]
+
+    def test_email_14_sick_leave_notification(self):
+        """
+        MEDIUM: Request to send sick leave notification.
+        """
+        user_prompt = """
+        Schreibe eine E-Mail mit Betreff "Krankmeldung" und teile mit, 
+        dass ich heute nicht zur Vorlesung kommen kann.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["send_email"],
+            required_arguments={
+                "send_email": {
+                    "subject": "Krankmeldung"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["send_email"]
+
+    def test_email_15_grade_inquiry(self):
+        """
+        MEDIUM: Request to send email about grade inquiry.
+        """
+        user_prompt = """
+        Sende eine E-Mail mit dem Betreff "Frage zu meiner Note" und frage,
+        wann die Ergebnisse der letzten Klausur veröffentlicht werden.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["send_email"],
+            required_arguments={
+                "send_email": {
+                    "subject": "Frage zu meiner Note"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["send_email"]
+
+
+# Total: 15 scenarios

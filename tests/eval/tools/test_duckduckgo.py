@@ -241,5 +241,77 @@ class TestSearchHard:
         
         assert gold.required_tools == ["duckduckgo_search"]
 
+    def test_search_12_news_search(self):
+        """
+        MEDIUM: Search for news about university.
+        """
+        user_prompt = """
+        Suche nach aktuellen Nachrichten über die Universität zu Köln.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["duckduckgo_search"],
+            required_arguments={
+                "duckduckgo_search": {}
+            },
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
+        )
+        
+        assert gold.required_tools == ["duckduckgo_search"]
 
-# Total: 11 scenarios
+    def test_search_13_job_search(self):
+        """
+        MEDIUM: Search for job/internship opportunities.
+        """
+        user_prompt = """
+        Suche im Internet nach Werkstudentenstellen für Informatik-Studenten in Köln.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["duckduckgo_search"],
+            required_arguments={
+                "duckduckgo_search": {}
+            },
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
+        )
+        
+        assert gold.required_tools == ["duckduckgo_search"]
+
+    def test_search_14_scholarship_search(self):
+        """
+        MEDIUM: Search for scholarship information.
+        """
+        user_prompt = """
+        Recherchiere nach Stipendien für Master-Studenten in Deutschland.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["duckduckgo_search"],
+            required_arguments={
+                "duckduckgo_search": {}
+            },
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
+        )
+        
+        assert gold.required_tools == ["duckduckgo_search"]
+
+    def test_search_15_event_search(self):
+        """
+        MEDIUM: Search for university events.
+        """
+        user_prompt = """
+        Google nach Karrieremessen für Studenten in NRW.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["duckduckgo_search"],
+            required_arguments={
+                "duckduckgo_search": {}
+            },
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
+        )
+        
+        assert gold.required_tools == ["duckduckgo_search"]
+
+
+# Total: 15 scenarios

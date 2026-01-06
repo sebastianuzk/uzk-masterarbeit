@@ -25,23 +25,27 @@ pytestmark = [pytest.mark.llm, pytest.mark.eval]
 class TestMultiTool:
     """Szenarien, die mehrere Tools erfordern."""
 
-    def test_multi_01_search_then_scrape(self):
+    def test_multi_01_search_then_klips(self):
         """
-        MULTI-TOOL: Search for information, then scrape specific result.
+        MULTI-TOOL: Search web for course info then get KLIPS details.
         """
         user_prompt = """
-        Suche nach der offiziellen Seite für KLIPS2 Anleitungen und 
-        zeige mir dann den Inhalt der Seite.
+        Suche im Internet nach dem Kurs 14302.0001 und hole dann 
+        die Details aus KLIPS.
         """
         
         gold = GoldStandard(
-            required_tools=["duckduckgo_search", "web_scraper"],
-            required_arguments={},
+            required_tools=["duckduckgo_search", "klips2_get_course_details"],
+            required_arguments={
+                "klips2_get_course_details": {
+                    "course_id": "14302.0001"
+                }
+            },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
         )
         
         assert "duckduckgo_search" in gold.required_tools
-        assert "web_scraper" in gold.required_tools
+        assert "klips2_get_course_details" in gold.required_tools
 
     def test_multi_02_klips_then_email(self):
         """
@@ -104,7 +108,7 @@ class TestNegative:
         gold = GoldStandard(
             required_tools=[],
             forbidden_tools={"klips2_register", "klips2_apply_study", 
-                          "send_email", "duckduckgo_search", "web_scraper"},
+                          "send_email", "duckduckgo_search"},
             argument_match_mode=ArgumentMatchMode.NORMALIZED
         )
         
@@ -138,11 +142,121 @@ class TestNegative:
         gold = GoldStandard(
             required_tools=[],
             forbidden_tools={"klips2_register", "klips2_apply_study",
-                          "send_email", "duckduckgo_search", "web_scraper"},
+                          "send_email", "duckduckgo_search"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert len(gold.required_tools) == 0
+
+    def test_negative_04_simple_calculation(self):
+        """
+        NEGATIVE: Simple math that doesn't need tools.
+        """
+        user_prompt = """
+        Was ist 2 + 2?
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"duckduckgo_search", "send_email"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert len(gold.required_tools) == 0
+
+    def test_negative_05_language_translation(self):
+        """
+        NEGATIVE: Translation request (no tools needed).
+        """
+        user_prompt = """
+        Übersetze "Guten Morgen" ins Englische.
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"duckduckgo_search"},
             argument_match_mode=ArgumentMatchMode.NORMALIZED
         )
         
         assert len(gold.required_tools) == 0
 
 
-# Total: 6 scenarios
+class TestMultiToolExtended:
+    """Extended multi-tool scenarios."""
+
+    def test_multi_04_register_then_email(self):
+        """
+        MULTI-TOOL: Register for KLIPS and send confirmation email.
+        """
+        user_prompt = """
+        Registriere mich bei KLIPS2 mit folgenden Daten:
+        Vorname: Max, Nachname: Mustermann, Geschlecht: männlich,
+        Geburtsdatum: 15.03.1999, E-Mail: max@test.de, Nationalität: deutsch.
+        Danach schicke eine Bestätigungs-E-Mail (Betreff: KLIPS Registrierung).
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_register", "send_email"],
+            required_arguments={
+                "send_email": {
+                    "subject": "KLIPS Registrierung"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert len(gold.required_tools) == 2
+
+    def test_multi_05_password_then_email(self):
+        """
+        MULTI-TOOL: Change password and send confirmation email.
+        """
+        user_prompt = """
+        Ändere mein KLIPS-Passwort. Login: max@uni-koeln.de / AltesPasswort,
+        neues Passwort: NeuesPasswort123.
+        Danach schicke mir eine Bestätigung per E-Mail (Betreff: Passwort geändert).
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_change_password", "send_email"],
+            required_arguments={
+                "klips2_change_password": {
+                    "username": "max@uni-koeln.de"
+                },
+                "send_email": {
+                    "subject": "Passwort geändert"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "klips2_change_password" in gold.required_tools
+        assert "send_email" in gold.required_tools
+
+    def test_multi_06_search_course_email(self):
+        """
+        MULTI-TOOL: Complex scenario with three tools.
+        """
+        user_prompt = """
+        Recherchiere online nach dem Kurs 14302.0001, hole die Details 
+        aus KLIPS und schicke mir alles per E-Mail 
+        (Betreff: Kursrecherche).
+        """
+        
+        gold = GoldStandard(
+            required_tools=["duckduckgo_search", "klips2_get_course_details", "send_email"],
+            required_arguments={
+                "klips2_get_course_details": {
+                    "course_id": "14302.0001"
+                },
+                "send_email": {
+                    "subject": "Kursrecherche"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
+        )
+        
+        assert len(gold.required_tools) == 3
+
+
+# Total: 11 scenarios
