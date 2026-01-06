@@ -168,7 +168,7 @@ class ChangeAddressToolCall(BaseModel):
         # - 2 bis 10 Zeichen
         # - Buchstaben, Ziffern, Leerzeichen oder Bindestrich
         # Beispiele: "50678" (DE), "1010" (AT), "SW1A 1AA" (UK), "K1A 0B1" (CA)
-        if not re.match(r'^[A-Za-z0-9][A-Za-z0-9 \-]{1,9}$', v):
+        if not re.match(r'^[A-Za-z0-9 \-]{2,10}$', v):
             raise ValueError("Postleitzahl/ZIP muss 2-10 Zeichen (Buchstaben, Ziffern, Leerzeichen oder '-') enthalten")
         return v
 
@@ -633,7 +633,7 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
         - ai_messages: Anzahl der AIMessage-Nachrichten
         - last_messages: Liste der letzten Nachrichten (max. 5) als einfache Dicts
         """
-        messages = getattr(self, "memory", []) or []
+        messages = self.memory
 
         total_messages = len(messages)
         human_messages = sum(1 for m in messages if isinstance(m, HumanMessage))
