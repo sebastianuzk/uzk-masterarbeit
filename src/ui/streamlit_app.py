@@ -35,9 +35,9 @@ def get_agent_mode() -> str:
     parser.add_argument(
         "--agent-mode",
         type=str,
-        choices=["single", "multi"],
+        choices=["single", "multi", "confirmation", "constrained"],
         default="single",
-        help="Agent-Modus: 'single' für ReactAgent, 'multi' für Multi-Agent-System"
+        help="Agent-Modus: 'single' für ReactAgent, 'multi' für Multi-Agent-System, 'confirmation' für ConfirmationAgent, 'constrained' für ConstrainedAgent"
     )
     
     # Nur eigene Argumente parsen, Rest ignorieren (für Streamlit)

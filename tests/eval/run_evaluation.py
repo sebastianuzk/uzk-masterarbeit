@@ -446,12 +446,14 @@ def run_evaluation(
     mode_labels = {
         "single": "Single-Agent",
         "multi": "Multi-Agent",
-        "confirmation": "Confirmation-Agent"
+        "confirmation": "Confirmation-Agent",
+        "constrained": "Constrained-Agent"
     }
     mode_subdirs = {
         "single": "single_agent",
         "multi": "multi_agent",
-        "confirmation": "confirmation_agent"
+        "confirmation": "confirmation_agent",
+        "constrained": "constrained_agent"
     }
     mode_label = mode_labels.get(agent_mode, "Single-Agent")
     mode_subdir = mode_subdirs.get(agent_mode, "single_agent")
@@ -732,8 +734,8 @@ def main():
     parser.add_argument("--export-dir", type=str, default="data/eval_scenarios",
                         help="Directory for exported scenarios")
     parser.add_argument("--agent-mode", type=str, default="single",
-                        choices=["single", "multi", "confirmation"],
-                        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem, 'confirmation' for ConfirmationAgent (default: single)")
+                        choices=["single", "multi", "confirmation", "constrained", "confirmation"],
+                        help="Agent mode: 'single' for ReactAgent, 'multi' for MultiAgentSystem, 'confirmation' for ConfirmationAgent, 'constrained' for ConstrainedAgent, 'confirmation' for ConfirmationAgent (default: single)")
     
     args = parser.parse_args()
     

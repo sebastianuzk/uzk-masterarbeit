@@ -1,10 +1,11 @@
 """
-Agent Package - Enthält Single-Agent, Multi-Agent und Confirmation-Agent Implementierungen.
+Agent Package - Enthält Single-Agent, Multi-Agent, Confirmation-Agent und Constrained-Agent.
 
 Verfügbare Agent-Systeme:
 - ReactAgent: Einzelner Agent mit allen Tools (Original-Implementierung)
 - MultiAgentSystem: Multi-Agent-System mit spezialisierten Agenten
 - ConfirmationAgent: Agent mit interner Validierungsschleife vor kritischen Tools
+- ConstrainedAgent: Agent mit Schema-beschränkter Generierung (LMQL-inspiriert)
 
 Verwendung:
     # Single-Agent (Original)
@@ -19,9 +20,13 @@ Verwendung:
     from src.agent import create_confirmation_agent
     agent = create_confirmation_agent()
     
+    # Constrained-Agent (Schema-Validierung)
+    from src.agent import create_constrained_agent
+    agent = create_constrained_agent()
+    
     # Oder direkt über Factory mit Mode-Parameter
     from src.agent import create_agent
-    agent = create_agent(mode="single")  # oder mode="multi" oder mode="confirmation"
+    agent = create_agent(mode="single")  # single, multi, confirmation, constrained
 """
 
 from enum import Enum
@@ -30,6 +35,7 @@ from typing import Union
 from .react_agent import ReactAgent, create_react_agent
 from .multi import MultiAgentSystem, create_multi_agent_system
 from .confirmation import ConfirmationAgent, create_confirmation_agent
+from .constrained import ConstrainedAgent, create_constrained_agent
 
 
 class AgentMode(str, Enum):
@@ -37,6 +43,7 @@ class AgentMode(str, Enum):
     SINGLE = "single"
     MULTI = "multi"
     CONFIRMATION = "confirmation"
+    CONSTRAINED = "constrained"
 
 
 def create_agent(mode: Union[str, AgentMode] = AgentMode.SINGLE):
@@ -45,10 +52,10 @@ def create_agent(mode: Union[str, AgentMode] = AgentMode.SINGLE):
     
     Args:
         mode: "single" für ReactAgent, "multi" für MultiAgentSystem,
-              "confirmation" für ConfirmationAgent
+              "confirmation" für ConfirmationAgent, "constrained" für ConstrainedAgent
         
     Returns:
-        Agent-Instanz (ReactAgent, MultiAgentSystem oder ConfirmationAgent)
+        Agent-Instanz
         
     Raises:
         ValueError: Bei unbekanntem Mode
@@ -65,10 +72,13 @@ def create_agent(mode: Union[str, AgentMode] = AgentMode.SINGLE):
     elif mode in (AgentMode.CONFIRMATION, "confirmation"):
         print("🔒 Starte Confirmation-Agent Modus")
         return create_confirmation_agent()
+    elif mode in (AgentMode.CONSTRAINED, "constrained"):
+        print("📐 Starte Constrained-Agent Modus")
+        return create_constrained_agent()
     else:
         raise ValueError(
             f"Unbekannter Agent-Mode: {mode}. "
-            "Verwende 'single', 'multi' oder 'confirmation'."
+            "Verwende 'single', 'multi', 'confirmation' oder 'constrained'."
         )
 
 
@@ -82,6 +92,9 @@ __all__ = [
     # Confirmation Agent
     "ConfirmationAgent",
     "create_confirmation_agent",
+    # Constrained Agent
+    "ConstrainedAgent",
+    "create_constrained_agent",
     # Factory
     "create_agent",
     "AgentMode",
