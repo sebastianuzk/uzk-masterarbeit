@@ -143,5 +143,54 @@ class TestPasswordHard:
         
         assert "klips2_change_password" in gold.forbidden_tools
 
+    def test_password_06_english_request(self):
+        """
+        HARD: Password change request in English.
+        """
+        user_prompt = """
+        I want to change my KLIPS password.
+        Username: john@uni-koeln.de
+        Current password: OldPwd123
+        New password: NewPwd456!
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_change_password"],
+            required_arguments={
+                "klips2_change_password": {
+                    "username": "john@uni-koeln.de",
+                    "password": "OldPwd123",
+                    "new_password": "NewPwd456!"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.EXACT
+        )
+        
+        assert gold.required_tools == ["klips2_change_password"]
 
-# Total: 5 scenarios
+    def test_password_07_correction_midway(self):
+        """
+        HARD: User corrects information mid-request.
+        """
+        user_prompt = """
+        Ändere mein KLIPS-Passwort. User: max@uni-koeln.de, altes PW: Alt123
+        ach nein sorry, das alte Passwort ist eigentlich Richtig456
+        neues Passwort: Neu789!
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_change_password"],
+            required_arguments={
+                "klips2_change_password": {
+                    "username": "max@uni-koeln.de",
+                    "password": "Richtig456",
+                    "new_password": "Neu789!"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.EXACT
+        )
+        
+        assert gold.required_tools == ["klips2_change_password"]
+
+
+# Total: 7 scenarios

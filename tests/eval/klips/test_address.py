@@ -204,5 +204,60 @@ class TestAddressHard:
         
         assert "klips2_change_address" in gold.forbidden_tools
 
+    def test_address_08_english_request(self):
+        """
+        HARD: Address change in English.
+        """
+        user_prompt = """
+        Please update my address in KLIPS.
+        Login: maria@uni-koeln.de / Pass123
+        New address: Hauptstraße 25, 50667 Cologne, Germany
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_change_address"],
+            required_arguments={
+                "klips2_change_address": {
+                    "username": "maria@uni-koeln.de",
+                    "password": "Pass123",
+                    "street": "Hauptstraße 25",
+                    "zip_code": "50667",
+                    "city": "Cologne"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["klips2_change_address"]
 
-# Total: 7 scenarios
+    def test_address_09_with_long_irrelevant_text(self):
+        """
+        HARD: Address change buried in long message with irrelevant details.
+        """
+        user_prompt = """
+        Hallo! Also ich bin letzte Woche umgezogen, war total stressig mit 
+        dem ganzen Umzugszeug und so. Meine Katze hat sich auch verlaufen 
+        aber ist wieder da. Jedenfalls, mein KLIPS-Login ist peter@uni-koeln.de 
+        mit Passwort MeinPass1. Ach ja, das Wetter war auch schlecht. 
+        Meine neue Adresse ist jetzt Neustraße 42, 51065 Köln. 
+        Hoffentlich funktioniert das. Übrigens, weißt du ob die Mensa heute auf hat?
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_change_address"],
+            required_arguments={
+                "klips2_change_address": {
+                    "username": "peter@uni-koeln.de",
+                    "password": "MeinPass1",
+                    "street": "Neustraße 42",
+                    "zip_code": "51065",
+                    "city": "Köln"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["klips2_change_address"]
+
+
+# Total: 9 scenarios

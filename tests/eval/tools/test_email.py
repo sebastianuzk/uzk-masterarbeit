@@ -164,81 +164,7 @@ class TestEmailMedium:
         
         assert gold.required_tools == ["send_email"]
 
-    def test_email_07_forward_info(self):
-        """
-        MEDIUM: Request to send information.
-        """
-        user_prompt = """
-        Sende eine Nachricht: Das Meeting wurde auf 15 Uhr verschoben.
-        Betreff: Meeting Update
-        """
-        
-        gold = GoldStandard(
-            required_tools=["send_email"],
-            required_arguments={
-                "send_email": {
-                    "subject": "Meeting Update"
-                }
-            },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert gold.required_tools == ["send_email"]
-
-
-class TestEmailHard:
-    """Hard scenarios - missing or problematic email information."""
-
-    def test_email_08_missing_subject(self):
-        """
-        HARD: Email request without subject.
-        LLM should ask for subject, NOT call tool.
-        """
-        user_prompt = """
-        Schreibe eine E-Mail und frage nach dem Status meiner Bewerbung.
-        """
-        
-        gold = GoldStandard(
-            required_tools=[],
-            forbidden_tools={"send_email"},
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert "send_email" in gold.forbidden_tools
-
-    def test_email_09_missing_content(self):
-        """
-        HARD: Email request without clear content.
-        """
-        user_prompt = """
-        Sende eine E-Mail mit Betreff "Test".
-        """
-        
-        gold = GoldStandard(
-            required_tools=[],
-            forbidden_tools={"send_email"},
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert "send_email" in gold.forbidden_tools
-
-    def test_email_10_too_vague(self):
-        """
-        HARD: Too vague email request.
-        """
-        user_prompt = """
-        Schick mal eine Mail.
-        """
-        
-        gold = GoldStandard(
-            required_tools=[],
-            forbidden_tools={"send_email"},
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert "send_email" in gold.forbidden_tools
-
-    def test_email_11_user_specifies_recipient(self):
+    def test_email_07_user_specifies_recipient(self):
         """
         MEDIUM: User specifies recipient (should work, recipient ignored).
         Tool will send to default recipient anyway.
@@ -261,7 +187,7 @@ class TestEmailHard:
         # Tool should still be called - it will use default recipient
         assert gold.required_tools == ["send_email"]
 
-    def test_email_12_follow_up_email(self):
+    def test_email_08_follow_up_email(self):
         """
         MEDIUM: Request to send follow-up email.
         """
@@ -282,20 +208,73 @@ class TestEmailHard:
         
         assert gold.required_tools == ["send_email"]
 
-    def test_email_13_thank_you_email(self):
+
+class TestEmailHard:
+    """Hard scenarios - missing or problematic email information."""
+
+    def test_email_09_missing_subject(self):
         """
-        MEDIUM: Request to send thank you email.
+        HARD: Email request without subject.
+        LLM should ask for subject, NOT call tool.
         """
         user_prompt = """
-        Verfasse eine Dankes-E-Mail mit dem Betreff "Vielen Dank für das Gespräch"
-        und bedanke dich für das informative Beratungsgespräch.
+        Schreibe eine E-Mail und frage nach dem Status meiner Bewerbung.
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"send_email"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "send_email" in gold.forbidden_tools
+
+    def test_email_10_missing_content(self):
+        """
+        HARD: Email request without clear content.
+        """
+        user_prompt = """
+        Sende eine E-Mail mit Betreff "Test".
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"send_email"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "send_email" in gold.forbidden_tools
+
+    def test_email_11_too_vague(self):
+        """
+        HARD: Too vague email request.
+        """
+        user_prompt = """
+        Schick mal eine Mail.
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"send_email"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "send_email" in gold.forbidden_tools
+
+    def test_email_12_mixed_language_typos(self):
+        """
+        HARD: Email request with mixed German-English and typos.
+        """
+        user_prompt = """
+        pls send eine email mit subject "Wichtige Frage" und 
+        content dass ich wissen will wann das nächste meeting ist thx
         """
         
         gold = GoldStandard(
             required_tools=["send_email"],
             required_arguments={
                 "send_email": {
-                    "subject": "Vielen Dank für das Gespräch"
+                    "subject": "Wichtige Frage"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -303,47 +282,6 @@ class TestEmailHard:
         
         assert gold.required_tools == ["send_email"]
 
-    def test_email_14_sick_leave_notification(self):
-        """
-        MEDIUM: Request to send sick leave notification.
-        """
-        user_prompt = """
-        Schreibe eine E-Mail mit Betreff "Krankmeldung" und teile mit, 
-        dass ich heute nicht zur Vorlesung kommen kann.
-        """
-        
-        gold = GoldStandard(
-            required_tools=["send_email"],
-            required_arguments={
-                "send_email": {
-                    "subject": "Krankmeldung"
-                }
-            },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert gold.required_tools == ["send_email"]
 
-    def test_email_15_grade_inquiry(self):
-        """
-        MEDIUM: Request to send email about grade inquiry.
-        """
-        user_prompt = """
-        Sende eine E-Mail mit dem Betreff "Frage zu meiner Note" und frage,
-        wann die Ergebnisse der letzten Klausur veröffentlicht werden.
-        """
-        
-        gold = GoldStandard(
-            required_tools=["send_email"],
-            required_arguments={
-                "send_email": {
-                    "subject": "Frage zu meiner Note"
-                }
-            },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert gold.required_tools == ["send_email"]
+# Total: 12 scenarios
 
-
-# Total: 15 scenarios

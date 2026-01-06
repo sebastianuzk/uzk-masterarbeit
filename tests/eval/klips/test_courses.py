@@ -196,5 +196,47 @@ class TestCoursesHard:
         
         assert "klips2_get_course_details" in gold.forbidden_tools
 
+    def test_courses_09_id_with_typo(self):
+        """
+        HARD: Course ID mentioned with typo in surrounding text.
+        """
+        user_prompt = """
+        zeig mir bitte die detials zum kurs 14302.0005, 
+        ich brauch das für meine anmledung
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_get_course_details"],
+            required_arguments={
+                "klips2_get_course_details": {
+                    "course_id": "14302.0005"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["klips2_get_course_details"]
 
-# Total: 8 scenarios
+    def test_courses_10_multiple_ids_mentioned(self):
+        """
+        HARD: Multiple course IDs mentioned, should query the main one.
+        """
+        user_prompt = """
+        Ich habe gehört der Kurs 14302.0001 ist gut, aber eigentlich 
+        möchte ich Infos zum Kurs 14302.0002.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_get_course_details"],
+            required_arguments={
+                "klips2_get_course_details": {
+                    "course_id": "14302.0002"
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert gold.required_tools == ["klips2_get_course_details"]
+
+
+# Total: 10 scenarios

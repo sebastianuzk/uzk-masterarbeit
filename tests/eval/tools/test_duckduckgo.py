@@ -151,59 +151,7 @@ class TestSearchMedium:
         
         assert gold.required_tools == ["duckduckgo_search"]
 
-
-class TestSearchHard:
-    """Hard scenarios - search not appropriate or needs clarification."""
-
-    def test_search_07_personal_data(self):
-        """
-        HARD: Request that shouldn't use search (personal data).
-        """
-        user_prompt = """
-        Such nach meiner E-Mail-Adresse.
-        """
-        
-        gold = GoldStandard(
-            required_tools=[],
-            forbidden_tools={"duckduckgo_search"},
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert "duckduckgo_search" in gold.forbidden_tools
-
-    def test_search_08_internal_system(self):
-        """
-        HARD: Request that should use internal system instead.
-        """
-        user_prompt = """
-        Such in KLIPS nach dem Kurs Informatik I.
-        """
-        
-        gold = GoldStandard(
-            required_tools=["klips2_get_course_details"],
-            forbidden_tools={"duckduckgo_search"},
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert "duckduckgo_search" in gold.forbidden_tools
-
-    def test_search_09_too_vague(self):
-        """
-        HARD: Too vague search request.
-        """
-        user_prompt = """
-        Such mal was.
-        """
-        
-        gold = GoldStandard(
-            required_tools=[],
-            forbidden_tools={"duckduckgo_search"},
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
-        )
-        
-        assert "duckduckgo_search" in gold.forbidden_tools
-
-    def test_search_10_academic_topic(self):
+    def test_search_07_academic_topic(self):
         """
         MEDIUM: Search for academic/research topic.
         """
@@ -222,7 +170,7 @@ class TestSearchHard:
         
         assert gold.required_tools == ["duckduckgo_search"]
 
-    def test_search_11_comparison(self):
+    def test_search_08_comparison(self):
         """
         MEDIUM: Search for comparison information.
         """
@@ -241,12 +189,66 @@ class TestSearchHard:
         
         assert gold.required_tools == ["duckduckgo_search"]
 
-    def test_search_12_news_search(self):
+
+class TestSearchHard:
+    """Hard scenarios - search not appropriate or needs clarification."""
+
+    def test_search_09_personal_data(self):
         """
-        MEDIUM: Search for news about university.
+        HARD: Request that shouldn't use search (personal data).
         """
         user_prompt = """
-        Suche nach aktuellen Nachrichten über die Universität zu Köln.
+        Such nach meiner E-Mail-Adresse.
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"duckduckgo_search"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "duckduckgo_search" in gold.forbidden_tools
+
+    def test_search_10_internal_system(self):
+        """
+        HARD: Request that should use internal system instead.
+        """
+        user_prompt = """
+        Such in KLIPS nach dem Kurs Informatik I.
+        """
+        
+        gold = GoldStandard(
+            required_tools=["klips2_get_course_details"],
+            forbidden_tools={"duckduckgo_search"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "duckduckgo_search" in gold.forbidden_tools
+
+    def test_search_11_too_vague(self):
+        """
+        HARD: Too vague search request.
+        """
+        user_prompt = """
+        Such mal was.
+        """
+        
+        gold = GoldStandard(
+            required_tools=[],
+            forbidden_tools={"duckduckgo_search"},
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        
+        assert "duckduckgo_search" in gold.forbidden_tools
+
+    def test_search_12_typo_and_noise(self):
+        """
+        HARD: Search request with typos and irrelevant details.
+        """
+        user_prompt = """
+        such mal im internett nach univerität köln bewrbung, 
+        ach und ich hab noch vergessen zu sagen dass ich eigentlich 
+        was anderes wollte aber egal such einfach
         """
         
         gold = GoldStandard(
@@ -259,59 +261,6 @@ class TestSearchHard:
         
         assert gold.required_tools == ["duckduckgo_search"]
 
-    def test_search_13_job_search(self):
-        """
-        MEDIUM: Search for job/internship opportunities.
-        """
-        user_prompt = """
-        Suche im Internet nach Werkstudentenstellen für Informatik-Studenten in Köln.
-        """
-        
-        gold = GoldStandard(
-            required_tools=["duckduckgo_search"],
-            required_arguments={
-                "duckduckgo_search": {}
-            },
-            argument_match_mode=ArgumentMatchMode.SEMANTIC
-        )
-        
-        assert gold.required_tools == ["duckduckgo_search"]
 
-    def test_search_14_scholarship_search(self):
-        """
-        MEDIUM: Search for scholarship information.
-        """
-        user_prompt = """
-        Recherchiere nach Stipendien für Master-Studenten in Deutschland.
-        """
-        
-        gold = GoldStandard(
-            required_tools=["duckduckgo_search"],
-            required_arguments={
-                "duckduckgo_search": {}
-            },
-            argument_match_mode=ArgumentMatchMode.SEMANTIC
-        )
-        
-        assert gold.required_tools == ["duckduckgo_search"]
+# Total: 12 scenarios
 
-    def test_search_15_event_search(self):
-        """
-        MEDIUM: Search for university events.
-        """
-        user_prompt = """
-        Google nach Karrieremessen für Studenten in NRW.
-        """
-        
-        gold = GoldStandard(
-            required_tools=["duckduckgo_search"],
-            required_arguments={
-                "duckduckgo_search": {}
-            },
-            argument_match_mode=ArgumentMatchMode.SEMANTIC
-        )
-        
-        assert gold.required_tools == ["duckduckgo_search"]
-
-
-# Total: 15 scenarios
