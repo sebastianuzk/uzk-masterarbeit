@@ -168,7 +168,7 @@ class ChangeAddressToolCall(BaseModel):
         # - 2 bis 10 Zeichen
         # - Buchstaben, Ziffern, Leerzeichen oder Bindestrich
         # Beispiele: "50678" (DE), "1010" (AT), "SW1A 1AA" (UK), "K1A 0B1" (CA)
-        if not re.match(r'^[A-Za-z0-9 \-]{2,10}$', v):
+        if not re.match(r'^[A-Za-z0-9 -]{2,10}$', v):
             raise ValueError("Postleitzahl/ZIP muss 2-10 Zeichen (Buchstaben, Ziffern, Leerzeichen oder '-') enthalten")
         return v
 
