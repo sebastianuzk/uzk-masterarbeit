@@ -18,6 +18,8 @@ import csv
 import json
 import re
 import time
+import inspect
+import importlib.util
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
@@ -29,7 +31,7 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from tests.eval.evaluation import (
+from eval.core.evaluation import (
     ToolCall,
     GoldStandard,
     EvaluationResult,
@@ -716,62 +718,411 @@ def save_report(report: EvaluationReport, output_dir: str = "data/eval_results")
     
     Directory structure:
         {output_dir}/
-            {model_name}/
-                results.json
-                results.csv
-                summary.csv
-                report.md
-                tables.tex
-            combined_summary.csv  (one row per model, overwritten)
+            {model_name}_{agent_type}/
+                tools/
+                    results.json
+                    results.csv
+                    summary.csv
+                    report.md
+                    tables.tex
     """
     # Sanitize model name for directory
     model_dir_name = sanitize_model_name(report.model_name)
     
-    # Create model-specific directory (without timestamp - overwrites previous results)
-    model_path = Path(output_dir) / model_dir_name
-    model_path.mkdir(parents=True, exist_ok=True)
+    # Agent-Typ aus evaluation_config holen
+    agent_type = report.evaluation_config.get('agent_type', 'single')
+    
+    # Create model+agent-specific directory with tools/ subfolder
+    model_path = Path(output_dir) / f"{model_dir_name}_{agent_type}"
+    tools_path = model_path / "tools"
+    tools_path.mkdir(parents=True, exist_ok=True)
     
     # Save JSON (complete data)
-    json_path = model_path / "results.json"
+    json_path = tools_path / "results.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(asdict(report), f, indent=2, ensure_ascii=False, default=str)
     
     # Save Markdown report
-    md_path = model_path / "report.md"
+    md_path = tools_path / "report.md"
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(generate_markdown_report(report))
     
     # Save LaTeX tables
-    latex_path = model_path / "tables.tex"
+    latex_path = tools_path / "tables.tex"
     with open(latex_path, "w", encoding="utf-8") as f:
         f.write(generate_latex_table(report.aggregated_metrics))
     
     # Save CSV - individual results (for statistical analysis)
-    csv_results_path = model_path / "results.csv"
+    csv_results_path = tools_path / "results.csv"
     with open(csv_results_path, "w", encoding="utf-8", newline="") as f:
         f.write(generate_csv_results(report.individual_results))
     
     # Save CSV - summary for this run
-    csv_summary_path = model_path / "summary.csv"
+    csv_summary_path = tools_path / "summary.csv"
     with open(csv_summary_path, "w", encoding="utf-8", newline="") as f:
         f.write(generate_csv_summary(report.aggregated_metrics, report.model_name))
     
-    # Update combined summary (overwrite with all model results)
-    combined_summary_path = Path(output_dir) / "combined_summary.csv"
-    # Write fresh - always overwrite to keep just current model results
-    with open(combined_summary_path, "w", encoding="utf-8", newline="") as f:
-        f.write(generate_csv_summary(report.aggregated_metrics, report.model_name))
-    
-    print(f"Reports saved to {model_path}/")
+    print(f"Reports saved to {tools_path}/")
     print(f"  - results.json (complete data)")
     print(f"  - results.csv (individual results for R/Python)")
     print(f"  - summary.csv (run summary)")
     print(f"  - report.md (readable report)")
     print(f"  - tables.tex (LaTeX tables)")
-    print()
-    print(f"Combined summary: {combined_summary_path}")
     
     return model_path
+
+
+# ============================================================================
+# SZENARIO-LOADING UND AUSFÜHRUNG
+# ============================================================================
+
+def load_scenarios_from_tests() -> list[EvaluationScenario]:
+    """
+    Lädt alle Evaluierungsszenarien aus den Test-Dateien in eval/scenarios/.
+    
+    Scannt die Szenario-Dateien und extrahiert EvaluationScenario-Objekte
+    aus allen Testklassen und -methoden.
+    
+    Returns:
+        Liste aller gefundenen Evaluierungsszenarien
+    """
+    from pathlib import Path
+    import importlib.util
+    import inspect
+    
+    scenarios = []
+    scenarios_dir = Path(__file__).parent.parent / "scenarios"
+    
+    # Durchsuche alle Python-Testdateien
+    for test_file in scenarios_dir.rglob("test_*.py"):
+        # Lade Modul dynamisch
+        spec = importlib.util.spec_from_file_location(test_file.stem, test_file)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(module)
+            except Exception as e:
+                print(f"⚠️  Konnte {test_file} nicht laden: {e}")
+                continue
+            
+            # Suche nach Testklassen
+            for name, obj in inspect.getmembers(module, inspect.isclass):
+                if name.startswith("Test"):
+                    # Suche nach Testmethoden
+                    for method_name, method in inspect.getmembers(obj, inspect.isfunction):
+                        if method_name.startswith("test_"):
+                            # Versuche Szenario aus Docstring zu parsen
+                            try:
+                                scenario = _parse_scenario_from_method(
+                                    obj, method_name, method, test_file
+                                )
+                                if scenario:
+                                    scenarios.append(scenario)
+                            except Exception as e:
+                                print(f"⚠️  Fehler bei {name}.{method_name}: {e}")
+    
+    # Sortiere nach ID
+    scenarios.sort(key=lambda s: s.id)
+    
+    # Vergebe kurze IDs
+    for i, scenario in enumerate(scenarios, 1):
+        scenario.short_id = f"s{i}"
+    
+    return scenarios
+
+
+def _parse_scenario_from_method(
+    cls, method_name: str, method, test_file: Path
+) -> Optional[EvaluationScenario]:
+    """
+    Extrahiert ein EvaluationScenario aus einer Testmethode.
+    
+    Parst den Docstring und Methodeninhalt, um die Szenario-Details zu extrahieren.
+    """
+    import ast
+    import re
+    
+    docstring = method.__doc__ or ""
+    
+    # Extrahiere Difficulty aus Klassennamen
+    class_name = cls.__name__
+    if "Easy" in class_name:
+        difficulty = Difficulty.EASY
+    elif "Medium" in class_name:
+        difficulty = Difficulty.MEDIUM
+    elif "Hard" in class_name:
+        difficulty = Difficulty.HARD
+    elif "Multi" in class_name:
+        difficulty = Difficulty.MULTI_STEP
+    else:
+        difficulty = Difficulty.MEDIUM
+    
+    # Extrahiere Tool aus Verzeichnisname oder Dateiname
+    parent_dir = test_file.parent.name
+    if parent_dir == "klips":
+        tool = _extract_tool_from_filename(test_file.stem)
+    elif parent_dir == "tools":
+        tool = _extract_tool_from_filename(test_file.stem)
+    else:
+        tool = "unknown"
+    
+    # Extrahiere user_prompt aus dem Methodencode
+    try:
+        source = inspect.getsource(method)
+        
+        # Suche nach user_prompt = """...""" (mehrzeilige Triple-Quotes)
+        prompt_match = re.search(
+            r'(?:prompt|user_prompt)\s*=\s*"""(.*?)"""',
+            source, re.DOTALL
+        )
+        if not prompt_match:
+            # Fallback: user_prompt = '''...'''
+            prompt_match = re.search(
+                r"(?:prompt|user_prompt)\s*=\s*'''(.*?)'''",
+                source, re.DOTALL
+            )
+        if not prompt_match:
+            # Fallback: einzeilige Strings user_prompt = "..."
+            prompt_match = re.search(
+                r'(?:prompt|user_prompt)\s*=\s*["\'](.+?)["\']',
+                source, re.DOTALL
+            )
+        
+        if prompt_match:
+            user_prompt = prompt_match.group(1).strip()
+        else:
+            # Letzter Fallback: Docstring verwenden
+            user_prompt = docstring.split("\n")[0] if docstring else f"Test: {method_name}"
+        
+        # Suche nach GoldStandard(...) - auch mehrzeilig
+        gold_match = re.search(r'GoldStandard\s*\((.*?)\)', source, re.DOTALL)
+        if gold_match:
+            gold_content = gold_match.group(1)
+            
+            # Extrahiere required_tools
+            tools_match = re.search(r'required_tools\s*=\s*\[(.*?)\]', gold_content, re.DOTALL)
+            required_tools = []
+            if tools_match:
+                tools_str = tools_match.group(1)
+                required_tools = re.findall(r'["\'](\w+)["\']', tools_str)
+            
+            # Extrahiere forbidden_tools (für negative Tests) - kann [] oder {} sein
+            forbidden_match = re.search(r'forbidden_tools\s*=\s*[\[{](.*?)[\]}]', gold_content, re.DOTALL)
+            forbidden_tools = set()
+            if forbidden_match:
+                forbidden_str = forbidden_match.group(1)
+                forbidden_tools = set(re.findall(r'["\'](\w+)["\']', forbidden_str))
+            
+            # Erstelle GoldStandard - negative Tests haben required_tools=[] aber forbidden_tools
+            gold_standard = GoldStandard(
+                required_tools=required_tools,
+                forbidden_tools=forbidden_tools,
+                argument_match_mode=ArgumentMatchMode.NORMALIZED
+            )
+        else:
+            # Fallback: leerer GoldStandard mit Tool aus Dateiname
+            gold_standard = GoldStandard(required_tools=[tool])
+        
+    except Exception as e:
+        print(f"⚠️  Parsing-Fehler: {e}")
+        user_prompt = docstring.split("\n")[0] if docstring else method_name
+        gold_standard = GoldStandard(required_tools=[tool])
+    
+    # Erstelle Szenario-ID
+    scenario_id = f"{cls.__name__}_{method_name}"
+    
+    # Kategorie aus Verzeichnis
+    category = parent_dir
+    
+    return EvaluationScenario(
+        id=scenario_id,
+        tool=tool if tool != "unknown" else (
+            required_tools[0] if gold_standard.required_tools else "unknown"
+        ),
+        difficulty=difficulty,
+        user_prompt=user_prompt,
+        gold_standard=gold_standard,
+        description=docstring.strip(),
+        category=category
+    )
+
+
+def _extract_tool_from_filename(filename: str) -> str:
+    """Extrahiert Toolnamen aus Dateinamen wie test_register.py -> klips2_register"""
+    name = filename.replace("test_", "")
+    
+    tool_mapping = {
+        "register": "klips2_register",
+        "apply": "klips2_apply_for_course",
+        "address": "klips2_update_address",
+        "password": "klips2_change_password",
+        "courses": "klips2_get_courses",
+        "duckduckgo": "duckduckgo_search",
+        "email": "send_email",
+        "multi_negative": "multi_tool",
+    }
+    
+    return tool_mapping.get(name, name)
+
+
+def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
+    """
+    Führt ein einzelnes Szenario mit dem gegebenen Agenten aus.
+    
+    WICHTIG: Diese Funktion testet nur die Tool-AUSWAHL, nicht die Tool-AUSFÜHRUNG!
+    Wir rufen das LLM direkt mit gebundenen Tools auf, um zu sehen welche Tools
+    es auswählen würde, ohne sie tatsächlich auszuführen.
+    
+    Args:
+        agent: Der zu testende Agent (ReactAgent, MultiAgentSystem, etc.)
+        scenario: Das auszuführende Szenario
+    
+    Returns:
+        ScenarioResult mit allen Metriken
+    """
+    import time
+    from langchain_core.messages import HumanMessage
+    
+    # Clear agent memory für frischen Start
+    if hasattr(agent, 'clear_memory'):
+        agent.clear_memory()
+    
+    start_time = time.time()
+    tool_calls = []
+    error = None
+    input_tokens, output_tokens, total_tokens = 0, 0, 0
+    
+    try:
+        # Prüfe ob es ein Multi-Agent System ist
+        is_multi_agent = not hasattr(agent, 'llm')
+        
+        if is_multi_agent:
+            # Für Multi-Agent: get_tool_selection nutzen (falls vorhanden)
+            if hasattr(agent, 'get_tool_selection'):
+                tool_selection = agent.get_tool_selection(scenario.user_prompt)
+                for tc in tool_selection:
+                    tool_calls.append(ToolCall(
+                        name=tc.get("name", ""),
+                        arguments=tc.get("args", {})
+                    ))
+            else:
+                # Fallback: Agent ausführen (mit Tool-Ausführung)
+                response = agent.run(scenario.user_prompt)
+                # Keine Tool-Calls extrahierbar
+                tool_calls = []
+            
+            # Token-Schätzung für Multi-Agent
+            input_tokens = len(scenario.user_prompt.split()) * 2
+            output_tokens = len(tool_calls) * 10
+            total_tokens = input_tokens + output_tokens
+            
+        else:
+            # Für Single-Agent (ReactAgent): LLM DIREKT mit Tools aufrufen
+            # Das gibt uns die Tool-Calls OHNE die Tools auszuführen!
+            
+            # LLM mit gebundenen Tools holen
+            llm_with_tools = agent.llm.bind_tools(agent.tools)
+            
+            # Message-Liste erstellen
+            messages = [
+                agent.system_message,
+                HumanMessage(content=scenario.user_prompt)
+            ]
+            
+            # LLM aufrufen um Tool-Auswahl zu bekommen (OHNE Ausführung)
+            response = llm_with_tools.invoke(messages)
+            
+            # Tool-Calls aus der AIMessage extrahieren
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tc in response.tool_calls:
+                    tool_calls.append(ToolCall(
+                        name=tc.get("name", ""),
+                        arguments=tc.get("args", {})
+                    ))
+            
+            # Token-Usage aus Response extrahieren
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                usage = response.usage_metadata
+                if isinstance(usage, dict):
+                    input_tokens = usage.get('input_tokens', 0)
+                    output_tokens = usage.get('output_tokens', 0)
+                    total_tokens = usage.get('total_tokens', input_tokens + output_tokens)
+            elif hasattr(response, 'response_metadata') and response.response_metadata:
+                meta = response.response_metadata
+                if isinstance(meta, dict):
+                    input_tokens = meta.get('prompt_eval_count', 0)
+                    output_tokens = meta.get('eval_count', 0)
+                    total_tokens = input_tokens + output_tokens
+        
+    except Exception as e:
+        error = str(e)
+    
+    latency_ms = (time.time() - start_time) * 1000
+    
+    # Evaluiere das Ergebnis
+    result = evaluate_scenario(scenario, tool_calls, latency_ms)
+    
+    # Token-Counts hinzufügen
+    result.input_tokens = input_tokens
+    result.output_tokens = output_tokens
+    result.total_tokens = total_tokens
+    
+    if error:
+        result.error = error
+    
+    return result
+
+
+def _extract_tool_calls(response) -> list[ToolCall]:
+    """
+    Extrahiert ToolCall-Objekte aus einer Agent-Antwort.
+    
+    Unterstützt verschiedene Response-Formate (LangGraph, LangChain, etc.)
+    """
+    tool_calls = []
+    
+    # LangGraph-Format: dict mit messages
+    if isinstance(response, dict) and "messages" in response:
+        for msg in response["messages"]:
+            # AIMessage mit tool_calls Attribut (LangGraph Standard)
+            if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    # tc ist ein dict mit 'name', 'args', 'id'
+                    if isinstance(tc, dict):
+                        tool_calls.append(ToolCall(
+                            name=tc.get("name", ""),
+                            arguments=tc.get("args", {})
+                        ))
+            
+            # ToolMessage - hat 'name' Attribut für das Tool das aufgerufen wurde
+            if hasattr(msg, 'name') and msg.name:
+                # Prüfe ob es eine ToolMessage ist (nicht AIMessage)
+                msg_type = type(msg).__name__
+                if msg_type == 'ToolMessage':
+                    # ToolMessage enthält das Ergebnis eines Tool-Aufrufs
+                    # Wir sammeln hier nur den Namen - Args kommen von der AIMessage
+                    pass  # Tool wurde bereits über AIMessage.tool_calls erfasst
+            
+            # Fallback: additional_kwargs (OpenAI-Format)
+            if hasattr(msg, 'additional_kwargs'):
+                for tc in msg.additional_kwargs.get('tool_calls', []):
+                    func = tc.get('function', {})
+                    if func.get('name'):
+                        tool_calls.append(ToolCall(
+                            name=func.get('name', ''),
+                            arguments=func.get('arguments', {})
+                        ))
+    
+    # Direkte Tool-Aufrufe (Liste von dicts)
+    elif isinstance(response, list):
+        for item in response:
+            if isinstance(item, dict) and 'tool' in item:
+                tool_calls.append(ToolCall(
+                    name=item['tool'],
+                    arguments=item.get('arguments', {})
+                ))
+    
+    return tool_calls
 
 
 # Example usage for running evaluation

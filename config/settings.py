@@ -30,8 +30,8 @@ class Settings:
     OLLAMA_NUM_GPU = int(os.getenv("OLLAMA_NUM_GPU", "99"))
     
     # SentenceTransformer Embedding-Modell (für Vektordatenbank & Semantic Chunking)
-    # paraphrase-multilingual-MiniLM-L12-v2 für DE+EN Texte (384 Dimensionen)
-    SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+    # BAAI/bge-m3 für DE+EN Texte (1024 Dimensionen) - passend zur Vektordatenbank
+    SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "BAAI/bge-m3")
     
     # LLM Konfiguration
     TEMPERATURE = 0.0
