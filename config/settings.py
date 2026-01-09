@@ -22,6 +22,9 @@ class Settings:
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:3b")  # Kleineres Modell für begrenzte RAM-Systeme
     OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:8b")
     OLLAMA_EVALUATION_TIMEOUT = int(os.getenv("OLLAMA_EVALUATION_TIMEOUT", "300"))  # 5 Minuten für RAGAS-Evaluationen
+    
+    # RAGAS-Evaluation: Fester Judge für faire Vergleiche zwischen Modellen
+    RAGAS_JUDGE_MODEL = os.getenv("RAGAS_JUDGE_MODEL", "qwen2.5:7b")
     REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "120"))  # 2 Minuten Timeout für LLM-Requests
     
     # Ollama Server-Optimierungen (aus Umgebungsvariablen)
@@ -91,6 +94,7 @@ OLLAMA_MODEL = settings.OLLAMA_MODEL
 OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
 OLLAMA_EMBEDDING_MODEL = settings.OLLAMA_EMBEDDING_MODEL
 OLLAMA_EVALUATION_TIMEOUT = settings.OLLAMA_EVALUATION_TIMEOUT
+RAGAS_JUDGE_MODEL = settings.RAGAS_JUDGE_MODEL
 SENTENCE_TRANSFORMER_MODEL = settings.SENTENCE_TRANSFORMER_MODEL
 LANGSMITH_API_KEY = settings.LANGSMITH_API_KEY
 LANGSMITH_PROJECT = settings.LANGSMITH_PROJECT

@@ -953,10 +953,10 @@ def _extract_tool_from_filename(filename: str) -> str:
     
     tool_mapping = {
         "register": "klips2_register",
-        "apply": "klips2_apply_for_course",
-        "address": "klips2_update_address",
+        "apply": "klips2_apply_study",
+        "address": "klips2_change_address",
         "password": "klips2_change_password",
-        "courses": "klips2_get_courses",
+        "courses": "klips2_get_course_details",
         "duckduckgo": "duckduckgo_search",
         "email": "send_email",
         "multi_negative": "multi_tool",

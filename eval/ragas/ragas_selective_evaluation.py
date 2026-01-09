@@ -32,7 +32,8 @@ from config.settings import (
     OLLAMA_MODEL,
     OLLAMA_BASE_URL,
     LANGSMITH_API_KEY,
-    LANGSMITH_PROJECT
+    LANGSMITH_PROJECT,
+    RAGAS_JUDGE_MODEL
 )
 from src.agent.react_agent import create_react_agent
 
@@ -216,17 +217,25 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     return EvaluationDataset(samples=samples)
 
 
-def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
-    """Führt RAGAS-Evaluation durch"""
+def run_ragas_evaluation(dataset: EvaluationDataset, model: str = None) -> pd.DataFrame:
+    """Führt RAGAS-Evaluation durch
+    
+    Args:
+        dataset: RAGAS EvaluationDataset mit Samples
+        model: Agent-Modell (nur für Dokumentation, Judge ist immer RAGAS_JUDGE_MODEL)
+    """
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
+    # Verwende immer den festen RAGAS Judge für faire Vergleiche
+    print(f"   Agent-Modell:  {model if model else 'N/A'}")
+    print(f"   RAGAS-Judge:   {RAGAS_JUDGE_MODEL}")
+    
     llm = ChatOllama(
-        model=OLLAMA_MODEL,
+        model=RAGAS_JUDGE_MODEL,
         base_url=OLLAMA_BASE_URL,
         temperature=0.0
     )
-    print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL}")
     
     metrics = [
         faithfulness,
@@ -400,7 +409,7 @@ def main():
         dataset = generate_chatbot_responses(test_df, agent, langsmith_client)
         
         # 5. RAGAS-Evaluation
-        results_df = run_ragas_evaluation(dataset)
+        results_df = run_ragas_evaluation(dataset, model=OLLAMA_MODEL)
         
         # 6. Mit bestehenden Ergebnissen mergen
         merged_df = merge_results_with_existing(results_df, test_df)

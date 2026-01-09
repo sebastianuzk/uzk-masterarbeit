@@ -30,7 +30,8 @@ from config.settings import (
     OLLAMA_BASE_URL,
     OLLAMA_EMBEDDING_MODEL,
     LANGSMITH_API_KEY,
-    LANGSMITH_PROJECT
+    LANGSMITH_PROJECT,
+    RAGAS_JUDGE_MODEL
 )
 from src.agent.react_agent import create_react_agent
 
@@ -178,22 +179,29 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     return dataset
 
 
-def run_ragas_evaluation(dataset: EvaluationDataset) -> pd.DataFrame:
+def run_ragas_evaluation(dataset: EvaluationDataset, model: str = None) -> pd.DataFrame:
     """
     Führt RAGAS-Evaluation durch.
     Verwendet 3 Standard-RAGAS-Metriken: faithfulness, context_recall, context_precision.
     (answer_relevancy auskommentiert - benötigt qwen3-embedding:8b)
+    
+    Args:
+        dataset: RAGAS EvaluationDataset mit Samples
+        model: Agent-Modell (nur für Dokumentation, Judge ist immer RAGAS_JUDGE_MODEL)
     """
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
-    # Ollama LLM konfigurieren
+    # Verwende immer den festen RAGAS Judge für faire Vergleiche
+    print(f"   Agent-Modell:  {model if model else 'N/A'}")
+    print(f"   RAGAS-Judge:   {RAGAS_JUDGE_MODEL}")
+    
+    # Ollama LLM konfigurieren mit festem Judge
     llm = ChatOllama(
-        model=OLLAMA_MODEL,
+        model=RAGAS_JUDGE_MODEL,
         base_url=OLLAMA_BASE_URL,
         temperature=0.0
     )
-    print(f"   LLM: {OLLAMA_MODEL} @ {OLLAMA_BASE_URL}")
     
     # Ollama Embeddings für answer_relevancy (später aktivieren)
     # embeddings = OllamaEmbeddings(
@@ -517,7 +525,7 @@ def main():
             dataset = generate_chatbot_responses(test_df, agent, langsmith_client)
         
         # 5. RAGAS-Evaluation (immer ausführen)
-        results_df = run_ragas_evaluation(dataset)
+        results_df = run_ragas_evaluation(dataset, model=OLLAMA_MODEL)
         
         # 6. Ergebnisse anzeigen und speichern
         display_and_save_results(results_df, test_df)

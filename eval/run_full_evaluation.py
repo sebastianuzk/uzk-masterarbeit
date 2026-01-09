@@ -117,7 +117,7 @@ def generate_combined_report(base_dir: Path, model: str) -> None:
     
     for agent_type in AGENT_TYPES:
         agent_dir = base_dir / f"{model_folder}_{agent_type}"
-        summary_path = agent_dir / "evaluation_summary.json"
+        summary_path = agent_dir / "summary.json"
         
         if summary_path.exists():
             with open(summary_path, 'r') as f:
@@ -381,15 +381,18 @@ def _generate_html_report(agent_results: List[Dict], model: str) -> str:
 
 def ensure_model_available(model: str) -> bool:
     """Prüft ob Modell in Ollama verfügbar ist."""
-    import subprocess
+    import requests
     try:
-        result = subprocess.run(
-            ["ollama", "list"],
-            capture_output=True,
-            text=True,
+        # Verwende API statt lokaler Befehle (funktioniert auch für Remote-Server)
+        response = requests.get(
+            f"{settings.OLLAMA_BASE_URL}/api/tags",
             timeout=10
         )
-        return model in result.stdout
+        if response.status_code == 200:
+            data = response.json()
+            models = [m['name'] for m in data.get('models', [])]
+            return model in models
+        return False
     except Exception:
         return False
 
@@ -400,13 +403,33 @@ def pull_model_if_needed(model: str) -> bool:
         return True
     
     print(f"⬇️  Lade Modell {model} herunter...")
-    import subprocess
+    import requests
     try:
-        result = subprocess.run(
-            ["ollama", "pull", model],
-            timeout=600  # 10 Minuten Timeout
+        # Verwende API für Pull (funktioniert auch für Remote-Server)
+        response = requests.post(
+            f"{settings.OLLAMA_BASE_URL}/api/pull",
+            json={"name": model, "stream": True},
+            timeout=600,
+            stream=True
         )
-        return result.returncode == 0
+        
+        for line in response.iter_lines():
+            if line:
+                try:
+                    data = json.loads(line)
+                    status = data.get('status', '')
+                    if 'completed' in data and 'total' in data:
+                        completed = data['completed'] / (1024**3)
+                        total = data['total'] / (1024**3)
+                        percent = (data['completed'] / data['total'] * 100) if data['total'] > 0 else 0
+                        print(f"\r{status}: {completed:.1f}GB / {total:.1f}GB ({percent:.0f}%)", end='', flush=True)
+                    elif status:
+                        print(f"\r{status}", end='', flush=True)
+                except:
+                    pass
+        
+        print()  # Neue Zeile nach Progress
+        return response.status_code == 200
     except Exception as e:
         print(f"❌ Fehler beim Laden von {model}: {e}")
         return False
@@ -646,7 +669,7 @@ def run_rag_evaluation(
     
     # RAGAS-Evaluation
     print("\n📊 Führe RAGAS-Evaluation durch...")
-    results_df = run_ragas_evaluation(dataset)
+    results_df = run_ragas_evaluation(dataset, model=model)
     
     # Ergebnisse speichern - in model+agent/ragas Unterordner
     model_folder = get_model_folder_name(model)
@@ -785,13 +808,17 @@ def run_full_evaluation(
     model_agent_dir = output_dir / f"{model_folder}_{agent_type}"
     model_agent_dir.mkdir(parents=True, exist_ok=True)
     
-    summary_path = model_agent_dir / "evaluation_summary.json"
+    summary_path = model_agent_dir / "summary.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False, default=str)
     
-    # Combined summary auch im model_agent Unterordner
-    combined_path = model_agent_dir / "combined_summary.csv"
-    _write_combined_summary(combined_path, results)
+    # CSV summary
+    csv_path = model_agent_dir / "summary.csv"
+    _write_summary_csv(csv_path, results)
+    
+    # Generiere Agent-spezifische Reports (MD + HTML)
+    from eval.agent_report_generator import generate_agent_report
+    generate_agent_report(model_agent_dir, results, model, agent_type)
     
     # Abschlussbericht
     print("\n" + "=" * 80)
@@ -821,8 +848,8 @@ def run_full_evaluation(
     return results
 
 
-def _write_combined_summary(path: Path, results: Dict[str, Any]):
-    """Schreibt eine kombinierte Zusammenfassung als CSV."""
+def _write_summary_csv(path: Path, results: Dict[str, Any]):
+    """Schreibt eine Zusammenfassung als CSV."""
     import csv
     
     headers = ["model", "agent_type", "exact_match_rate", "mean_f1", "mean_precision", "mean_recall",
@@ -932,6 +959,18 @@ def run_all_agents_evaluation(
     print(f"   📄 Report:   {shared_output_dir / 'evaluation_report.html'}")
     print("=" * 80)
     
+    # 📱 Benachrichtigung senden
+    try:
+        from eval.utils.notify import notify_evaluation_complete
+        notify_evaluation_complete(
+            model=model,
+            agents=agent_list,
+            duration=format_duration(total_duration),
+            results_path=str(shared_output_dir)
+        )
+    except Exception as e:
+        print(f"\n⚠️  Benachrichtigung fehlgeschlagen: {e}")
+    
     return all_results
 
 
@@ -991,6 +1030,12 @@ Beispiele:
     )
     
     parser.add_argument(
+        "--all-models",
+        action="store_true",
+        help="Evaluiere alle konfigurierten Modelle"
+    )
+    
+    parser.add_argument(
         "--rag-limit",
         type=int,
         default=DEFAULT_RAG_LIMIT,
@@ -1007,32 +1052,41 @@ Beispiele:
     args = parser.parse_args()
     
     try:
-        if args.agents:
-            # Spezifische Agenten evaluieren
-            run_all_agents_evaluation(
-                model=args.model,
-                mode=args.mode,
-                rag_limit=args.rag_limit,
-                tool_limit=args.tool_limit,
-                agents=args.agents
-            )
-        elif args.agent == "all":
-            # Alle Agent-Architekturen evaluieren
-            run_all_agents_evaluation(
-                model=args.model,
-                mode=args.mode,
-                rag_limit=args.rag_limit,
-                tool_limit=args.tool_limit
-            )
-        else:
-            # Einzelnen Agent evaluieren
-            run_full_evaluation(
-                model=args.model,
-                agent_type=args.agent,
-                mode=args.mode,
-                rag_limit=args.rag_limit,
-                tool_limit=args.tool_limit
-            )
+        # Bestimme welche Modelle evaluiert werden sollen
+        models_to_eval = list(AVAILABLE_MODELS.keys()) if args.all_models else [args.model]
+        
+        for model in models_to_eval:
+            if len(models_to_eval) > 1:
+                print("\n" + "#" * 80)
+                print(f"# MODELL: {model}")
+                print("#" * 80)
+            
+            if args.agents:
+                # Spezifische Agenten evaluieren
+                run_all_agents_evaluation(
+                    model=model,
+                    mode=args.mode,
+                    rag_limit=args.rag_limit,
+                    tool_limit=args.tool_limit,
+                    agents=args.agents
+                )
+            elif args.agent == "all":
+                # Alle Agent-Architekturen evaluieren
+                run_all_agents_evaluation(
+                    model=model,
+                    mode=args.mode,
+                    rag_limit=args.rag_limit,
+                    tool_limit=args.tool_limit
+                )
+            else:
+                # Einzelnen Agent evaluieren
+                run_full_evaluation(
+                    model=model,
+                    agent_type=args.agent,
+                    mode=args.mode,
+                    rag_limit=args.rag_limit,
+                    tool_limit=args.tool_limit
+                )
     except KeyboardInterrupt:
         print("\n\n⚠️  Evaluation abgebrochen!")
         sys.exit(1)

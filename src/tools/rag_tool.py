@@ -45,10 +45,11 @@ class UniversityRAGTool(BaseTool):
     
     name: str = "university_knowledge_search"
     description: str = (
-        "Durchsucht die Universitäts-Wissensdatenbank für Fragen zu "
-        "Bewerbungen, Studiengängen, Fristen, Prüfungen, Fachsemestern "
-        "und anderen Themen der Universität zu Köln / WiSo-Fakultät. "
-        "Nutze dieses Tool für spezifische Uni-Fragen."
+        "**PRIMÄRES TOOL für alle Fragen zur Universität zu Köln und WiSo-Fakultät.** "
+        "Durchsucht die offizielle Universitäts-Wissensdatenbank für Fragen zu "
+        "Bewerbungen, Studiengängen, Fristen, Prüfungen, Fachsemestern, "
+        "Einschreibung, Semesterbeiträgen, Fakultäten und allen anderen universitären Themen. "
+        "Nutze IMMER ZUERST dieses Tool für Uni-Fragen, bevor du andere Tools verwendest."
     )
     
     # Configuration (optional)
