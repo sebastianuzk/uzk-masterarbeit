@@ -500,30 +500,33 @@ def run_tool_evaluation(
     
     # Szenarien laden
     print("\n📂 Lade Evaluationsszenarien...")
-    scenarios = load_scenarios_from_tests()
+    all_scenarios = load_scenarios_from_tests()
     
     # Limit anwenden falls gesetzt
-    if limit is not None and limit < len(scenarios):
-        scenarios = scenarios[:limit]
-        print(f"   ✅ {limit} von {len(load_scenarios_from_tests())} Szenarien geladen (limitiert)")
+    if limit is not None and limit < len(all_scenarios):
+        scenarios = all_scenarios[:limit]
+        print(f"   ✅ {limit} von {len(all_scenarios)} Szenarien geladen (limitiert)")
     else:
+        scenarios = all_scenarios
         print(f"   ✅ {len(scenarios)} Szenarien geladen")
     
     # Szenarien durchführen
     print(f"\n🚀 Starte Evaluation ({len(scenarios)} Szenarien)...")
+    print("-" * 80)
     results = []
     
     for i, scenario in enumerate(scenarios, 1):
-        print(f"   [{i}/{len(scenarios)}] {scenario.short_id}: {scenario.user_prompt[:50]}...")
+        # Kompakte Ausgabe: alles in einer Zeile wie eval_old
+        print(f"[{i}/{len(scenarios)}] {scenario.short_id}...", end=" ", flush=True)
         
         try:
             result = run_single_scenario(agent, scenario)
             results.append(result)
             
-            status = "✅" if result.exact_match else "❌"
-            print(f"            {status} Tools: {result.actual_tools}")
+            status = "✓" if result.exact_match else "✗"
+            print(f"{status} (F1={result.tool_f1:.2f}, {result.latency_ms:.0f}ms)")
         except Exception as e:
-            print(f"            ⚠️ Fehler: {str(e)[:50]}")
+            print(f"ERROR: {str(e)[:50]}")
     
     # Ergebnisse aggregieren
     from eval.core.runner import EvaluationReport

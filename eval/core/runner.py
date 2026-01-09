@@ -780,8 +780,7 @@ def load_scenarios_from_tests() -> list[EvaluationScenario]:
     """
     Lädt alle Evaluierungsszenarien aus den Test-Dateien in eval/scenarios/.
     
-    Scannt die Szenario-Dateien und extrahiert EvaluationScenario-Objekte
-    aus allen Testklassen und -methoden.
+    Verwendet die gleiche Reihenfolge wie eval_old für Vergleichbarkeit.
     
     Returns:
         Liste aller gefundenen Evaluierungsszenarien
@@ -793,8 +792,24 @@ def load_scenarios_from_tests() -> list[EvaluationScenario]:
     scenarios = []
     scenarios_dir = Path(__file__).parent.parent / "scenarios"
     
-    # Durchsuche alle Python-Testdateien
-    for test_file in scenarios_dir.rglob("test_*.py"):
+    # Feste Reihenfolge der Test-Kategorien (wie eval_old)
+    test_order = [
+        ("klips/test_register.py", "registration"),
+        ("klips/test_apply.py", "application"),
+        ("klips/test_address.py", "address"),
+        ("klips/test_password.py", "password"),
+        ("klips/test_courses.py", "courses"),
+        ("tools/test_email.py", "email"),
+        ("tools/test_duckduckgo.py", "search"),
+        ("tools/test_multi_negative.py", "multi"),
+    ]
+    
+    # Lade Module in fester Reihenfolge
+    for test_path, category in test_order:
+        test_file = scenarios_dir / test_path
+        if not test_file.exists():
+            continue
+            
         # Lade Modul dynamisch
         spec = importlib.util.spec_from_file_location(test_file.stem, test_file)
         if spec and spec.loader:
@@ -821,8 +836,8 @@ def load_scenarios_from_tests() -> list[EvaluationScenario]:
                             except Exception as e:
                                 print(f"⚠️  Fehler bei {name}.{method_name}: {e}")
     
-    # Sortiere nach ID
-    scenarios.sort(key=lambda s: s.id)
+    # KEINE alphabetische Sortierung - behalte Module-Reihenfolge bei
+    # Vergebe kurze IDs in der Lade-Reihenfolge
     
     # Vergebe kurze IDs
     for i, scenario in enumerate(scenarios, 1):
