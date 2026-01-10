@@ -19,9 +19,14 @@ class MultiAgentSystem:
     Integration in bestehende Systeme (Streamlit, CLI).
     """
     
-    def __init__(self):
-        """Initialisiere das Multi-Agent-System."""
-        self.orchestrator = OrchestratorAgent()
+    def __init__(self, force_llm_routing: bool = False):
+        """
+        Initialisiere das Multi-Agent-System.
+        
+        Args:
+            force_llm_routing: Wenn True, keine Keyword-Vorfilterung (für Evaluation-Konsistenz)
+        """
+        self.orchestrator = OrchestratorAgent(force_llm_routing=force_llm_routing)
     
     def chat(self, message: str, session_id: str = None) -> str:
         """
@@ -99,7 +104,7 @@ class MultiAgentSystem:
             Liste der ausgewählten Tool-Calls
         """
         agent_name, tool_calls = self.orchestrator.get_tool_selection(message)
-        return tool_calls
+        return tool_calls  # Nur Tool-Calls zurückgeben, nicht das Tuple!
 
 
 def create_multi_agent_system() -> MultiAgentSystem:

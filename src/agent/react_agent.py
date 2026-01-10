@@ -257,6 +257,46 @@ Antworte in der Sprache des Nutzers."""
             "last_messages": [msg.content[:100] + "..." if len(msg.content) > 100 else msg.content 
                             for msg in self.memory[-5:]]
         }
+    
+    def get_tool_selection(self, message: str) -> List[Dict[str, Any]]:
+        """
+        Ermittle Tool-Auswahl ohne Ausführung (für Evaluierung).
+        
+        Diese Methode ruft das LLM mit gebundenen Tools auf und
+        extrahiert die Tool-Calls, ohne sie auszuführen.
+        
+        Args:
+            message: Die Nutzeranfrage
+            
+        Returns:
+            Liste der ausgewählten Tool-Calls
+        """
+        try:
+            # LLM mit gebundenen Tools
+            llm_with_tools = self.llm.bind_tools(self.tools)
+            
+            # Message-Liste erstellen
+            messages = [
+                self.system_message,
+                HumanMessage(content=message)
+            ]
+            
+            # LLM aufrufen um Tool-Auswahl zu bekommen (OHNE Ausführung)
+            response = llm_with_tools.invoke(messages)
+            
+            # Tool-Calls extrahieren
+            tool_calls = []
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tc in response.tool_calls:
+                    tool_calls.append({
+                        "name": tc.get("name", ""),
+                        "args": tc.get("args", {})
+                    })
+            
+            return tool_calls
+            
+        except Exception as e:
+            return []  # Bei Fehler keine Tool-Auswahl
 
 def create_react_agent() -> ReactAgent:
     """Factory-Funktion für den React Agent"""

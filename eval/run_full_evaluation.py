@@ -449,7 +449,8 @@ def run_tool_evaluation(
     model: str,
     agent_type: str,
     output_dir: Path,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    test_ids: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Führt die Tool-Evaluation durch.
@@ -459,6 +460,7 @@ def run_tool_evaluation(
         agent_type: Agent-Typ (single, multi, etc.)
         output_dir: Ausgabeverzeichnis
         limit: Optionale Begrenzung der Test-Szenarien
+        test_ids: Optionale Liste spezifischer Test-IDs (short_ids)
     
     Returns:
         Dictionary mit Evaluationsergebnissen
@@ -488,7 +490,9 @@ def run_tool_evaluation(
         agent = create_react_agent()
     elif agent_type == "multi":
         from src.agent.multi.multi_agent_system import MultiAgentSystem
-        agent = MultiAgentSystem()
+        # Force LLM routing for fair evaluation across all models
+        agent = MultiAgentSystem(force_llm_routing=True)
+        print("   🎯 LLM-only routing aktiviert für faire Modell-Vergleichbarkeit")
     elif agent_type == "constrained":
         from src.agent.constrained.constrained_agent import create_constrained_agent
         agent = create_constrained_agent()
@@ -502,8 +506,16 @@ def run_tool_evaluation(
     print("\n📂 Lade Evaluationsszenarien...")
     all_scenarios = load_scenarios_from_tests()
     
-    # Limit anwenden falls gesetzt
-    if limit is not None and limit < len(all_scenarios):
+    # Filtere nach spezifischen Test-IDs falls angegeben
+    if test_ids:
+        scenarios = [s for s in all_scenarios if s.short_id in test_ids]
+        print(f"   ✅ {len(scenarios)} von {len(all_scenarios)} Szenarien geladen (gefiltert nach Test-IDs)")
+        if len(scenarios) < len(test_ids):
+            found_ids = {s.short_id for s in scenarios}
+            missing_ids = set(test_ids) - found_ids
+            print(f"   ⚠️  Nicht gefundene Test-IDs: {', '.join(sorted(missing_ids))}")
+    # Limit anwenden falls gesetzt (nur wenn keine spezifischen IDs)
+    elif limit is not None and limit < len(all_scenarios):
         scenarios = all_scenarios[:limit]
         print(f"   ✅ {limit} von {len(all_scenarios)} Szenarien geladen (limitiert)")
     else:
@@ -641,7 +653,9 @@ def run_rag_evaluation(
         agent = create_react_agent()
     elif agent_type == "multi":
         from src.agent.multi.multi_agent_system import MultiAgentSystem
-        agent = MultiAgentSystem()
+        # Force LLM routing for fair evaluation across all models
+        agent = MultiAgentSystem(force_llm_routing=True)
+        print("   🎯 LLM-only routing aktiviert für faire Modell-Vergleichbarkeit")
     elif agent_type == "constrained":
         from src.agent.constrained.constrained_agent import create_constrained_agent
         agent = create_constrained_agent()
@@ -736,7 +750,8 @@ def run_full_evaluation(
     mode: str = "all",
     rag_limit: Optional[int] = None,
     tool_limit: Optional[int] = None,
-    output_dir: Optional[Path] = None
+    output_dir: Optional[Path] = None,
+    test_ids: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Führt die vollständige Evaluation für ein Modell durch.
@@ -748,6 +763,7 @@ def run_full_evaluation(
         rag_limit: Optionale Begrenzung für RAGAS-Testfragen
         tool_limit: Optionale Begrenzung für Tool-Szenarien
         output_dir: Optionales Ausgabeverzeichnis (wenn None, wird neuer Timestamp erstellt)
+        test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
     
     Returns:
         Zusammenfassung aller Ergebnisse
@@ -790,7 +806,13 @@ def run_full_evaluation(
     # Tool-Evaluation
     if mode in ("all", "tools"):
         try:
-            results["tools"] = run_tool_evaluation(model, agent_type, output_dir, limit=tool_limit)
+            results["tools"] = run_tool_evaluation(
+                model, 
+                agent_type, 
+                output_dir, 
+                limit=tool_limit,
+                test_ids=test_ids
+            )
         except Exception as e:
             print(f"\n❌ Tool-Evaluation fehlgeschlagen: {e}")
             results["tools"] = {"error": str(e)}
@@ -893,13 +915,15 @@ def run_all_agents_evaluation(
     mode: str = "all",
     rag_limit: Optional[int] = None,
     tool_limit: Optional[int] = None,
-    agents: Optional[List[str]] = None
+    agents: Optional[List[str]] = None,
+    test_ids: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Führt Evaluation für alle Agent-Typen durch.
     
     Args:
         agents: Liste von Agenten (default: alle aus AGENT_TYPES)
+        test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
     """
     # Verwende custom Agenten-Liste oder alle
     agent_list = agents if agents else AGENT_TYPES
@@ -935,7 +959,8 @@ def run_all_agents_evaluation(
                 mode=mode,
                 rag_limit=rag_limit,
                 tool_limit=tool_limit,
-                output_dir=shared_output_dir
+                output_dir=shared_output_dir,
+                test_ids=test_ids
             )
         except Exception as e:
             print(f"\n❌ Evaluation für {agent_type} fehlgeschlagen: {e}")
@@ -1052,6 +1077,14 @@ Beispiele:
         help="Begrenze Anzahl der Tool-Test-Szenarien (default: alle 100)"
     )
     
+    parser.add_argument(
+        "--test-ids",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Spezifische Test-IDs für Tool-Evaluation (z.B. s8 s21 s24)"
+    )
+    
     args = parser.parse_args()
     
     try:
@@ -1071,7 +1104,8 @@ Beispiele:
                     mode=args.mode,
                     rag_limit=args.rag_limit,
                     tool_limit=args.tool_limit,
-                    agents=args.agents
+                    agents=args.agents,
+                    test_ids=args.test_ids
                 )
             elif args.agent == "all":
                 # Alle Agent-Architekturen evaluieren
@@ -1079,7 +1113,8 @@ Beispiele:
                     model=model,
                     mode=args.mode,
                     rag_limit=args.rag_limit,
-                    tool_limit=args.tool_limit
+                    tool_limit=args.tool_limit,
+                    test_ids=args.test_ids
                 )
             else:
                 # Einzelnen Agent evaluieren
@@ -1088,7 +1123,8 @@ Beispiele:
                     agent_type=args.agent,
                     mode=args.mode,
                     rag_limit=args.rag_limit,
-                    tool_limit=args.tool_limit
+                    tool_limit=args.tool_limit,
+                    test_ids=args.test_ids
                 )
     except KeyboardInterrupt:
         print("\n\n⚠️  Evaluation abgebrochen!")

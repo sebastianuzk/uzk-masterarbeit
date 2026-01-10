@@ -1008,25 +1008,27 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
     input_tokens, output_tokens, total_tokens = 0, 0, 0
     
     try:
-        # Prüfe ob es ein Multi-Agent System ist
-        is_multi_agent = not hasattr(agent, 'llm')
+        # Prüfe ob Agent eine get_tool_selection Methode hat
+        # (Multi-Agent, Constrained, Confirmation)
+        has_tool_selection = hasattr(agent, 'get_tool_selection')
         
-        if is_multi_agent:
-            # Für Multi-Agent: get_tool_selection nutzen (falls vorhanden)
-            if hasattr(agent, 'get_tool_selection'):
-                tool_selection = agent.get_tool_selection(scenario.user_prompt)
-                for tc in tool_selection:
-                    tool_calls.append(ToolCall(
-                        name=tc.get("name", ""),
-                        arguments=tc.get("args", {})
-                    ))
-            else:
-                # Fallback: Agent ausführen (mit Tool-Ausführung)
-                response = agent.run(scenario.user_prompt)
-                # Keine Tool-Calls extrahierbar
-                tool_calls = []
+        if has_tool_selection:
+            # Nutze die agentenspezifische Tool-Selection-Logik
+            tool_selection = agent.get_tool_selection(scenario.user_prompt)
+            for tc in tool_selection:
+                # Confirmation Agent: Ignoriere Tools die Validierung fehlgeschlagen sind
+                # (entspricht dem echten Verhalten - Tool wird nicht ausgeführt)
+                if tc.get("validation_failed", False):
+                    # Tool wurde vom Confirmation Agent abgelehnt
+                    # In der Evaluation zählt das als "kein Tool-Call"
+                    continue
+                
+                tool_calls.append(ToolCall(
+                    name=tc.get("name", ""),
+                    arguments=tc.get("args", {})
+                ))
             
-            # Token-Schätzung für Multi-Agent
+            # Token-Schätzung
             input_tokens = len(scenario.user_prompt.split()) * 2
             output_tokens = len(tool_calls) * 10
             total_tokens = input_tokens + output_tokens

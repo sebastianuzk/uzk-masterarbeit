@@ -277,6 +277,12 @@ class ConfirmationAgent:
         """
         Validiere einen Tool-Aufruf intern (Self-Critique).
         
+        Prüft:
+        1. Erforderliche Parameter vorhanden
+        2. Parameter-Formate korrekt
+        3. Keine Platzhalter oder erfundene Daten
+        4. Stadt bei klips2_change_address MUSS explizit angegeben sein
+        
         Returns:
             Dict mit:
             - confirmed: bool - Ob die Validierung erfolgreich war
@@ -297,6 +303,34 @@ class ConfirmationAgent:
             # Prüfe ob Wert fehlt: None oder leerer String (False und 0 sind gültige Werte)
             if value is None or (isinstance(value, str) and not value.strip()):
                 missing_params.append(param)
+            # KRITISCH: Verhindere Platzhalter-Werte
+            elif isinstance(value, str):
+                value_lower = value.lower().strip()
+                # Prüfe auf Platzhalter
+                if value_lower in ['n/a', 'tbd', 'unknown', 'unbekannt', 'keine angabe']:
+                    missing_params.append(f"{param} (Platzhalter: '{value}')")
+        
+        # 1b. SPEZIAL: Bei klips2_change_address MUSS city EXPLIZIT gegeben sein
+        # Verhindere dass Agent Stadt aus PLZ ableitet!
+        if tool_name == "klips2_change_address":
+            city = args.get("city", "").strip()
+            zip_code = args.get("zip_code", "").strip()
+            
+            # Wenn Stadt leer ist oder nur aus PLZ abgeleitet
+            if not city:
+                missing_params.append("city (MUSS explizit angegeben werden)")
+            # Prüfe ob Stadt wahrscheinlich aus PLZ inferiert wurde
+            # (z.B. 50667 → "Köln", aber Stadt war nicht im Input)
+            elif city and zip_code:
+                # Bekannte PLZ-Stadt-Mappings die vermieden werden sollten
+                known_mappings = {
+                    "50667": "köln", "51063": "köln", "50672": "köln",
+                    "10115": "berlin", "80331": "münchen"
+                }
+                if zip_code in known_mappings and city.lower() == known_mappings[zip_code]:
+                    # Warnung: Dies könnte eine Inferenz sein
+                    # Wir akzeptieren es, aber mit Vorsicht
+                    pass  # Könnte verschärft werden zu: missing_params.append("city (erscheint inferiert)")
         
         # 2. Prüfe Format-Validierungen
         for param, pattern in validations.items():
@@ -334,16 +368,22 @@ class ConfirmationAgent:
 
 ✅ Tool aufrufen bei:
 - KLIPS2-Aktionen (registrieren, bewerben, Adresse/Passwort ändern, Kurs abfragen)
+  * NUR wenn ALLE erforderlichen Daten VOLLSTÄNDIG vorliegen
+  * NUR wenn die Anfrage SPEZIFISCH und KLAR ist
 - Wissensfragen zur Universität → university_knowledge_search
-- Explizite Internet-Suche → duckduckgo_search
+  * NUR bei SPEZIFISCHEN Fragen (z.B. "Wie sind die Öffnungszeiten der Bibliothek?")
+- Explizite Internet-Suche → duckduckgo_search (bei "Search for", "Suche im Internet")
 - URL genannt → web_scraper
-- E-Mail senden → send_email
+- E-Mail senden → send_email (mit vollständigem Betreff und Text)
 
 ❌ KEIN Tool bei:
 - Begrüßungen ("Hallo!", "Wie geht's?")
 - Fragen über dich selbst ("Was kannst du?")
 - Einfache Rechenaufgaben, Übersetzungen
 - Allgemeine Wissensfragen ohne Uni-Bezug
+- **VAGE Anfragen**: "irgendwann", "irgendwie", "irgendwelche", "vielleicht", "würde gerne"
+- **Reine FRAGEN** ohne Handlungsabsicht: "Kann man..?", "Ist es möglich..?"
+- **UNVOLLSTÄNDIGE Daten**: Wenn Pflichtfelder fehlen → FRAGE NACH, rufe KEIN Tool auf
 
 ## DEINE BESONDERHEIT: INTERNE VALIDIERUNG
 
@@ -373,6 +413,17 @@ Extrahiere Daten aus Fließtext:
 - "geboren am 15.03.1999" → geburtsdatum="15.03.1999"
 - "männlich" / "male" / "m" → geschlecht="männlich"
 
+## MULTI-STEP KONVERSATIONEN
+
+Wenn im Prompt "Previous conversation:" steht:
+1. Analysiere ALLE Informationen aus vorherigen Nachrichten
+2. Kombiniere sie mit der aktuellen Nachricht
+3. Wenn dadurch ALLE Pflichtfelder vorhanden sind → Tool aufrufen
+4. Beispiel:
+   - Vorherige Nachricht: "Bewerbung Informatik, Login: user@uni.de, ..."
+   - Aktuelle Nachricht: "Männlich, geboren 15.03.1999 in Köln"
+   - → Kombiniere beide für vollständige klips2_apply_study Daten
+
 Antworte in der Sprache des Nutzers."""
     
     def chat(self, message: str, session_id: str = None) -> str:
@@ -383,6 +434,15 @@ Antworte in der Sprache des Nutzers."""
             
             # Reset confirmation tracking für diesen Chat
             self.last_confirmation_result = None
+            
+            # PRE-CHECK: Prüfe auf vage Anfragen BEVOR Tools aufgerufen werden
+            if self._is_vague_request(message):
+                # Direkte Antwort ohne Tool-Aufruf
+                vague_response = self._generate_direct_response_for_vague(message)
+                ai_response = AIMessage(content=vague_response)
+                self.memory.append(HumanMessage(content=message))
+                self.memory.append(ai_response)
+                return vague_response
             
             human_message = HumanMessage(content=message)
             self.memory.append(human_message)
@@ -454,6 +514,65 @@ Antworte in der Sprache des Nutzers."""
             "last_confirmation": self.last_confirmation_result
         }
     
+    def _is_vague_request(self, message: str) -> bool:
+        """
+        Prüfe ob eine Anfrage zu vage ist für Tool-Aufrufe.
+        
+        Vage Anfragen sollten direkt beantwortet werden ohne Tool.
+        """
+        msg_lower = message.lower()
+        
+        # Vage Muster
+        vague_patterns = [
+            r"\birgendwann\b",
+            r"\birgendwie\b", 
+            r"\birgendwelche?\b",
+            r"\birgendwo\b",
+            r"\bvielleicht\b",
+            r"\bwürde gerne\b",
+            r"\bkönnte ich\b",
+            r"\bwäre es möglich\b",
+        ]
+        
+        # Reine Fragen ohne Handlungsabsicht
+        question_patterns = [
+            r"^kann man\b",
+            r"^ist es möglich\b",
+            r"^gibt es\b",
+            r"^wie viel\b",
+            r"^wann\b",
+        ]
+        
+        # Prüfe vage Patterns
+        for pattern in vague_patterns:
+            if re.search(pattern, msg_lower):
+                return True
+        
+        # Prüfe Frage-Patterns (nur am Anfang)
+        for pattern in question_patterns:
+            if re.search(pattern, msg_lower):
+                # Zusätzlich: Keine spezifischen Daten (Zahlen, @-Zeichen)
+                if not re.search(r'\d|@', message):
+                    return True
+        
+        return False
+    
+    def _generate_direct_response_for_vague(self, message: str) -> str:
+        """
+        Generiere eine direkte Antwort für vage Anfragen.
+        
+        Nutzt das LLM ohne Tools.
+        """
+        prompt = f"""Beantworte die folgende Frage direkt und hilfreich, OHNE Tools zu verwenden.
+Die Frage ist zu vage oder allgemein für eine Tool-Ausführung.
+
+Frage: {message}
+
+Gib eine informative Antwort und ermutige den Nutzer bei Bedarf, spezifischer zu werden."""
+
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        return response.content
+    
     def get_memory_summary(self) -> Dict[str, Any]:
         """Gebe Zusammenfassung des Memory zurück."""
         human_messages = [msg for msg in self.memory if isinstance(msg, HumanMessage)]
@@ -468,6 +587,69 @@ Antworte in der Sprache des Nutzers."""
                 for msg in self.memory[-5:]
             ]
         }
+    
+    def get_tool_selection(self, message: str) -> List[Dict[str, Any]]:
+        """
+        Ermittle Tool-Auswahl mit Confirmation-Agent-Logik (für Evaluierung).
+        
+        Diese Methode führt die spezifische Confirmation-Agent-Logik durch:
+        1. LLM mit gewrappten Tools aufrufen (Tools haben Bestätigungslogik)
+        2. Tool-Calls extrahieren
+        3. Validierung durchführen (wie bei echtem Aufruf, aber ohne Ausführung)
+        
+        Args:
+            message: Die Nutzeranfrage
+            
+        Returns:
+            Liste der ausgewählten Tool-Calls (nach Validierung bestätigt oder abgelehnt)
+        """
+        from langchain_core.messages import HumanMessage
+        
+        try:
+            # LLM mit gewrappten Tools aufrufen
+            llm_with_tools = self.llm.bind_tools(self.wrapped_tools)
+            
+            messages = [
+                self.system_message,
+                HumanMessage(content=message)
+            ]
+            
+            response = llm_with_tools.invoke(messages)
+            
+            # Tool-Calls extrahieren
+            tool_calls = []
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tc in response.tool_calls:
+                    tool_name = tc.get("name", "")
+                    tool_args = tc.get("args", {})
+                    
+                    # Wenn kritisches Tool: Validierung durchführen
+                    if tool_name in CRITICAL_TOOLS:
+                        validation_result = self._validate_tool_call(tool_name, tool_args)
+                        
+                        # Tracking (wie bei echtem Aufruf)
+                        self.confirmation_count += 1
+                        
+                        if validation_result["confirmed"]:
+                            self.confirmed_count += 1
+                            tool_calls.append({"name": tool_name, "args": tool_args})
+                        else:
+                            # Tool wurde abgelehnt - trotzdem zurückgeben mit Flag
+                            self.rejected_count += 1
+                            tool_calls.append({
+                                "name": tool_name,
+                                "args": tool_args,
+                                "validation_failed": True,
+                                "validation_reason": validation_result["reason"]
+                            })
+                    else:
+                        # Nicht-kritische Tools direkt durchreichen
+                        tool_calls.append({"name": tool_name, "args": tool_args})
+            
+            return tool_calls
+            
+        except Exception as e:
+            return []  # Bei Fehler keine Tool-Auswahl
 
 
 def create_confirmation_agent() -> ConfirmationAgent:

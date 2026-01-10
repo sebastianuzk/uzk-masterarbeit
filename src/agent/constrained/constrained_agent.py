@@ -48,7 +48,7 @@ from src.tools.web_scraper_tool import create_web_scraper_tool
 class ToolDecision(BaseModel):
     """Entscheidung des Agenten: Tool aufrufen oder direkt antworten."""
     action: str = Field(
-        description="'tool' wenn ein Tool aufgerufen werden soll, 'respond' für direkte Antwort"
+        description="'tool' wenn ein Tool aufgerufen werden soll, 'respond' für direkte Antwort, 'insufficient_data' wenn Daten fehlen"
     )
     tool_name: Optional[str] = Field(
         default=None,
@@ -58,12 +58,16 @@ class ToolDecision(BaseModel):
         default=None,
         description="Kurze Begründung für die Entscheidung"
     )
+    missing_fields: Optional[List[str]] = Field(
+        default=None,
+        description="Liste der fehlenden Pflichtfelder (nur wenn action='insufficient_data')"
+    )
 
     @field_validator('action')
     @classmethod
     def validate_action(cls, v):
-        if v not in ('tool', 'respond'):
-            raise ValueError("action must be 'tool' or 'respond'")
+        if v not in ('tool', 'respond', 'insufficient_data'):
+            raise ValueError("action must be 'tool', 'respond', or 'insufficient_data'")
         return v
 
 
@@ -379,30 +383,77 @@ class ConstrainedAgent:
         return tools
     
     def _get_decision_prompt(self) -> str:
-        """Prompt für die Tool-Entscheidung."""
-        tool_list = "\n".join([
-            f"- {name}: {TOOL_SCHEMAS[name].__doc__ or 'Keine Beschreibung'}"
-            for name in TOOL_SCHEMAS.keys()
-        ])
+        """Prompt für die Tool-Entscheidung mit expliziten Anforderungen."""
+        # Tool-spezifische Pflichtfelder
+        tool_requirements = {
+            "klips2_register": ["vorname", "nachname", "geschlecht", "geburtsdatum", "email", "staatsangehoerigkeit"],
+            "klips2_apply_study": ["username", "password", "semester", "degree_type", "study_program", "gender", "birth_place", "nationality", "hzb_date", "hzb_type", "hzb_name", "hzb_grade", "hzb_school", "hzb_place"],
+            "klips2_change_password": ["username", "old_password", "new_password"],
+            "klips2_change_address": ["username", "password", "street", "zip_code", "city", "country"],
+            "klips2_get_course_details": ["course_number"],
+            "send_email": ["recipient", "subject", "body"],
+            "duckduckgo_search": ["query"],
+            "university_knowledge_search": ["query"],
+            "web_scraper": ["url"]
+        }
+        
+        tool_list = []
+        for name, schema in TOOL_SCHEMAS.items():
+            desc = schema.__doc__ or 'Keine Beschreibung'
+            required = tool_requirements.get(name, [])
+            req_str = ", ".join(required) if required else "keine"
+            tool_list.append(f"- {name}: {desc}\n  PFLICHT: {req_str}")
+        
+        tools_str = "\n".join(tool_list)
         
         return f"""Du bist ein KI-Assistent für KLIPS 2.0 der Universität zu Köln.
 
-Analysiere die Nutzeranfrage und entscheide:
+Analysiere die Nutzeranfrage SORGFÄLTIG und entscheide:
 1. Welches Tool benötigt wird (oder keins)
-2. Ob alle erforderlichen Daten vorhanden sind
+2. Ob ALLE Pflichtfelder VOLLSTÄNDIG und VALIDE vorhanden sind
 
-VERFÜGBARE TOOLS:
-{tool_list}
+VERFÜGBARE TOOLS mit Pflichtfeldern:
+{tools_str}
 
-REGELN:
-- Nur Tool aufrufen wenn ALLE Pflichtdaten vorhanden sind
-- Bei fehlenden Daten: KEIN Tool, sondern nachfragen
-- Bei reinen Fragen: KEIN Tool, direkt antworten
+ENTSCHEIDUNGSLOGIK (STRENG):
+1. Prüfe ob Tool-Aktion angefordert wird
+2. Prüfe JEDES Pflichtfeld einzeln nach diesen Kriterien:
+   - Ist der Wert EXPLIZIT im Text angegeben?
+   - Ist der Wert VOLLSTÄNDIG (kein Platzhalter, keine Auslassung)?
+   - Ist der Wert VALIDE (korrekte Formatierung)?
+3. WENN ein oder mehrere Pflichtfelder fehlen/ungültig → action='insufficient_data' mit missing_fields
+4. NUR WENN alle Pflichtfelder vollständig vorhanden → action='tool'
+5. Bei vagen Fragen/allgemeinen Informationen → action='respond'
+
+WICHTIGE VALIDIERUNGSREGELN:
+✗ REJECT (insufficient_data):
+  - Email ohne @: "email max.mustermann"
+  - Platzhalter-Email: "keine-echte-email@example.com"
+  - Partielles Datum: "1995" (nur Jahr), "15.03" (ohne Jahr)
+  - Ungültiges Datum: "32.13.2020"
+  - Fehlende Stadt: "Adresse: Hauptstraße 1, PLZ 12345" (Stadt fehlt)
+  - Vage Suche: "irgendwelche Kurse", "könnte ich Infos zu..."
+  - Fehlender Betreff: Email ohne Subject
+  - Unvollständige Anmeldedaten: Fehlende HZB-Infos, Geburtsdaten, etc.
+
+✓ ACCEPT (action='tool'):
+  - Alle Pflichtfelder explizit vorhanden
+  - Valide Formate (email@domain.de, DD.MM.YYYY, 5-stellige PLZ)
+  - Bei mehrstufigen Konversationen: "Previous conversation:" im Prompt
+    → Falls dort bereits Daten genannt wurden, gelten diese als vorhanden
+
+SPEZIALFALL: Multi-Step-Konversationen
+Wenn "Previous conversation:" vorhanden:
+  1. Prüfe ZUERST vorherige Nachrichten auf fehlende Daten
+  2. Kombiniere Informationen aus aktuellem + vorherigem Kontext
+  3. Nur fehlende Felder müssen nachgefragt werden
 
 Antworte im JSON-Format:
-{{"action": "tool", "tool_name": "<name>", "reason": "<kurz>"}}
+{{"action": "tool", "tool_name": "<name>", "reason": "Alle Daten vollständig vorhanden"}}
 oder
-{{"action": "respond", "reason": "<kurz>", "missing": ["feld1", "feld2"]}}"""
+{{"action": "insufficient_data", "tool_name": "<name>", "reason": "Fehlende/ungültige Daten", "missing_fields": ["feld1", "feld2"]}}
+oder
+{{"action": "respond", "reason": "Nur Frage/Information, kein Tool benötigt"}}"""
 
     def _get_extraction_prompt(self, tool_name: str, schema: Type[BaseModel]) -> str:
         """Prompt für die Argument-Extraktion."""
@@ -418,17 +469,24 @@ oder
         
         return f"""Extrahiere die Parameter für {tool_name} aus dem Nutzertext.
 
-WICHTIG:
-- Extrahiere NUR Daten die explizit im Text stehen
-- Erfinde KEINE Daten
-- Nutze exakt diese Feldnamen
+WICHTIGE REGELN:
+- Extrahiere NUR Daten die EXPLIZIT im Text stehen
+- Bei "Previous conversation:"-Kontext: Kombiniere aktuelle + vorherige Daten
+- NIEMALS Daten erfinden oder raten
+- Bei mehrdeutigen/unvollständigen Daten: Lasse Feld weg
+- Nutze EXAKT diese Feldnamen (keine Variationen!)
+- Normalisiere Formate:
+  * Datum → TT.MM.JJJJ
+  * Email → lowercase
+  * Namen → Capitalize first letter
 
 Ausgabeformat (JSON):
 {{
 {fields_str}
 }}
 
-Lasse optionale Felder weg wenn nicht vorhanden."""
+Lasse optionale Felder weg wenn nicht vorhanden.
+PFLICHT-Felder MÜSSEN vorhanden sein (sollte bereits validiert sein)."""
 
     def _parse_and_validate(
         self, 
@@ -524,11 +582,30 @@ Lasse optionale Felder weg wenn nicht vorhanden."""
             if len(self.memory) > settings.MEMORY_SIZE:
                 self.memory = self.memory[-settings.MEMORY_SIZE:]
             
-            # Schritt 1: Entscheidung
+            # Erstelle erweiterten Kontext mit vorherigen Nachrichten
+            context_messages = []
+            if len(self.memory) > 1:
+                # Inkludiere letzte 3 Nachrichtenpaare für Kontext
+                prev_context = []
+                for msg in self.memory[-7:-1]:  # Letzte 6 Nachrichten (ohne die aktuelle)
+                    if isinstance(msg, HumanMessage):
+                        prev_context.append(f"User: {msg.content}")
+                    elif isinstance(msg, AIMessage):
+                        prev_context.append(f"Assistant: {msg.content}")
+                
+                if prev_context:
+                    context_str = "\n".join(prev_context)
+                    enriched_message = f"Previous conversation:\n{context_str}\n\nCurrent message:\n{message}"
+                else:
+                    enriched_message = message
+            else:
+                enriched_message = message
+            
+            # Schritt 1: Entscheidung (mit erweitertem Kontext)
             decision_prompt = self._get_decision_prompt()
             decision_messages = [
                 SystemMessage(content=decision_prompt),
-                human_message
+                HumanMessage(content=enriched_message)
             ]
             
             decision_response = self.llm_json.invoke(decision_messages)
@@ -543,14 +620,23 @@ Lasse optionale Felder weg wenn nicht vorhanden."""
                 self.memory.append(AIMessage(content=response_text))
                 return response_text
             
-            # Schritt 2: Action ausführen
+            # Schritt 2: Prüfe auf fehlende Daten
+            if decision_result.action == "insufficient_data":
+                # Fehlende Pflichtfelder → Nachfragen
+                missing = decision_result.missing_fields or []
+                field_names = ", ".join(missing)
+                response_text = f"Um fortzufahren, benötige ich noch folgende Informationen: {field_names}. Bitte ergänze diese Angaben."
+                self.memory.append(AIMessage(content=response_text))
+                return response_text
+            
+            # Schritt 3: Action ausführen
             if decision_result.action == "respond":
                 # Direkte Antwort generieren
                 response_text = self._generate_direct_response(message)
                 self.memory.append(AIMessage(content=response_text))
                 return response_text
             
-            # Schritt 3: Tool-Argumente extrahieren
+            # Schritt 4: Tool-Argumente extrahieren (mit erweitertem Kontext)
             tool_name = decision_result.tool_name
             if tool_name not in TOOL_SCHEMAS:
                 response_text = f"Unbekanntes Tool: {tool_name}"
@@ -562,7 +648,7 @@ Lasse optionale Felder weg wenn nicht vorhanden."""
             
             extraction_messages = [
                 SystemMessage(content=extraction_prompt),
-                HumanMessage(content=f"Nutzertext: {message}")
+                HumanMessage(content=f"Nutzertext (mit Kontext):\n{enriched_message}")
             ]
             
             extraction_response = self.llm_json.invoke(extraction_messages)
@@ -577,11 +663,11 @@ Lasse optionale Felder weg wenn nicht vorhanden."""
                 self.memory.append(AIMessage(content=response_text))
                 return response_text
             
-            # Schritt 4: Tool ausführen
+            # Schritt 5: Tool ausführen
             args_dict = validated_args.model_dump(exclude_none=True)
             tool_result = self._execute_tool(tool_name, args_dict)
             
-            # Schritt 5: Antwort formulieren
+            # Schritt 6: Antwort formulieren
             response_text = self._format_tool_response(tool_name, tool_result)
             self.memory.append(AIMessage(content=response_text))
             return response_text
@@ -692,6 +778,79 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
                 if self.schema_validations > 0 else 0
             )
         }
+    
+    def get_tool_selection(self, message: str) -> List[Dict[str, Any]]:
+        """
+        Ermittle Tool-Auswahl mit Constrained-Decoding-Logik (für Evaluierung).
+        
+        Diese Methode führt die spezifische Constrained-Agent-Logik durch:
+        1. Entscheidung ob Tool oder direkte Antwort (mit JSON-Mode)
+        2. Argument-Extraktion mit Pydantic-Schema-Validierung
+        
+        Args:
+            message: Die Nutzeranfrage
+            
+        Returns:
+            Liste der ausgewählten Tool-Calls mit validierten Argumenten
+        """
+        from langchain_core.messages import HumanMessage, SystemMessage
+        
+        try:
+            human_message = HumanMessage(content=message)
+            
+            # Schritt 1: Entscheidung mit JSON-Mode LLM
+            decision_prompt = self._get_decision_prompt()
+            decision_messages = [
+                SystemMessage(content=decision_prompt),
+                human_message
+            ]
+            
+            decision_response = self.llm_json.invoke(decision_messages)
+            decision_result, error = self._parse_and_validate(
+                decision_response.content, 
+                ToolDecision
+            )
+            
+            if error or not decision_result:
+                return []  # Keine Tool-Auswahl möglich
+            
+            # Check for insufficient data (NEU!)
+            if decision_result.action == "insufficient_data":
+                return []  # Fehlende Daten → kein Tool-Call
+            
+            if decision_result.action == "respond":
+                return []  # Direkte Antwort, kein Tool
+            
+            # Schritt 2: Tool-Argumente mit Schema extrahieren
+            tool_name = decision_result.tool_name
+            if tool_name not in TOOL_SCHEMAS:
+                return []  # Unbekanntes Tool
+            
+            schema = TOOL_SCHEMAS[tool_name]
+            extraction_prompt = self._get_extraction_prompt(tool_name, schema)
+            
+            extraction_messages = [
+                SystemMessage(content=extraction_prompt),
+                HumanMessage(content=f"Nutzertext: {message}")
+            ]
+            
+            extraction_response = self.llm_json.invoke(extraction_messages)
+            validated_args, error = self._parse_and_validate(
+                extraction_response.content,
+                schema
+            )
+            
+            if error:
+                # Schema-Validierung fehlgeschlagen, aber Tool wurde gewählt
+                # Gebe Tool trotzdem zurück mit leeren Args für Evaluierung
+                return [{"name": tool_name, "args": {}}]
+            
+            # Erfolgreiche Extraktion
+            args_dict = validated_args.model_dump(exclude_none=True)
+            return [{"name": tool_name, "args": args_dict}]
+            
+        except Exception as e:
+            return []  # Bei Fehler keine Tool-Auswahl
 
 
 def create_constrained_agent() -> ConstrainedAgent:
