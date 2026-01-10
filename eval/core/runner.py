@@ -980,7 +980,7 @@ def _extract_tool_from_filename(filename: str) -> str:
     return tool_mapping.get(name, name)
 
 
-def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
+def run_single_scenario(agent, scenario: EvaluationScenario, enable_trace: bool = False) -> ScenarioResult:
     """
     Führt ein einzelnes Szenario mit dem gegebenen Agenten aus.
     
@@ -991,6 +991,7 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
     Args:
         agent: Der zu testende Agent (ReactAgent, MultiAgentSystem, etc.)
         scenario: Das auszuführende Szenario
+        enable_trace: Wenn True, wird Conversation-Trace aufgezeichnet (nur für Constrained Agent)
     
     Returns:
         ScenarioResult mit allen Metriken
@@ -1014,7 +1015,14 @@ def run_single_scenario(agent, scenario: EvaluationScenario) -> ScenarioResult:
         
         if has_tool_selection:
             # Nutze die agentenspezifische Tool-Selection-Logik
-            tool_selection = agent.get_tool_selection(scenario.user_prompt)
+            # Check if agent supports enable_trace parameter (Constrained Agent)
+            import inspect
+            sig = inspect.signature(agent.get_tool_selection)
+            if 'enable_trace' in sig.parameters:
+                tool_selection = agent.get_tool_selection(scenario.user_prompt, enable_trace=enable_trace)
+            else:
+                tool_selection = agent.get_tool_selection(scenario.user_prompt)
+            
             for tc in tool_selection:
                 # Confirmation Agent: Ignoriere Tools die Validierung fehlgeschlagen sind
                 # (entspricht dem echten Verhalten - Tool wird nicht ausgeführt)

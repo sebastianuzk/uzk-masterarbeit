@@ -450,7 +450,8 @@ def run_tool_evaluation(
     agent_type: str,
     output_dir: Path,
     limit: Optional[int] = None,
-    test_ids: Optional[List[str]] = None
+    test_ids: Optional[List[str]] = None,
+    enable_trace: bool = False
 ) -> Dict[str, Any]:
     """
     Führt die Tool-Evaluation durch.
@@ -461,6 +462,7 @@ def run_tool_evaluation(
         output_dir: Ausgabeverzeichnis
         limit: Optionale Begrenzung der Test-Szenarien
         test_ids: Optionale Liste spezifischer Test-IDs (short_ids)
+        enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
     
     Returns:
         Dictionary mit Evaluationsergebnissen
@@ -524,6 +526,8 @@ def run_tool_evaluation(
     
     # Szenarien durchführen
     print(f"\n🚀 Starte Evaluation ({len(scenarios)} Szenarien)...")
+    if enable_trace and agent_type == "constrained":
+        print("   📝 Conversation-Trace-Logging aktiviert")
     print("-" * 80)
     results = []
     
@@ -532,7 +536,7 @@ def run_tool_evaluation(
         print(f"[{i}/{len(scenarios)}] {scenario.short_id}...", end=" ", flush=True)
         
         try:
-            result = run_single_scenario(agent, scenario)
+            result = run_single_scenario(agent, scenario, enable_trace=enable_trace)
             results.append(result)
             
             status = "✓" if result.exact_match else "✗"
@@ -567,6 +571,12 @@ def run_tool_evaluation(
     
     # Speichere mit save_report
     save_report(report, str(output_dir))
+    
+    # Speichere Conversation-Trace falls aktiviert (nur für Constrained Agent)
+    if enable_trace and agent_type == "constrained" and hasattr(agent, 'save_conversation_trace'):
+        trace_file = output_dir / "conversation_trace.json"
+        agent.save_conversation_trace(str(trace_file))
+        print(f"\n   📝 Conversation-Trace gespeichert: {trace_file}")
     
     # Metriken aus dem Report extrahieren
     exact_match_count = int(metrics.exact_match_rate * metrics.total_scenarios)
@@ -751,7 +761,8 @@ def run_full_evaluation(
     rag_limit: Optional[int] = None,
     tool_limit: Optional[int] = None,
     output_dir: Optional[Path] = None,
-    test_ids: Optional[List[str]] = None
+    test_ids: Optional[List[str]] = None,
+    enable_trace: bool = False
 ) -> Dict[str, Any]:
     """
     Führt die vollständige Evaluation für ein Modell durch.
@@ -764,6 +775,7 @@ def run_full_evaluation(
         tool_limit: Optionale Begrenzung für Tool-Szenarien
         output_dir: Optionales Ausgabeverzeichnis (wenn None, wird neuer Timestamp erstellt)
         test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
+        enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
     
     Returns:
         Zusammenfassung aller Ergebnisse
@@ -811,7 +823,8 @@ def run_full_evaluation(
                 agent_type, 
                 output_dir, 
                 limit=tool_limit,
-                test_ids=test_ids
+                test_ids=test_ids,
+                enable_trace=enable_trace
             )
         except Exception as e:
             print(f"\n❌ Tool-Evaluation fehlgeschlagen: {e}")
@@ -916,7 +929,8 @@ def run_all_agents_evaluation(
     rag_limit: Optional[int] = None,
     tool_limit: Optional[int] = None,
     agents: Optional[List[str]] = None,
-    test_ids: Optional[List[str]] = None
+    test_ids: Optional[List[str]] = None,
+    enable_trace: bool = False
 ) -> Dict[str, Any]:
     """
     Führt Evaluation für alle Agent-Typen durch.
@@ -924,6 +938,7 @@ def run_all_agents_evaluation(
     Args:
         agents: Liste von Agenten (default: alle aus AGENT_TYPES)
         test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
+        enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
     """
     # Verwende custom Agenten-Liste oder alle
     agent_list = agents if agents else AGENT_TYPES
@@ -960,7 +975,8 @@ def run_all_agents_evaluation(
                 rag_limit=rag_limit,
                 tool_limit=tool_limit,
                 output_dir=shared_output_dir,
-                test_ids=test_ids
+                test_ids=test_ids,
+                enable_trace=enable_trace
             )
         except Exception as e:
             print(f"\n❌ Evaluation für {agent_type} fehlgeschlagen: {e}")
@@ -1085,6 +1101,12 @@ Beispiele:
         help="Spezifische Test-IDs für Tool-Evaluation (z.B. s8 s21 s24)"
     )
     
+    parser.add_argument(
+        "--enable-trace",
+        action="store_true",
+        help="Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)"
+    )
+    
     args = parser.parse_args()
     
     try:
@@ -1105,7 +1127,8 @@ Beispiele:
                     rag_limit=args.rag_limit,
                     tool_limit=args.tool_limit,
                     agents=args.agents,
-                    test_ids=args.test_ids
+                    test_ids=args.test_ids,
+                    enable_trace=args.enable_trace
                 )
             elif args.agent == "all":
                 # Alle Agent-Architekturen evaluieren
@@ -1114,7 +1137,8 @@ Beispiele:
                     mode=args.mode,
                     rag_limit=args.rag_limit,
                     tool_limit=args.tool_limit,
-                    test_ids=args.test_ids
+                    test_ids=args.test_ids,
+                    enable_trace=args.enable_trace
                 )
             else:
                 # Einzelnen Agent evaluieren
@@ -1124,7 +1148,8 @@ Beispiele:
                     mode=args.mode,
                     rag_limit=args.rag_limit,
                     tool_limit=args.tool_limit,
-                    test_ids=args.test_ids
+                    test_ids=args.test_ids,
+                    enable_trace=args.enable_trace
                 )
     except KeyboardInterrupt:
         print("\n\n⚠️  Evaluation abgebrochen!")

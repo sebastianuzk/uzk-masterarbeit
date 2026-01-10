@@ -20,6 +20,7 @@ import os
 import uuid
 import json
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -314,6 +315,9 @@ class ConstrainedAgent:
         self.schema_validations = 0
         self.schema_repairs = 0
         self.schema_failures = 0
+        
+        # Conversation Trace für Debugging/Evaluation
+        self.conversation_trace = []
     
     def _get_system_prompt(self) -> str:
         """Kompakter System-Prompt für Constrained Agent."""
@@ -408,52 +412,60 @@ class ConstrainedAgent:
         
         return f"""Du bist ein KI-Assistent für KLIPS 2.0 der Universität zu Köln.
 
-Analysiere die Nutzeranfrage SORGFÄLTIG und entscheide:
+Analysiere die Nutzeranfrage und entscheide:
 1. Welches Tool benötigt wird (oder keins)
-2. Ob ALLE Pflichtfelder VOLLSTÄNDIG und VALIDE vorhanden sind
+2. Ob die wichtigsten Pflichtfelder vorhanden sind
 
 VERFÜGBARE TOOLS mit Pflichtfeldern:
 {tools_str}
 
-ENTSCHEIDUNGSLOGIK (STRENG):
-1. Prüfe ob Tool-Aktion angefordert wird
-2. Prüfe JEDES Pflichtfeld einzeln nach diesen Kriterien:
-   - Ist der Wert EXPLIZIT im Text angegeben?
-   - Ist der Wert VOLLSTÄNDIG (kein Platzhalter, keine Auslassung)?
-   - Ist der Wert VALIDE (korrekte Formatierung)?
-3. WENN ein oder mehrere Pflichtfelder fehlen/ungültig → action='insufficient_data' mit missing_fields
-4. NUR WENN alle Pflichtfelder vollständig vorhanden → action='tool'
-5. Bei vagen Fragen/allgemeinen Informationen → action='respond'
+ENTSCHEIDUNGSLOGIK:
+1. Prüfe ob eine Tool-Aktion angefordert wird (z.B. "registriere mich", "bewerbe mich", "ändere Passwort")
+2. Prüfe ALLE Pflichtfelder für das gewählte Tool:
+   - Ist JEDES Pflichtfeld vorhanden (auch in vorherigen Nachrichten)?
+   - Sind die Werte sinnvoll (keine offensichtlichen Platzhalter wie "TBD", "N/A")?
+3. WENN ein oder mehrere Pflichtfelder fehlen → action='insufficient_data' mit missing_fields
+4. WENN ALLE Pflichtfelder vorhanden sind → action='tool'
+5. Bei reinen Fragen ohne Aktionswunsch → action='respond'
 
-WICHTIGE VALIDIERUNGSREGELN:
-✗ REJECT (insufficient_data):
-  - Email ohne @: "email max.mustermann"
-  - Platzhalter-Email: "keine-echte-email@example.com"
+WICHTIG: Sei STRENG bei Pflichtfeldern!
+- Fehlt ein Pflichtfeld KOMPLETT (z.B. keine Email erwähnt) → insufficient_data
+- Ist ein Pflichtfeld unvollständig (z.B. nur Nachname, kein Vorname) → insufficient_data
+- NUR wenn ALLE Pflichtfelder vorhanden sind → tool
+- Bei klips2_register: Vorname, Nachname, Geschlecht, Geburtsdatum, Email UND Staatsangehörigkeit MÜSSEN vorhanden sein
+- Bei klips2_apply_study: ALLE 14+ Pflichtfelder müssen vorhanden sein
+
+FORMAT-TOLERANZ (WICHTIG):
+✓ ACCEPT verschiedene Formate:
+  - Datum: "15.03.1995", "1995-03-15", "March 15, 1995" (alle gültig)
+  - Geschlecht: "m", "w", "d", "männlich", "male", "female", "divers" (alle gültig)
+  - Email: Jede Email mit @ ist gültig (auch nicht-deutsche Domains)
+  - Namen: Auch englische/internationale Namen akzeptieren
+  - Sprache: Deutsch UND Englisch akzeptieren
+
+✗ REJECT nur offensichtliche Probleme:
+  - Email OHNE @: "email max.mustermann"
+  - Fake-Emails: "keine-echte-email@example.com", "noemail@nodomain.com"
   - Partielles Datum: "1995" (nur Jahr), "15.03" (ohne Jahr)
-  - Ungültiges Datum: "32.13.2020"
-  - Fehlende Stadt: "Adresse: Hauptstraße 1, PLZ 12345" (Stadt fehlt)
+  - Ungültiges Datum: "32.13.2020", "99.99.9999"
+  - Fehlende Stadt bei Adresse: "Hauptstraße 1, PLZ 12345" (Stadt fehlt)
   - Vage Suche: "irgendwelche Kurse", "könnte ich Infos zu..."
-  - Fehlender Betreff: Email ohne Subject
-  - Unvollständige Anmeldedaten: Fehlende HZB-Infos, Geburtsdaten, etc.
-
-✓ ACCEPT (action='tool'):
-  - Alle Pflichtfelder explizit vorhanden
-  - Valide Formate (email@domain.de, DD.MM.YYYY, 5-stellige PLZ)
-  - Bei mehrstufigen Konversationen: "Previous conversation:" im Prompt
-    → Falls dort bereits Daten genannt wurden, gelten diese als vorhanden
+  - Komplett fehlende Pflichtfelder bei klips2_apply_study (16+ Felder erforderlich)
 
 SPEZIALFALL: Multi-Step-Konversationen
-Wenn "Previous conversation:" vorhanden:
-  1. Prüfe ZUERST vorherige Nachrichten auf fehlende Daten
-  2. Kombiniere Informationen aus aktuellem + vorherigem Kontext
-  3. Nur fehlende Felder müssen nachgefragt werden
+Wenn "Previous conversation:" vorhanden ist:
+  1. Lies ZUERST die vorherigen Nachrichten (User + Assistant)
+  2. Sammle ALLE bereits erwähnten Daten aus vorherigen Nachrichten
+  3. Kombiniere mit aktueller Nachricht
+  4. Wenn Nutzer zusätzliche Daten nachliefert UND jetzt ALLE Pflichtfelder vorhanden → action='tool'
+  5. Bei Korrekturen ("sorry, ich meinte X statt Y") → action='tool' mit korrigierten Daten
 
 Antworte im JSON-Format:
-{{"action": "tool", "tool_name": "<name>", "reason": "Alle Daten vollständig vorhanden"}}
+{{"action": "tool", "tool_name": "<name>", "reason": "Alle Pflichtfelder vorhanden"}}
 oder
-{{"action": "insufficient_data", "tool_name": "<name>", "reason": "Fehlende/ungültige Daten", "missing_fields": ["feld1", "feld2"]}}
+{{"action": "insufficient_data", "tool_name": "<name>", "reason": "Pflichtfelder fehlen", "missing_fields": ["feld1", "feld2"]}}
 oder
-{{"action": "respond", "reason": "Nur Frage/Information, kein Tool benötigt"}}"""
+{{"action": "respond", "reason": "Nur Frage/Information, keine Aktion gewünscht"}}"""
 
     def _get_extraction_prompt(self, tool_name: str, schema: Type[BaseModel]) -> str:
         """Prompt für die Argument-Extraktion."""
@@ -470,15 +482,22 @@ oder
         return f"""Extrahiere die Parameter für {tool_name} aus dem Nutzertext.
 
 WICHTIGE REGELN:
-- Extrahiere NUR Daten die EXPLIZIT im Text stehen
-- Bei "Previous conversation:"-Kontext: Kombiniere aktuelle + vorherige Daten
+- Extrahiere NUR Daten die im Text stehen (aktuell ODER in "Previous conversation:")
+- Bei "Previous conversation:": Lies ALLE vorherigen Nachrichten und sammle Daten
+- Bei Korrekturen ("sorry, ich meinte X statt Y"): Nutze korrigierte Werte
 - NIEMALS Daten erfinden oder raten
-- Bei mehrdeutigen/unvollständigen Daten: Lasse Feld weg
 - Nutze EXAKT diese Feldnamen (keine Variationen!)
-- Normalisiere Formate:
-  * Datum → TT.MM.JJJJ
-  * Email → lowercase
-  * Namen → Capitalize first letter
+- Normalisiere Formate flexibel:
+  * Datum: "15.03.1995", "1995-03-15", "March 15, 1995" → "15.03.1995"
+  * Geschlecht: "m"→"männlich", "w"→"weiblich", "d"→"divers", "male"→"männlich", etc.
+  * Email: lowercase, beliebige Domains OK (auch .edu, .org, etc.)
+  * Namen: Capitalize first letter, auch internationale Namen
+
+FORMAT-TOLERANZ:
+- Akzeptiere verschiedene Datumsformate (DD.MM.YYYY, YYYY-MM-DD, Month DD, YYYY)
+- Akzeptiere Abkürzungen (m/w/d, DE/USA, etc.)
+- Akzeptiere englische Texte
+- Konvertiere automatisch zu erwarteten Formaten
 
 Ausgabeformat (JSON):
 {{
@@ -486,7 +505,7 @@ Ausgabeformat (JSON):
 }}
 
 Lasse optionale Felder weg wenn nicht vorhanden.
-PFLICHT-Felder MÜSSEN vorhanden sein (sollte bereits validiert sein)."""
+PFLICHT-Felder sollten vorhanden sein (wurden bereits validiert)."""
 
     def _parse_and_validate(
         self, 
@@ -658,10 +677,36 @@ PFLICHT-Felder MÜSSEN vorhanden sein (sollte bereits validiert sein)."""
             )
             
             if error:
-                # Schema-Validierung fehlgeschlagen
-                response_text = f"Ich konnte die Daten nicht korrekt verarbeiten: {error}\nBitte überprüfe die Angaben."
-                self.memory.append(AIMessage(content=response_text))
-                return response_text
+                # Retry: Gebe Feedback und eine weitere Chance
+                retry_prompt = f"""Die vorherige JSON-Generierung hatte Fehler:
+{error}
+
+Bitte korrigiere die Fehler und generiere das JSON erneut.
+Nur die fehlenden/fehlerhaften Felder müssen korrigiert werden.
+
+Ursprünglicher Nutzertext: {enriched_message}"""
+                
+                retry_messages = [
+                    SystemMessage(content=extraction_prompt),
+                    HumanMessage(content=f"Nutzertext (mit Kontext):\n{enriched_message}"),
+                    AIMessage(content=extraction_response.content),
+                    HumanMessage(content=retry_prompt)
+                ]
+                
+                retry_response = self.llm_json.invoke(retry_messages)
+                validated_args_retry, error_retry = self._parse_and_validate(
+                    retry_response.content,
+                    schema
+                )
+                
+                if error_retry:
+                    # Auch nach Retry fehlgeschlagen
+                    response_text = f"Ich konnte die Daten nicht korrekt verarbeiten: {error_retry}\nBitte überprüfe die Angaben."
+                    self.memory.append(AIMessage(content=response_text))
+                    return response_text
+                
+                # Retry erfolgreich - verwende korrigierte Args
+                validated_args = validated_args_retry
             
             # Schritt 5: Tool ausführen
             args_dict = validated_args.model_dump(exclude_none=True)
@@ -779,7 +824,32 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
             )
         }
     
-    def get_tool_selection(self, message: str) -> List[Dict[str, Any]]:
+    def get_conversation_trace(self) -> List[Dict[str, Any]]:
+        """Gebe den kompletten Conversation-Trace zurück."""
+        return self.conversation_trace
+    
+    def clear_conversation_trace(self):
+        """Lösche den Conversation-Trace."""
+        self.conversation_trace = []
+    
+    def save_conversation_trace(self, filepath: str):
+        """
+        Speichere den Conversation-Trace als JSON-Datei.
+        
+        Args:
+            filepath: Pfad zur Ausgabedatei
+        """
+        from pathlib import Path
+        
+        output_path = Path(filepath)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(self.conversation_trace, f, indent=2, ensure_ascii=False)
+        
+        print(f"✅ Conversation-Trace gespeichert: {output_path}")
+    
+    def get_tool_selection(self, message: str, enable_trace: bool = False) -> List[Dict[str, Any]]:
         """
         Ermittle Tool-Auswahl mit Constrained-Decoding-Logik (für Evaluierung).
         
@@ -789,6 +859,7 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
         
         Args:
             message: Die Nutzeranfrage
+            enable_trace: Wenn True, wird der Conversation-Trace aufgezeichnet
             
         Returns:
             Liste der ausgewählten Tool-Calls mit validierten Argumenten
@@ -806,10 +877,27 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
             ]
             
             decision_response = self.llm_json.invoke(decision_messages)
+            
+            # Log Step 1: Decision (optional)
+            if enable_trace:
+                trace_step = {
+                    "step": "decision",
+                    "scenario": message,
+                    "prompt": decision_prompt,
+                    "raw_output": decision_response.content,
+                    "timestamp": datetime.now().isoformat()
+                }
+            
             decision_result, error = self._parse_and_validate(
                 decision_response.content, 
                 ToolDecision
             )
+            
+            if enable_trace:
+                trace_step["validation_success"] = error is None
+                trace_step["validation_error"] = error
+                trace_step["parsed_result"] = decision_result.model_dump() if decision_result else None
+                self.conversation_trace.append(trace_step)
             
             if error or not decision_result:
                 return []  # Keine Tool-Auswahl möglich
@@ -835,21 +923,127 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
             ]
             
             extraction_response = self.llm_json.invoke(extraction_messages)
+            
+            # Log Step 2: Initial Extraction (optional)
+            if enable_trace:
+                trace_step = {
+                    "step": "extraction_initial",
+                    "tool_name": tool_name,
+                    "scenario": message,
+                    "prompt": extraction_prompt,
+                    "raw_output": extraction_response.content,
+                    "timestamp": datetime.now().isoformat()
+                }
+            
             validated_args, error = self._parse_and_validate(
                 extraction_response.content,
                 schema
             )
             
-            if error:
-                # Schema-Validierung fehlgeschlagen, aber Tool wurde gewählt
-                # Gebe Tool trotzdem zurück mit leeren Args für Evaluierung
-                return [{"name": tool_name, "args": {}}]
+            if enable_trace:
+                trace_step["validation_success"] = error is None
+                trace_step["validation_error"] = error
+                trace_step["parsed_result"] = validated_args.model_dump() if validated_args else None
+                self.conversation_trace.append(trace_step)
             
-            # Erfolgreiche Extraktion
+            if error:
+                # Retry: Gebe Feedback und eine weitere Chance
+                retry_prompt = f"""Die vorherige JSON-Generierung hatte Fehler:
+{error}
+
+Bitte korrigiere die Fehler und generiere das JSON erneut.
+Nur die fehlenden/fehlerhaften Felder müssen korrigiert werden.
+
+Ursprünglicher Nutzertext: {message}"""
+                
+                retry_messages = [
+                    SystemMessage(content=extraction_prompt),
+                    HumanMessage(content=f"Nutzertext: {message}"),
+                    AIMessage(content=extraction_response.content),
+                    HumanMessage(content=retry_prompt)
+                ]
+                
+                retry_response = self.llm_json.invoke(retry_messages)
+                
+                # Log Step 3: Retry Extraction (optional)
+                if enable_trace:
+                    trace_step = {
+                        "step": "extraction_retry",
+                        "tool_name": tool_name,
+                        "scenario": message,
+                        "previous_error": error,
+                        "retry_prompt": retry_prompt,
+                        "raw_output": retry_response.content,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                
+                validated_args_retry, error_retry = self._parse_and_validate(
+                    retry_response.content,
+                    schema
+                )
+                
+                if enable_trace:
+                    trace_step["validation_success"] = error_retry is None
+                    trace_step["validation_error"] = error_retry
+                    trace_step["parsed_result"] = validated_args_retry.model_dump() if validated_args_retry else None
+                    self.conversation_trace.append(trace_step)
+                
+                if error_retry:
+                    # Auch nach Retry fehlgeschlagen
+                    if enable_trace:
+                        final_step = {
+                            "step": "final_result",
+                            "tool_name": tool_name,
+                            "scenario": message,
+                            "status": "failed_after_retry",
+                            "reason": "Schema-Validierung fehlgeschlagen trotz Retry",
+                            "initial_error": error,
+                            "retry_error": error_retry,
+                            "result": {"name": tool_name, "args": {}},
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        self.conversation_trace.append(final_step)
+                    return [{"name": tool_name, "args": {}}]
+                
+                # Retry erfolgreich
+                args_dict = validated_args_retry.model_dump(exclude_none=True)
+                if enable_trace:
+                    final_step = {
+                        "step": "final_result",
+                        "tool_name": tool_name,
+                        "scenario": message,
+                        "status": "success_after_retry",
+                        "reason": "Schema-Validierung erfolgreich nach Retry",
+                        "result": {"name": tool_name, "args": args_dict},
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    self.conversation_trace.append(final_step)
+                return [{"name": tool_name, "args": args_dict}]
+            
+            # Erfolgreiche Extraktion beim ersten Versuch
             args_dict = validated_args.model_dump(exclude_none=True)
+            if enable_trace:
+                final_step = {
+                    "step": "final_result",
+                    "tool_name": tool_name,
+                    "scenario": message,
+                    "status": "success_first_attempt",
+                    "reason": "Schema-Validierung erfolgreich beim ersten Versuch",
+                    "result": {"name": tool_name, "args": args_dict},
+                    "timestamp": datetime.now().isoformat()
+                }
+                self.conversation_trace.append(final_step)
             return [{"name": tool_name, "args": args_dict}]
             
         except Exception as e:
+            if enable_trace:
+                trace_step = {
+                    "step": "error",
+                    "scenario": message,
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat()
+                }
+                self.conversation_trace.append(trace_step)
             return []  # Bei Fehler keine Tool-Auswahl
 
 
