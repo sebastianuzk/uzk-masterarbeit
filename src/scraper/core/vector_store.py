@@ -35,7 +35,7 @@ except ImportError:
 try:
     from config.settings import SENTENCE_TRANSFORMER_MODEL
 except ImportError:
-    SENTENCE_TRANSFORMER_MODEL = "all-MiniLM-L6-v2"
+    SENTENCE_TRANSFORMER_MODEL = "BAAI/bge-m3"
 
 # Embedding dependencies
 try:

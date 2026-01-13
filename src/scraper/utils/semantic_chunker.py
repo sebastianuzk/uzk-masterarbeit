@@ -3,7 +3,7 @@ Semantic Chunking für optimale RAG-Performance
 ==============================================
 
 Echter Semantic Chunker der Embeddings nutzt um semantische Grenzen zu erkennen.
-Verwendet das gleiche Embedding-Modell wie die Vektordatenbank (all-MiniLM-L6-v2).
+Verwendet das gleiche Embedding-Modell wie die Vektordatenbank (BAAI/bge-m3).
 
 Basiert auf der Idee: Sätze mit hoher semantischer Ähnlichkeit gehören zusammen,
 ein starker Ähnlichkeitsabfall markiert eine Chunk-Grenze.
@@ -19,7 +19,7 @@ from sentence_transformers import SentenceTransformer
 try:
     from config.settings import SENTENCE_TRANSFORMER_MODEL
 except ImportError:
-    SENTENCE_TRANSFORMER_MODEL = "all-MiniLM-L6-v2"
+    SENTENCE_TRANSFORMER_MODEL = "BAAI/bge-m3"
 
 logger = logging.getLogger(__name__)
 
