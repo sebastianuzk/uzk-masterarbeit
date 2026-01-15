@@ -2,11 +2,17 @@
 RAGAS-Evaluation für WiSo-Chatbot
 
 Evaluiert den Chatbot mit RAGAS-Framework:
-- Verwendet Ollama (qwen3:8b) als LLM-Judge
+- Unterstützt zwei LLM-Modi für den Judge: LOKAL (Ollama) oder CLOUD (OpenAI)
+- Embeddings werden IMMER lokal mit Ollama (embeddinggemma) berechnet
+- Konfiguration über RUN_EVALUATION_LOCAL in .env (true/false)
 - Lädt Testfragen aus Testset.CSV
 - Generiert Antworten mit dem Chatbot
 - Extrahiert RAG-Kontexte aus LangSmith
-- Berechnet RAGAS-Metriken (Faithfulness, Context Recall)
+- Berechnet RAGAS-Metriken (Faithfulness, Context Recall, etc.)
+
+Modi:
+- RUN_EVALUATION_LOCAL=true  → Ollama LLM (RAGAS_EVAL_MODEL) + Ollama Embeddings
+- RUN_EVALUATION_LOCAL=false → OpenAI LLM (OPENAI_EVAL_MODEL) + Ollama Embeddings
 """
 
 import sys
@@ -24,6 +30,14 @@ from typing import List
 import time
 import requests
 import gc
+
+# BERT-Score für Token-Level semantische Ähnlichkeit
+try:
+    from bert_score import score as bert_score_fn
+    BERT_SCORE_AVAILABLE = True
+except ImportError:
+    BERT_SCORE_AVAILABLE = False
+    print("⚠️ bert-score nicht installiert. Installiere mit: pip install bert-score")
 
 # Reproduzierbarkeit: Seeds werden aus config.settings geladen
 import random
@@ -50,13 +64,21 @@ from config.settings import (
     TEMPERATURE,
     CONTEXT_WINDOW,
     RANDOM_SEED,
-    SENTENCE_TRANSFORMER_MODEL
+    SENTENCE_TRANSFORMER_MODEL,
+    OPENAI_API_KEY,
+    OPENAI_EVAL_MODEL,
+    RUN_EVALUATION_LOCAL
 )
 from src.agent.react_agent import create_react_agent
 
 # Setze Seeds für Reproduzierbarkeit
 random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
+
+# Globaler Timestamp für alle Dateien dieser Evaluation
+from datetime import datetime
+#EVAL_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+EVAL_TIMESTAMP = "20260115_115815"
 
 
 def calculate_RR_at5(context_hint: str, retrieved_urls: list) -> float:
@@ -164,6 +186,93 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
         return [], [], []  # Leere Listen bei Fehler
 
 
+def get_token_usage_from_langsmith(client: Client, trace_id: str) -> dict:
+    """
+    Holt Token-Usage aus LangSmith für eine spezifische Trace-ID.
+    
+    Summiert alle Tokens aus LLM-Runs (ChatOllama/ChatOpenAI) innerhalb der Trace.
+    
+    Args:
+        client: LangSmith Client
+        trace_id: Die Trace-ID der Session
+        
+    Returns:
+        dict: {'prompt_tokens': int, 'completion_tokens': int, 'total_tokens': int}
+    """
+    try:
+        # Hole alle Child-Runs für diese Trace
+        child_runs = list(client.list_runs(
+            project_name=LANGSMITH_PROJECT,
+            trace_id=trace_id,
+            is_root=False
+        ))
+        
+        total_prompt = 0
+        total_completion = 0
+        total_tokens = 0
+        
+        for child in child_runs:
+            # LLM-Runs haben run_type="llm"
+            if child.run_type == "llm":
+                # Token-Usage kann in verschiedenen Stellen sein:
+                # 1. Direkt als Attribute: total_tokens, prompt_tokens, completion_tokens
+                # 2. In extra['usage'] oder outputs['usage']
+                
+                # Methode 1: Direkte Attribute
+                if hasattr(child, 'total_tokens') and child.total_tokens:
+                    total_tokens += child.total_tokens
+                if hasattr(child, 'prompt_tokens') and child.prompt_tokens:
+                    total_prompt += child.prompt_tokens
+                if hasattr(child, 'completion_tokens') and child.completion_tokens:
+                    total_completion += child.completion_tokens
+                
+                # Methode 2: In outputs
+                if child.outputs and isinstance(child.outputs, dict):
+                    usage = child.outputs.get('usage', {})
+                    if usage:
+                        total_prompt += usage.get('prompt_tokens', 0) or 0
+                        total_completion += usage.get('completion_tokens', 0) or 0
+                        total_tokens += usage.get('total_tokens', 0) or 0
+                    
+                    # Alternative: token_usage in outputs (LangChain Format)
+                    token_usage = child.outputs.get('token_usage', {})
+                    if token_usage:
+                        total_prompt += token_usage.get('prompt_tokens', 0) or 0
+                        total_completion += token_usage.get('completion_tokens', 0) or 0
+                        total_tokens += token_usage.get('total_tokens', 0) or 0
+                    
+                    # Alternative: llm_output -> token_usage (älteres Format)
+                    llm_output = child.outputs.get('llm_output', {})
+                    if llm_output and isinstance(llm_output, dict):
+                        tu = llm_output.get('token_usage', {})
+                        if tu:
+                            total_prompt += tu.get('prompt_tokens', 0) or 0
+                            total_completion += tu.get('completion_tokens', 0) or 0
+                            total_tokens += tu.get('total_tokens', 0) or 0
+                
+                # Methode 3: In extra
+                if hasattr(child, 'extra') and child.extra and isinstance(child.extra, dict):
+                    usage = child.extra.get('usage', {})
+                    if usage:
+                        total_prompt += usage.get('prompt_tokens', 0) or 0
+                        total_completion += usage.get('completion_tokens', 0) or 0
+                        total_tokens += usage.get('total_tokens', 0) or 0
+        
+        # Falls total_tokens nicht direkt verfügbar, berechne aus prompt + completion
+        if total_tokens == 0 and (total_prompt > 0 or total_completion > 0):
+            total_tokens = total_prompt + total_completion
+        
+        return {
+            'prompt_tokens': total_prompt,
+            'completion_tokens': total_completion,
+            'total_tokens': total_tokens
+        }
+    
+    except Exception as e:
+        print(f"      ⚠️ Token-Usage Fehler: {str(e)[:100]}")
+        return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+
+
 def stop_ollama_model(model_name: str):
     """
     Stoppt ein Ollama-Modell via CLI-Befehl, um GPU-Speicher freizugeben.
@@ -233,8 +342,8 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     Bei Timeout (3 Min) wird der Agent neu gestartet.
     
     Returns:
-        Tuple (dataset, response_times, urls_list, content_types_list): 
-        EvaluationDataset, Liste der Antwortzeiten, Liste der URL-Listen, Liste der Content-Type-Listen
+        Tuple (dataset, response_times, urls_list, content_types_list, token_usage_list): 
+        EvaluationDataset, Liste der Antwortzeiten, Liste der URL-Listen, Liste der Content-Type-Listen, Liste der Token-Usages
     """
     import pickle
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
@@ -245,8 +354,8 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     print(f"   ⏱️ Timeout pro Frage: {TIMEOUT_SECONDS}s")
     print("=" * 80)
     
-    # Checkpoint-Pfad
-    checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
+    # Checkpoint-Pfad mit Timestamp
+    checkpoint_path = Path(__file__).parent / "data" / f"responses_checkpoint_{EVAL_TIMESTAMP}.pkl"
     checkpoint_path.parent.mkdir(exist_ok=True)
     
     # Prüfe ob inkrementeller Checkpoint existiert (für Fortsetzung nach Abbruch)
@@ -254,45 +363,62 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     response_times = []
     urls_list = []
     content_types_list = []
-    start_idx = 0
+    token_usage_list = []  # Token-Usage pro Anfrage
+    processed_ids = set()  # IDs die bereits im Checkpoint sind
+    checkpoint_df = pd.DataFrame()  # DataFrame mit verarbeiteten Zeilen
     
     if checkpoint_path.exists():
         try:
             with open(checkpoint_path, 'rb') as f:
                 checkpoint_data = pickle.load(f)
             
-            # Prüfe ob Checkpoint zum aktuellen Testset passt
+            # Prüfe ob Checkpoint gültig ist
             if isinstance(checkpoint_data, dict) and 'test_df' in checkpoint_data:
                 saved_df = checkpoint_data['test_df']
-                if len(saved_df) == len(df):
-                    # Lade bisherige Samples
-                    saved_dataset = checkpoint_data.get('dataset')
-                    if saved_dataset and hasattr(saved_dataset, 'samples'):
-                        samples = list(saved_dataset.samples)
-                        response_times = checkpoint_data.get('response_times', [])
-                        urls_list = checkpoint_data.get('urls_list', [])
-                        content_types_list = checkpoint_data.get('content_types_list', [])
-                        start_idx = len(samples)
-                        
-                        if start_idx > 0 and start_idx < len(df):
-                            print(f"📂 Checkpoint geladen: {start_idx}/{len(df)} Fragen bereits beantwortet")
-                            print(f"   → Setze fort ab Frage {start_idx + 1}")
-                        elif start_idx >= len(df):
-                            print(f"📂 Checkpoint vollständig: Alle {len(df)} Fragen beantwortet")
-                            dataset = EvaluationDataset(samples=samples)
-                            return dataset, response_times, urls_list, content_types_list
+                saved_dataset = checkpoint_data.get('dataset')
+                
+                if saved_dataset and hasattr(saved_dataset, 'samples'):
+                    # Lade bisherige Daten
+                    samples = list(saved_dataset.samples)
+                    response_times = checkpoint_data.get('response_times', [])
+                    urls_list = checkpoint_data.get('urls_list', [])
+                    content_types_list = checkpoint_data.get('content_types_list', [])
+                    token_usage_list = checkpoint_data.get('token_usage_list', [])
+                    checkpoint_df = saved_df.copy()
+                    
+                    # Ermittle bereits verarbeitete IDs aus saved_df
+                    processed_ids = set(saved_df['id'].tolist())
+                    
+                    # Prüfe welche IDs aus df noch fehlen
+                    required_ids = set(df['id'].tolist())
+                    missing_ids = required_ids - processed_ids
+                    
+                    if len(missing_ids) == 0:
+                        print(f"📂 Checkpoint vollständig: Alle {len(processed_ids)} Fragen beantwortet")
+                        dataset = EvaluationDataset(samples=samples)
+                        return dataset, response_times, urls_list, content_types_list, token_usage_list
+                    else:
+                        print(f"📂 Checkpoint geladen: {len(processed_ids)} Fragen bereits beantwortet")
+                        print(f"   → Fehlende IDs: {sorted(missing_ids)}")
         except Exception as e:
             print(f"⚠️ Checkpoint-Ladefehler: {e} - Starte neu")
-            samples, response_times, urls_list, content_types_list, start_idx = [], [], [], [], 0
+            samples, response_times, urls_list, content_types_list, token_usage_list, processed_ids = [], [], [], [], [], set()
+            checkpoint_df = pd.DataFrame()
     
-    # Iteriere über verbleibende Fragen (ab start_idx)
+    # Iteriere über alle Fragen, aber überspringe bereits verarbeitete
     total_questions = len(df)
-    for i in range(start_idx, total_questions):
+    for i in range(total_questions):
         row = df.iloc[i]
+        question_id = row['id']
+        
+        # Überspringe bereits verarbeitete IDs
+        if question_id in processed_ids:
+            continue
+        
         question = row['question']
         expected_answer = row['expected_answer']
         
-        print(f"\n[{i + 1}/{total_questions}] {question[:70]}...")
+        print(f"\n[ID {question_id}] {question[:70]}...")
         
         # Memory löschen für isolierte Evaluation
         agent.clear_memory()
@@ -346,17 +472,23 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         if matching_run:
             trace_id = matching_run.trace_id
             contexts, urls, content_types = get_rag_context_from_langsmith(langsmith_client, trace_id)
+            # Token-Usage aus LangSmith holen
+            token_usage = get_token_usage_from_langsmith(langsmith_client, trace_id)
             print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
         else:
             print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
+            token_usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
         
         urls_list.append(urls)
         content_types_list.append(content_types)
+        token_usage_list.append(token_usage)
         
         total_chars = sum(len(c) for c in contexts)
         print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
         print(f"   🔗 URLs: {len(urls)} Quellen")
         print(f"   📁 Content-Types: {set(content_types)}")
+        if token_usage['total_tokens'] > 0:
+            print(f"   📊 Tokens: {token_usage['total_tokens']} (Prompt: {token_usage['prompt_tokens']}, Completion: {token_usage['completion_tokens']})")
         
         # RAGAS-Sample erstellen
         sample = SingleTurnSample(
@@ -367,80 +499,144 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         )
         samples.append(sample)
         
+        # Füge aktuelle Zeile zum checkpoint_df hinzu
+        new_row = row.to_frame().T.copy()
+        new_row['id'] = int(question_id)  # Sicherstellen dass ID als int gespeichert wird
+        checkpoint_df = pd.concat([checkpoint_df, new_row], ignore_index=True)
+        processed_ids.add(question_id)
+        
         # 💾 INKREMENTELLER CHECKPOINT nach jeder Frage
         dataset = EvaluationDataset(samples=samples)
         checkpoint_data = {
             'dataset': dataset,
-            'test_df': df,
+            'test_df': checkpoint_df,
             'response_times': response_times,
             'urls_list': urls_list,
-            'content_types_list': content_types_list
+            'content_types_list': content_types_list,
+            'token_usage_list': token_usage_list
         }
         with open(checkpoint_path, 'wb') as f:
             pickle.dump(checkpoint_data, f)
-        print(f"   💾 Checkpoint: {len(samples)}/{len(df)} Fragen gespeichert")
+        print(f"   💾 Checkpoint: {len(samples)}/{len(df)} Fragen gespeichert (IDs: {len(processed_ids)})")
     
     print("\n" + "=" * 80)
     print(f"✅ {len(samples)} Antworten generiert\n")
-    print(f"   ⏱️ Durchschn. Antwortzeit: {sum(response_times)/len(response_times):.2f}s")
-    print(f"   ⏱️ Gesamt Antwortzeit: {sum(response_times):.2f}s\n")
+    if response_times:
+        print(f"   ⏱️ Durchschn. Antwortzeit: {sum(response_times)/len(response_times):.2f}s")
+        print(f"   ⏱️ Gesamt Antwortzeit: {sum(response_times):.2f}s\n")
+    if token_usage_list:
+        total_tokens_all = sum(t.get('total_tokens', 0) for t in token_usage_list)
+        print(f"   📊 Gesamt Tokens: {total_tokens_all}\n")
     
     dataset = EvaluationDataset(samples=samples)
-    return dataset, response_times, urls_list, content_types_list
+    return dataset, response_times, urls_list, content_types_list, token_usage_list
 
 
 # ============================================================================
 # KONFIGURATION
 # ============================================================================
 # Limit für Testfragen (None = alle, z.B. 5 für Test)
-TEST_LIMIT = None  # None = alle Fragen evaluieren
+TEST_LIMIT = 2 # None = alle Fragen evaluieren
 
 
-def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
+def run_ragas_evaluation(dataset: EvaluationDataset, run_local: bool = None) -> tuple:
     """
     Führt RAGAS-Evaluation durch.
-    Verwendet 3 Standard-RAGAS-Metriken: faithfulness, context_recall, context_precision.
-    (response_relevancy auskommentiert - benötigt qwen3-embedding:8b)
+    Unterstützt sowohl lokale Ollama-Modelle als auch OpenAI Cloud-Modelle.
+    
+    Args:
+        dataset: EvaluationDataset mit Samples
+        run_local: True = lokales Ollama, False = OpenAI Cloud, None = aus Config
     
     Returns:
         Tuple (results_df, evaluation_time): DataFrame mit Ergebnissen und Evaluationszeit in Sekunden
     """
+    # Bestimme Modus (Parameter überschreibt Config)
+    use_local = run_local if run_local is not None else RUN_EVALUATION_LOCAL
+    
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
-    # Separates LLM für RAGAS-Evaluation (gleiches Setup wie Chatbot, nur anderes Modell)
-    llm = ChatOllama(
-        model=RAGAS_EVAL_MODEL,  # Separates Modell für Evaluation
-        base_url=OLLAMA_BASE_URL,
-        temperature=TEMPERATURE,  # Gleiche Parameter wie Chatbot
-        seed=RANDOM_SEED,
-        num_ctx=CONTEXT_WINDOW
-    )
-    print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
-    print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
+    if use_local:
+        # ====================================================================
+        # LOKALE EVALUATION mit Ollama LLM
+        # ====================================================================
+        print("   🏠 Modus: LOKAL (Ollama LLM)")
+        
+        # Separates LLM für RAGAS-Evaluation (gleiches Setup wie Chatbot, nur anderes Modell)
+        llm = ChatOllama(
+            model=RAGAS_EVAL_MODEL,  # Separates Modell für Evaluation
+            base_url=OLLAMA_BASE_URL,
+            temperature=TEMPERATURE,  # Gleiche Parameter wie Chatbot
+            seed=RANDOM_SEED,
+            num_ctx=CONTEXT_WINDOW
+        )
+        print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
+        print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
+        
+        # RunConfig für Ollama-Evaluation
+        # max_workers=4: Ollama verarbeitet Requests sequentiell, parallele Worker verursachen Timeouts
+        # timeout=300: 5 Minuten pro Metrik-Berechnung (erhöht wegen LLM-Latenz)
+        run_config = RunConfig(
+            max_workers=4,
+            seed=RANDOM_SEED,
+            timeout=300
+        )
+    else:
+        # ====================================================================
+        # CLOUD EVALUATION mit OpenAI (nur LLM, Embeddings bleiben lokal!)
+        # ====================================================================
+        print("   ☁️ Modus: CLOUD (OpenAI LLM)")
+        
+        # Prüfe API-Key
+        if not OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY nicht gesetzt! Bitte in .env konfigurieren.")
+        
+        # OpenAI LLM für RAGAS-Evaluation (nur der Judge!)
+        from langchain_openai import ChatOpenAI
+        from ragas.llms import LangchainLLMWrapper
+        
+        openai_llm = ChatOpenAI(
+            model=OPENAI_EVAL_MODEL,
+            api_key=OPENAI_API_KEY,
+            temperature=0.0,  # Deterministische Evaluation
+            seed=RANDOM_SEED,  # Reproduzierbarkeit
+            max_retries=5  # Automatisches Retry bei Rate-Limits (429)
+        )
+        llm = LangchainLLMWrapper(openai_llm)
+        print(f"   RAGAS-LLM: {OPENAI_EVAL_MODEL} (OpenAI Cloud, temp=0.0, seed={RANDOM_SEED}, retries=5)")
+        print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
+        
+        # RunConfig für OpenAI-Evaluation
+        # max_workers=300: Hohe Parallelität, Retries fangen Rate-Limits ab
+        # timeout=1800: Ausreichend Zeit für komplexe Metriken
+        run_config = RunConfig(
+            max_workers=150,
+            seed=RANDOM_SEED,
+            timeout=1800,
+            max_retries=5
+        )
     
-    # Embeddings für RAGAS-Metriken
-    # - Wir nutzen Ollama embeddinggemma für schnelle Evaluation via Ollama-Server
-    # - Basiert auf Gemma, optimiert für Embeddings
+    # ========================================================================
+    # EMBEDDINGS: IMMER lokal mit Ollama (unabhängig vom LLM-Modus)
+    # ========================================================================
     RAGAS_EMBEDDING_MODEL = "embeddinggemma"
-    RAGAS_MAX_SEQ_LENGTH = 1024  # Kontextlänge für Embeddings
+    RAGAS_MAX_SEQ_LENGTH = 1024
     
-    # Ollama-Embeddings für alle RAGAS-Metriken
     ollama_embeddings = OllamaEmbeddings(
         model=RAGAS_EMBEDDING_MODEL,
         base_url=OLLAMA_BASE_URL,
-        num_ctx=RAGAS_MAX_SEQ_LENGTH  # max_seq_length für Ollama
+        num_ctx=RAGAS_MAX_SEQ_LENGTH
     )
     
-    # LangchainEmbeddingsWrapper für RAGAS-Kompatibilität
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         langchain_embeddings = LangchainEmbeddingsWrapper(ollama_embeddings)
     
-    print(f"   Embeddings: {RAGAS_EMBEDDING_MODEL} @ {OLLAMA_BASE_URL} (max_seq_length={RAGAS_MAX_SEQ_LENGTH}, für semantic_similarity, response_relevancy)")
+    print(f"   Embeddings: {RAGAS_EMBEDDING_MODEL} @ {OLLAMA_BASE_URL} (LOKAL, max_seq_length={RAGAS_MAX_SEQ_LENGTH})")
     print(f"   (RAG verwendet: {SENTENCE_TRANSFORMER_MODEL})")
     
-    # SemanticSimilarity mit Ollama-Embeddings (via LangChain-Wrapper)
+    # SemanticSimilarity mit Embeddings
     semantic_similarity = SemanticSimilarity(embeddings=langchain_embeddings)
     
     # ResponseRelevancy benötigt LangChain-Interface (embed_query/embed_documents)
@@ -460,16 +656,10 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     ]
     print(f"   Metriken: {[m.name for m in metrics]}")
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
-    print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
-    
-    # RunConfig für Ollama-Evaluation
-    # max_workers=4: Ollama verarbeitet Requests sequentiell, parallele Worker verursachen Timeouts
-    # timeout=300: 5 Minuten pro Metrik-Berechnung (erhöht wegen LLM-Latenz)
-    run_config = RunConfig(
-        max_workers=4,
-        seed=RANDOM_SEED,
-        timeout=300
-    )
+    if use_local:
+        print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
+    else:
+        print(f"   💡 OpenAI Cloud: ca. 10-30 Sek pro Sample\n")
     
     # Zeit messen für Evaluation
     eval_start = time.time()
@@ -488,12 +678,61 @@ def run_ragas_evaluation(dataset: EvaluationDataset) -> tuple:
     print(f"\n   ✅ Evaluation abgeschlossen in {evaluation_time:.2f}s")
     print(f"   ⏱️ Durchschn. pro Sample: {evaluation_time/len(dataset.samples):.2f}s\n")
     
-    return results.to_pandas(), evaluation_time
+    # ========================================================================
+    # BERT-SCORE: Token-Level semantische Ähnlichkeit (nach RAGAS-Evaluation)
+    # ========================================================================
+    results_df = results.to_pandas()
+    
+    if BERT_SCORE_AVAILABLE:
+        print("📊 Berechne BERT-Score...")
+        bert_start = time.time()
+        
+        try:
+            # Extrahiere responses und references aus dataset
+            responses = [s.response for s in dataset.samples]
+            references = [s.reference for s in dataset.samples]
+            
+            # BERT-Score berechnen (Multilingual: xlm-roberta-large)
+            # Unterstützt Deutsch + Englisch gemischt
+            # Unterdrücke Tokenizer-Warnungen
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore")
+                P, R, F1 = bert_score_fn(
+                    responses, 
+                    references, 
+                    model_type="xlm-roberta-large",  # Multilingual (100+ Sprachen, inkl. DE + EN)
+                    lang="de",  # Sprache für Baseline-Rescaling (DE funktioniert auch für gemischte Texte)
+                    verbose=False,
+                    rescale_with_baseline=True  # Bessere Interpretierbarkeit
+                )
+            
+            # Zu results_df hinzufügen
+            results_df['bert_precision'] = P.numpy()
+            results_df['bert_recall'] = R.numpy()
+            results_df['bert_f1'] = F1.numpy()
+            
+            bert_time = time.time() - bert_start
+            print(f"   ✅ BERT-Score berechnet in {bert_time:.2f}s")
+            print(f"   📈 Durchschn. BERT-F1: {F1.mean():.3f}")
+            
+        except Exception as e:
+            print(f"   ⚠️ BERT-Score Fehler: {e}")
+            results_df['bert_precision'] = None
+            results_df['bert_recall'] = None
+            results_df['bert_f1'] = None
+    else:
+        print("⚠️ BERT-Score übersprungen (nicht installiert)")
+        results_df['bert_precision'] = None
+        results_df['bert_recall'] = None
+        results_df['bert_f1'] = None
+    
+    return results_df, evaluation_time
 
 
 def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame, 
                               response_times: List[float] = None, urls_list: List[List[str]] = None,
-                              content_types_list: List[List[str]] = None, evaluation_time: float = None):
+                              content_types_list: List[List[str]] = None, evaluation_time: float = None,
+                              token_usage_list: List[dict] = None):
     """
     Zeigt Ergebnisse an und speichert sie.
     
@@ -504,6 +743,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         urls_list: Liste von URL-Listen pro Frage (optional)
         content_types_list: Liste von Content-Type-Listen pro Frage (optional)
         evaluation_time: Gesamtzeit für RAGAS-Evaluation in Sekunden (optional)
+        token_usage_list: Liste von Token-Usage-Dicts pro Frage (optional)
     """
     from datetime import datetime
     
@@ -552,10 +792,20 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     else:
         results_df['latency'] = None
     
+    # Token-Usage hinzufügen (falls vorhanden)
+    if token_usage_list:
+        results_df['prompt_tokens'] = [t.get('prompt_tokens', 0) for t in token_usage_list[:len(results_df)]]
+        results_df['completion_tokens'] = [t.get('completion_tokens', 0) for t in token_usage_list[:len(results_df)]]
+        results_df['total_tokens'] = [t.get('total_tokens', 0) for t in token_usage_list[:len(results_df)]]
+    else:
+        results_df['prompt_tokens'] = None
+        results_df['completion_tokens'] = None
+        results_df['total_tokens'] = None
+    
     # ============================================================================
-    # SOFORT SPEICHERN - Rohdaten CSV (bevor irgendwas schiefgehen kann)
+    # SOFORT SPEICHERN - Rohdaten CSV mit Timestamp (bevor irgendwas schiefgehen kann)
     # ============================================================================
-    output_path_raw = Path(__file__).parent / "data" / "ragas_results_raw.csv"
+    output_path_raw = Path(__file__).parent / "data" / f"ragas_results_raw_{EVAL_TIMESTAMP}.csv"
     try:
         results_df.to_csv(output_path_raw, index=False, encoding='utf-8-sig')
         print(f"\n💾 ROHDATEN GESPEICHERT: {output_path_raw}")
@@ -566,15 +816,24 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     print("📊 RAGAS-EVALUATION ERGEBNISSE")
     print("=" * 80)
     
+    # Alle Metriken (inkl. BERT-Score und Tokens)
+    all_metrics = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 
+                   'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall',
+                   'RR_at5', 'hit_at5', 'latency', 'total_tokens']
+    
     # Gesamtscores
     print("\n📈 Durchschnittliche Scores:")
     print("-" * 80)
-    for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+    for metric in all_metrics:
         if metric in results_df.columns and results_df[metric].notna().any():
             avg = results_df[metric].mean()
             # Anzeigename für Zusammenfassung
-            display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
-            print(f"   {display_name:20s}: {avg:.3f}")
+            display_names = {'RR_at5': 'MRR@5', 'hit_at5': 'Hit@5', 'total_tokens': 'Tokens (avg)'}
+            display_name = display_names.get(metric, metric)
+            if metric == 'total_tokens':
+                print(f"   {display_name:20s}: {avg:.0f}")
+            else:
+                print(f"   {display_name:20s}: {avg:.3f}")
     
     # Nach Kategorie (NaN ausfiltern)
     print("\n📁 Scores nach Kategorie:")
@@ -583,11 +842,21 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     for category in sorted(display_categories):
         cat_df = results_df[results_df['category'] == category]
         print(f"\n   {category}:")
-        for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+        for metric in all_metrics:
             if metric in cat_df.columns and cat_df[metric].notna().any():
                 avg = cat_df[metric].mean()
                 display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
                 print(f"      {display_name:20s}: {avg:.3f}")
+        # Token-Statistiken pro Kategorie
+        if 'prompt_tokens' in cat_df.columns and cat_df['prompt_tokens'].notna().any():
+            avg_input = cat_df['prompt_tokens'].mean()
+            print(f"      {'Tokens (Input)':20s}: {avg_input:.0f}")
+        if 'completion_tokens' in cat_df.columns and cat_df['completion_tokens'].notna().any():
+            avg_output = cat_df['completion_tokens'].mean()
+            print(f"      {'Tokens (Output)':20s}: {avg_output:.0f}")
+        if 'total_tokens' in cat_df.columns and cat_df['total_tokens'].notna().any():
+            avg_total = cat_df['total_tokens'].mean()
+            print(f"      {'Tokens (Gesamt)':20s}: {avg_total:.0f}")
     
     # Nach Schwierigkeit
     print("\n⚡ Scores nach Schwierigkeit:")
@@ -596,14 +865,24 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         diff_df = results_df[results_df['difficulty'] == difficulty]
         if len(diff_df) > 0:
             print(f"\n   {difficulty.upper()}:")
-            for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+            for metric in all_metrics:
                 if metric in diff_df.columns and diff_df[metric].notna().any():
                     avg = diff_df[metric].mean()
                     display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
                     print(f"      {display_name:20s}: {avg:.3f}")
-    
-    # Speichern in CSV (alle Spalten)
-    output_path_csv = Path(__file__).parent / "data" / "ragas_results.csv"
+            # Token-Statistiken pro Schwierigkeit
+            if 'prompt_tokens' in diff_df.columns and diff_df['prompt_tokens'].notna().any():
+                avg_input = diff_df['prompt_tokens'].mean()
+                print(f"      {'Tokens (Input)':20s}: {avg_input:.0f}")
+            if 'completion_tokens' in diff_df.columns and diff_df['completion_tokens'].notna().any():
+                avg_output = diff_df['completion_tokens'].mean()
+                print(f"      {'Tokens (Output)':20s}: {avg_output:.0f}")
+            if 'total_tokens' in diff_df.columns and diff_df['total_tokens'].notna().any():
+                avg_total = diff_df['total_tokens'].mean()
+                print(f"      {'Tokens (Gesamt)':20s}: {avg_total:.0f}")
+
+    # Speichern in CSV mit Timestamp (alle Spalten)
+    output_path_csv = Path(__file__).parent / "data" / f"ragas_results_{EVAL_TIMESTAMP}.csv"
     
     # Berechne Anzahl der Context-Chunks
     results_df['context_count'] = results_df['retrieved_contexts'].apply(lambda x: len(x) if isinstance(x, list) else 0)
@@ -631,11 +910,12 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             lambda x: str(x).replace('\n', ' ').replace('\r', ' ') if x else ''
         )
     
-    # CSV mit allen wichtigen Spalten (erweitert um response_time, urls, content_types und alle Metriken)
+    # CSV mit allen wichtigen Spalten (erweitert um response_time, urls, content_types, alle Metriken inkl. BERT-Score und Tokens)
     csv_columns = ['id', 'category', 'difficulty', 'user_input', 'response', 
                    'reference', 'retrieved_contexts', 'retrieved_urls', 'retrieved_content_types',
                    'faithfulness', 'context_recall', 'context_precision', 'semantic_similarity',
-                   'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency',
+                   'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall',
+                   'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens',
                    'context_count', 'response_time_seconds']
     
     # Nur vorhandene Spalten verwenden
@@ -664,7 +944,9 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     # ============================================================================
     # DURCHSCHNITTE: Gesamt, pro Kategorie, pro Schwierigkeit, kombiniert
     # ============================================================================
-    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']
+    metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 
+                   'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall',
+                   'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens']
     
     # Gesamtdurchschnitt
     avg_row = {col: '' for col in csv_columns}
@@ -731,8 +1013,8 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     # Speichere mit UTF-8-BOM für korrekte Umlaut-Darstellung
     csv_df.to_csv(output_path_csv, index=False, encoding='utf-8-sig', sep=',', quoting=1)
     
-    # Excel mit Formatierung erstellen
-    output_path_excel = Path(__file__).parent / "data" / "ragas_results.xlsx"
+    # Excel mit Formatierung erstellen (mit Timestamp)
+    output_path_excel = Path(__file__).parent / "data" / f"ragas_results_{EVAL_TIMESTAMP}.xlsx"
     
     try:
         from openpyxl import Workbook
@@ -812,17 +1094,31 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'A{row}'].font = Font(bold=True, size=12)
         row += 1
         
-        for metric in ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency']:
+        # Excel-Metriken inkl. BERT-Score und Tokens
+        excel_metrics = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 
+                         'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall', 
+                         'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens']
+        
+        for metric in excel_metrics:
             if metric in results_df.columns and results_df[metric].notna().any():
                 avg = results_df[metric].mean()
                 # Anzeigename für Excel
-                display_name = 'MRR@5' if metric == 'RR_at5' else ('Hit@5' if metric == 'hit_at5' else metric)
+                display_names = {'RR_at5': 'MRR@5', 'hit_at5': 'Hit@5', 'bert_f1': 'BERT-F1', 
+                                 'bert_precision': 'BERT-Precision', 'bert_recall': 'BERT-Recall',
+                                 'prompt_tokens': 'Prompt Tokens (avg)', 'completion_tokens': 'Completion Tokens (avg)',
+                                 'total_tokens': 'Total Tokens (avg)'}
+                display_name = display_names.get(metric, metric)
                 ws_summary[f'A{row}'] = display_name
                 ws_summary[f'B{row}'] = avg
-                ws_summary[f'B{row}'].number_format = '0.000'
                 
-                # Farbe basierend auf Score (nicht für latency)
-                if metric != 'latency':
+                # Token-Metriken als Ganzzahlen formatieren
+                if 'tokens' in metric:
+                    ws_summary[f'B{row}'].number_format = '#,##0'
+                else:
+                    ws_summary[f'B{row}'].number_format = '0.000'
+                
+                # Farbe basierend auf Score (nicht für latency und tokens)
+                if metric not in ['latency', 'prompt_tokens', 'completion_tokens', 'total_tokens']:
                     if avg >= 0.8:
                         ws_summary[f'B{row}'].fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
                     elif avg >= 0.6:
@@ -838,7 +1134,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'A{row}'].font = Font(bold=True, size=12)
         row += 1
         
-        # Header für Kategorie-Tabelle
+        # Header für Kategorie-Tabelle (mit allen 3 BERT-Metriken und Tokens)
         ws_summary[f'A{row}'] = "Kategorie"
         ws_summary[f'B{row}'] = "Faithfulness"
         ws_summary[f'C{row}'] = "Context Recall"
@@ -846,10 +1142,16 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'E{row}'] = "Semantic Similarity"
         ws_summary[f'F{row}'] = "Context Entity Recall"
         ws_summary[f'G{row}'] = "Answer Relevancy"
-        ws_summary[f'H{row}'] = "MRR@5"
-        ws_summary[f'I{row}'] = "Hit@5"
-        ws_summary[f'J{row}'] = "Latency"
-        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
+        ws_summary[f'H{row}'] = "BERT-F1"
+        ws_summary[f'I{row}'] = "BERT-Precision"
+        ws_summary[f'J{row}'] = "BERT-Recall"
+        ws_summary[f'K{row}'] = "MRR@5"
+        ws_summary[f'L{row}'] = "Hit@5"
+        ws_summary[f'M{row}'] = "Latency"
+        ws_summary[f'N{row}'] = "(Input) Tokens"
+        ws_summary[f'O{row}'] = "(Output) Tokens"
+        ws_summary[f'P{row}'] = "Gesamt Tokens"
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']:
             ws_summary[f'{col}{row}'].font = Font(bold=True)
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
@@ -860,12 +1162,15 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             cat_df = results_df[results_df['category'] == category]
             ws_summary[f'A{row}'] = category
             
-            for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency'], 1):
+            for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall', 'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens'], 1):
                 if metric in cat_df.columns:
                     avg = cat_df[metric].mean()
-                    col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J
+                    col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J, K, L, M, N, O, P
                     ws_summary[f'{col_letter}{row}'] = avg
-                    ws_summary[f'{col_letter}{row}'].number_format = '0.000'
+                    if metric in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
+                        ws_summary[f'{col_letter}{row}'].number_format = '#,##0'
+                    else:
+                        ws_summary[f'{col_letter}{row}'].number_format = '0.000'
             
             row += 1
         
@@ -875,7 +1180,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'A{row}'].font = Font(bold=True, size=12)
         row += 1
         
-        # Header
+        # Header (mit allen 3 BERT-Metriken und Tokens)
         ws_summary[f'A{row}'] = "Schwierigkeit"
         ws_summary[f'B{row}'] = "Faithfulness"
         ws_summary[f'C{row}'] = "Context Recall"
@@ -883,10 +1188,16 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'E{row}'] = "Semantic Similarity"
         ws_summary[f'F{row}'] = "Context Entity Recall"
         ws_summary[f'G{row}'] = "Answer Relevancy"
-        ws_summary[f'H{row}'] = "MRR@5"
-        ws_summary[f'I{row}'] = "Hit@5"
-        ws_summary[f'J{row}'] = "Latency"
-        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']:
+        ws_summary[f'H{row}'] = "BERT-F1"
+        ws_summary[f'I{row}'] = "BERT-Precision"
+        ws_summary[f'J{row}'] = "BERT-Recall"
+        ws_summary[f'K{row}'] = "MRR@5"
+        ws_summary[f'L{row}'] = "Hit@5"
+        ws_summary[f'M{row}'] = "Latency"
+        ws_summary[f'N{row}'] = "(Input) Tokens"
+        ws_summary[f'O{row}'] = "(Output) Tokens"
+        ws_summary[f'P{row}'] = "Gesamt Tokens"
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']:
             ws_summary[f'{col}{row}'].font = Font(bold=True)
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
@@ -896,16 +1207,19 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             if len(diff_df) > 0:
                 ws_summary[f'A{row}'] = difficulty.upper()
                 
-                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'RR_at5', 'hit_at5', 'latency'], 1):
+                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall', 'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens'], 1):
                     if metric in diff_df.columns:
                         avg = diff_df[metric].mean()
-                        col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J
+                        col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J, K, L, M, N, O, P
                         ws_summary[f'{col_letter}{row}'] = avg
-                        ws_summary[f'{col_letter}{row}'].number_format = '0.000'
+                        if metric in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
+                            ws_summary[f'{col_letter}{row}'].number_format = '#,##0'
+                        else:
+                            ws_summary[f'{col_letter}{row}'].number_format = '0.000'
                 
                 row += 1
         
-        # Spaltenbreiten für Zusammenfassung
+        # Spaltenbreiten für Zusammenfassung (erweitert um alle 3 BERT-Metriken und Tokens)
         ws_summary.column_dimensions['A'].width = 30
         ws_summary.column_dimensions['B'].width = 15
         ws_summary.column_dimensions['C'].width = 18
@@ -913,9 +1227,15 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary.column_dimensions['E'].width = 20
         ws_summary.column_dimensions['F'].width = 22
         ws_summary.column_dimensions['G'].width = 18
-        ws_summary.column_dimensions['H'].width = 10
-        ws_summary.column_dimensions['I'].width = 10
-        ws_summary.column_dimensions['J'].width = 10
+        ws_summary.column_dimensions['H'].width = 12  # BERT-F1
+        ws_summary.column_dimensions['I'].width = 16  # BERT-Precision
+        ws_summary.column_dimensions['J'].width = 14  # BERT-Recall
+        ws_summary.column_dimensions['K'].width = 10  # MRR@5
+        ws_summary.column_dimensions['L'].width = 10  # Hit@5
+        ws_summary.column_dimensions['M'].width = 10  # Latency
+        ws_summary.column_dimensions['N'].width = 16  # (Input) Tokens
+        ws_summary.column_dimensions['O'].width = 17  # (Output) Tokens
+        ws_summary.column_dimensions['P'].width = 14  # Gesamt Tokens
         
         # Speichern
         wb.save(output_path_excel)
@@ -941,13 +1261,22 @@ def main():
     print("🎯 RAGAS-EVALUATION - WiSo-Chatbot")
     print("=" * 80 + "\n")
     
-    # Checkpoint-Pfad
-    checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
+    # Zeige Evaluationsmodus
+    if RUN_EVALUATION_LOCAL:
+        print(f"⚙️ Evaluationsmodus: LOKAL (Ollama: {RAGAS_EVAL_MODEL})")
+    else:
+        print(f"⚙️ Evaluationsmodus: CLOUD (OpenAI: {OPENAI_EVAL_MODEL})")
+    print(f"📁 Timestamp: {EVAL_TIMESTAMP}")
+    print()
     
-    # Variablen für Timing, URLs und Content-Types initialisieren
+    # Checkpoint-Pfad mit Timestamp (gleicher wie in generate_chatbot_responses)
+    checkpoint_path = Path(__file__).parent / "data" / f"responses_checkpoint_{EVAL_TIMESTAMP}.pkl"
+    
+    # Variablen für Timing, URLs, Content-Types und Token-Usage initialisieren
     response_times = None
     urls_list = None
     content_types_list = None
+    token_usage_list = None
     dataset = None
     checkpoint_complete = False
     
@@ -976,6 +1305,7 @@ def main():
                 response_times = checkpoint_data.get('response_times', None)
                 urls_list = checkpoint_data.get('urls_list', None)
                 content_types_list = checkpoint_data.get('content_types_list', None)
+                token_usage_list = checkpoint_data.get('token_usage_list', None)
                 
                 # Prüfe ob Checkpoint vollständig ist
                 if saved_dataset and hasattr(saved_dataset, 'samples'):
@@ -1006,7 +1336,7 @@ def main():
             print()
             
             # Antworten generieren (setzt bei Checkpoint fort)
-            dataset, response_times, urls_list, content_types_list = generate_chatbot_responses(test_df, agent, langsmith_client)
+            dataset, response_times, urls_list, content_types_list, token_usage_list = generate_chatbot_responses(test_df, agent, langsmith_client)
             
             # ====================================================================
             # CHATBOT-MODELL ENTLADEN (GPU-Speicher freigeben vor RAGAS)
@@ -1016,13 +1346,18 @@ def main():
             gc.collect()  # Garbage Collection
             stop_ollama_model(OLLAMA_MODEL)  # LLM via CLI stoppen
             stop_embedding_model()  # Embedding-Modell (BGE-M3) freigeben
+            
+            # Bei lokaler Evaluation: Warte kurz damit GPU-Speicher freigegeben wird
+            if RUN_EVALUATION_LOCAL:
+                print("   ⏳ Warte 2s für GPU-Speicherfreigabe...")
+                time.sleep(2)
             print()
         
-        # 5. RAGAS-Evaluation (immer ausführen, jetzt mit Timing)
+        # 5. RAGAS-Evaluation (immer ausführen, Modus aus Config)
         results_df, evaluation_time = run_ragas_evaluation(dataset)
         
-        # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten)
-        display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time)
+        # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten inkl. Token-Usage)
+        display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time, token_usage_list)
         
         print("✅ Evaluation erfolgreich abgeschlossen!")
         

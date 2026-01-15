@@ -47,7 +47,10 @@ from config.settings import (
     TEMPERATURE,
     CONTEXT_WINDOW,
     RANDOM_SEED,
-    SENTENCE_TRANSFORMER_MODEL
+    SENTENCE_TRANSFORMER_MODEL,
+    OPENAI_API_KEY,
+    OPENAI_EVAL_MODEL,
+    RUN_EVALUATION_LOCAL
 )
 from src.agent.react_agent import create_react_agent
 
@@ -418,35 +421,88 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     return EvaluationDataset(samples=samples), response_times, urls_list
 
 
-def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[str] = None) -> tuple:
+def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[str] = None, run_local: bool = None) -> tuple:
     """
     Führt RAGAS-Evaluation durch.
+    Unterstützt sowohl lokale Ollama-Modelle als auch OpenAI Cloud-Modelle für den LLM-Judge.
+    Embeddings werden IMMER lokal mit Ollama berechnet.
     
     Args:
         dataset: Das EvaluationDataset mit den Samples
         metrics_to_compute: Optional - Liste der zu berechnenden Metriken.
                            Falls None, werden alle berechnet.
-                           Mögliche Werte: 'faithfulness', 'context_recall', 'context_precision'
+        run_local: True = lokales Ollama, False = OpenAI Cloud, None = aus Config
     
     Returns:
         Tuple (results_df, evaluation_time): DataFrame mit Ergebnissen und Evaluationszeit in Sekunden
     """
+    # Bestimme Modus (Parameter überschreibt Config)
+    use_local = run_local if run_local is not None else RUN_EVALUATION_LOCAL
+    
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
-    # Separates LLM für RAGAS-Evaluation (gleiches Setup wie Chatbot, nur anderes Modell)
-    llm = ChatOllama(
-        model=RAGAS_EVAL_MODEL,  # Separates Modell für Evaluation
-        base_url=OLLAMA_BASE_URL,
-        temperature=TEMPERATURE,  # Gleiche Parameter wie Chatbot
-        seed=RANDOM_SEED,
-        num_ctx=CONTEXT_WINDOW
-    )
-    print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
-    print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
+    if use_local:
+        # ====================================================================
+        # LOKALE EVALUATION mit Ollama LLM
+        # ====================================================================
+        print("   🏠 Modus: LOKAL (Ollama LLM)")
+        
+        llm = ChatOllama(
+            model=RAGAS_EVAL_MODEL,
+            base_url=OLLAMA_BASE_URL,
+            temperature=TEMPERATURE,
+            seed=RANDOM_SEED,
+            num_ctx=CONTEXT_WINDOW
+        )
+        print(f"   RAGAS-LLM: {RAGAS_EVAL_MODEL} @ {OLLAMA_BASE_URL} (ctx={CONTEXT_WINDOW}, temp={TEMPERATURE}, seed={RANDOM_SEED})")
+        print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
+        
+        # RunConfig für Ollama-Evaluation
+        run_config = RunConfig(
+            max_workers=4,
+            timeout=300,
+            max_retries=3,
+            max_wait=30,
+            seed=RANDOM_SEED
+        )
+    else:
+        # ====================================================================
+        # CLOUD EVALUATION mit OpenAI (nur LLM, Embeddings bleiben lokal!)
+        # ====================================================================
+        print("   ☁️ Modus: CLOUD (OpenAI LLM)")
+        
+        if not OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY nicht gesetzt! Bitte in .env konfigurieren.")
+        
+        from langchain_openai import ChatOpenAI
+        
+        # OpenAI LLM für RAGAS-Evaluation (nur der Judge!)
+        # HINWEIS: gpt-5-nano unterstützt NUR temperature=1.0!
+        from ragas.llms import LangchainLLMWrapper
+        
+        openai_llm = ChatOpenAI(
+            model=OPENAI_EVAL_MODEL,
+            api_key=OPENAI_API_KEY,
+            temperature=1.0  # gpt-5-nano erlaubt nur 1.0!
+        )
+        # bypass_temperature=True verhindert, dass RAGAS die Temperature überschreibt
+        llm = LangchainLLMWrapper(openai_llm, bypass_temperature=True)
+        print(f"   RAGAS-LLM: {OPENAI_EVAL_MODEL} (OpenAI Cloud, temp=1.0, bypass_temperature=True)")
+        print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
+        
+        # RunConfig für OpenAI-Evaluation
+        run_config = RunConfig(
+            max_workers=8,
+            timeout=180,
+            max_retries=3,
+            max_wait=30,
+            seed=RANDOM_SEED
+        )
     
-    # HuggingFace Embeddings für semantic_similarity und response_relevancy
-    # Verwende Ollama embeddinggemma für schnelle Evaluation
+    # ========================================================================
+    # EMBEDDINGS: IMMER lokal mit Ollama (unabhängig vom LLM-Modus)
+    # ========================================================================
     RAGAS_EMBEDDING_MODEL = "embeddinggemma"
     RAGAS_MAX_SEQ_LENGTH = 1024
     
@@ -456,7 +512,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
         num_ctx=RAGAS_MAX_SEQ_LENGTH
     )
     embeddings = LangchainEmbeddingsWrapper(ollama_embeddings)
-    print(f"   Embeddings: {RAGAS_EMBEDDING_MODEL} @ {OLLAMA_BASE_URL} (max_seq_length={RAGAS_MAX_SEQ_LENGTH}, für semantic_similarity, response_relevancy)")
+    print(f"   Embeddings: {RAGAS_EMBEDDING_MODEL} @ {OLLAMA_BASE_URL} (LOKAL, max_seq_length={RAGAS_MAX_SEQ_LENGTH})")
     print(f"   (RAG verwendet: {SENTENCE_TRANSFORMER_MODEL})")
     
     # SemanticSimilarity Metrik mit Embeddings
@@ -486,18 +542,10 @@ def run_ragas_evaluation(dataset: EvaluationDataset, metrics_to_compute: List[st
     
     print(f"   Metriken: {[m.name for m in metrics]}")
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
-    print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
-    
-    # RunConfig mit erhöhtem Timeout für Ollama (lokale GPU kann langsam sein)
-    # seed=RANDOM_SEED für Reproduzierbarkeit (RAGAS verwendet numpy RNG intern)
-    # timeout=240 für längere Metrik-Berechnungen (noise_sensitivity, response_relevancy)
-    run_config = RunConfig(
-        max_workers=15,  # Reduziert von 4 auf 2 für weniger GPU-Last
-        timeout=240,  # 4 Minuten Timeout pro Request
-        max_retries=3,
-        max_wait=30,  # Max 30 Sekunden warten zwischen Retries
-        seed=RANDOM_SEED  # Seed für numpy RNG in RAGAS
-    )
+    if use_local:
+        print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
+    else:
+        print(f"   💡 OpenAI Cloud: ca. 10-30 Sek pro Sample\n")
     
     # Zeit messen für Evaluation
     eval_start = time.time()
@@ -735,6 +783,13 @@ def main():
     print("\n" + "=" * 80)
     print("🎯 RAGAS-EVALUATION - Spezifische Indizes")
     print("=" * 80 + "\n")
+    
+    # Zeige Evaluationsmodus
+    if RUN_EVALUATION_LOCAL:
+        print(f"⚙️ Evaluationsmodus: LOKAL (Ollama: {RAGAS_EVAL_MODEL})")
+    else:
+        print(f"⚙️ Evaluationsmodus: CLOUD (OpenAI: {OPENAI_EVAL_MODEL})")
+    print()
     
     # Auto-Detect fehlgeschlagene und fehlende IDs wenn aktiviert
     indices_to_eval = SPECIFIC_INDICES.copy()
