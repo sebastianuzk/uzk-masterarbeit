@@ -3,10 +3,14 @@
 Vollständiges Evaluierungsskript für den WiSo-Chatbot
 
 Führt Tool- und/oder RAGAS-Evaluation für verschiedene Modelle durch.
+Unterstützt sowohl lokale Ollama-Modelle als auch OpenAI API-Modelle.
 
 Verwendung:
-    # Einzelnes Modell, beide Evaluationen
+    # Einzelnes Modell, beide Evaluationen (Ollama)
     python -m eval.run_full_evaluation --model llama3.1:8b
+    
+    # OpenAI-Modell verwenden
+    python -m eval.run_full_evaluation --model gpt-4o-mini --provider openai
     
     # Nur Tool-Evaluation
     python -m eval.run_full_evaluation --model llama3.1:8b --mode tools
@@ -19,6 +23,9 @@ Verwendung:
     
     # Mit bestimmtem Agent-Typ
     python -m eval.run_full_evaluation --model llama3.1:8b --agent single
+    
+    # OpenAI mit spezifischem Agent
+    python -m eval.run_full_evaluation --model gpt-4o --provider openai --agent single
 
 Ergebnisse: data/eval/final/<modell>/
 """
@@ -42,17 +49,48 @@ from config.settings import settings
 # KONFIGURATION
 # ============================================================================
 
-# Verfügbare Modelle für Evaluation
+# Verfügbare LLM-Provider
+LLM_PROVIDERS = ["ollama", "openai"]
+
+# Verfügbare Modelle für Evaluation (nach Provider gruppiert)
 AVAILABLE_MODELS = {
+    # Ollama-Modelle
     "llama3.1:8b": {
         "name": "LLaMA 3.1 8B",
         "ctx_size": 8192,
-        "description": "Meta's LLaMA 3.1 mit 8B Parametern"
+        "description": "Meta's LLaMA 3.1 mit 8B Parametern",
+        "provider": "ollama"
     },
     "gpt-oss:20b": {
         "name": "GPT-OSS 20B", 
         "ctx_size": 16384,
-        "description": "Open-Source GPT-Variante mit 20B Parametern"
+        "description": "Open-Source GPT-Variante mit 20B Parametern",
+        "provider": "ollama"
+    },
+    # OpenAI-Modelle
+    "gpt-4o": {
+        "name": "GPT-4o",
+        "ctx_size": 128000,
+        "description": "OpenAI GPT-4o (multimodal, schnell)",
+        "provider": "openai"
+    },
+    "gpt-4o-mini": {
+        "name": "GPT-4o Mini",
+        "ctx_size": 128000,
+        "description": "OpenAI GPT-4o Mini (kosteneffizient)",
+        "provider": "openai"
+    },
+    "gpt-4-turbo": {
+        "name": "GPT-4 Turbo",
+        "ctx_size": 128000,
+        "description": "OpenAI GPT-4 Turbo",
+        "provider": "openai"
+    },
+    "gpt-3.5-turbo": {
+        "name": "GPT-3.5 Turbo",
+        "ctx_size": 16385,
+        "description": "OpenAI GPT-3.5 Turbo (günstig)",
+        "provider": "openai"
     },
 }
 
@@ -379,11 +417,20 @@ def _generate_html_report(agent_results: List[Dict], model: str) -> str:
     return html
 
 
-def ensure_model_available(model: str) -> bool:
-    """Prüft ob Modell in Ollama verfügbar ist."""
+def ensure_model_available(model: str, provider: str = "ollama") -> bool:
+    """Prüft ob Modell verfügbar ist.
+    
+    Args:
+        model: Modellname
+        provider: 'ollama' oder 'openai'
+    """
+    if provider == "openai":
+        # Bei OpenAI prüfen wir nur ob API-Key vorhanden ist
+        return bool(settings.OPENAI_API_KEY)
+    
+    # Ollama: Prüfe ob Modell lokal verfügbar ist
     import requests
     try:
-        # Verwende API statt lokaler Befehle (funktioniert auch für Remote-Server)
         response = requests.get(
             f"{settings.OLLAMA_BASE_URL}/api/tags",
             timeout=10
@@ -397,15 +444,45 @@ def ensure_model_available(model: str) -> bool:
         return False
 
 
-def pull_model_if_needed(model: str) -> bool:
-    """Lädt Modell herunter falls nicht vorhanden."""
-    if ensure_model_available(model):
+def pull_model_if_needed(model: str, provider: str = "ollama") -> bool:
+    """Lädt Modell herunter falls nicht vorhanden.
+    
+    Args:
+        model: Modellname
+        provider: 'ollama' oder 'openai'
+    """
+    if provider == "openai":
+        # OpenAI: Prüfe API-Key und validiere Modell
+        if not settings.OPENAI_API_KEY:
+            print(f"❌ OPENAI_API_KEY nicht gesetzt! Bitte in .env konfigurieren.")
+            return False
+        
+        # Validiere Modellname gegen bekannte OpenAI-Modelle
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            
+            # Liste verfügbare Modelle
+            models_response = client.models.list()
+            available_models = [m.id for m in models_response.data]
+            
+            if model not in available_models:
+                print(f"❌ Modell '{model}' ist nicht verfügbar in Ihrem OpenAI Account!")
+                print(f"   Verfügbare Modelle: {', '.join([m for m in available_models if m.startswith('gpt')])[:100]}...")
+                return False
+            
+            return True
+        except Exception as e:
+            print(f"❌ Fehler beim Validieren des OpenAI-Modells: {e}")
+            return False
+    
+    # Ollama: Prüfe und lade bei Bedarf
+    if ensure_model_available(model, provider):
         return True
     
     print(f"⬇️  Lade Modell {model} herunter...")
     import requests
     try:
-        # Verwende API für Pull (funktioniert auch für Remote-Server)
         response = requests.post(
             f"{settings.OLLAMA_BASE_URL}/api/pull",
             json={"name": model, "stream": True},
@@ -435,10 +512,42 @@ def pull_model_if_needed(model: str) -> bool:
         return False
 
 
-def set_model_in_settings(model: str):
-    """Setzt das aktive Modell in den Settings."""
-    os.environ["OLLAMA_MODEL"] = model
-    settings.OLLAMA_MODEL = model
+def set_model_in_settings(model: str, provider: str = "ollama"):
+    """Setzt das aktive Modell und den Provider in den Settings.
+    
+    Args:
+        model: Modellname
+        provider: 'ollama' oder 'openai'
+    """
+    os.environ["LLM_PROVIDER"] = provider
+    settings.LLM_PROVIDER = provider
+    
+    if provider == "openai":
+        os.environ["OPENAI_MODEL"] = model
+        settings.OPENAI_MODEL = model
+    else:
+        os.environ["OLLAMA_MODEL"] = model
+        settings.OLLAMA_MODEL = model
+
+
+def get_provider_for_model(model: str) -> str:
+    """Ermittelt den Provider für ein Modell aus AVAILABLE_MODELS.
+    
+    Args:
+        model: Modellname
+        
+    Returns:
+        Provider-String ('ollama' oder 'openai')
+    """
+    if model in AVAILABLE_MODELS:
+        return AVAILABLE_MODELS[model].get("provider", "ollama")
+    
+    # Heuristik: GPT-Modelle sind OpenAI
+    if model.startswith("gpt-"):
+        return "openai"
+    
+    # Default: Ollama
+    return "ollama"
 
 
 # ============================================================================
@@ -451,18 +560,20 @@ def run_tool_evaluation(
     output_dir: Path,
     limit: Optional[int] = None,
     test_ids: Optional[List[str]] = None,
-    enable_trace: bool = False
+    enable_trace: bool = False,
+    provider: str = "ollama"
 ) -> Dict[str, Any]:
     """
     Führt die Tool-Evaluation durch.
     
     Args:
-        model: Ollama-Modellname
+        model: Modellname (Ollama oder OpenAI)
         agent_type: Agent-Typ (single, multi, etc.)
         output_dir: Ausgabeverzeichnis
         limit: Optionale Begrenzung der Test-Szenarien
         test_ids: Optionale Liste spezifischer Test-IDs (short_ids)
         enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
+        provider: LLM-Provider ('ollama' oder 'openai')
     
     Returns:
         Dictionary mit Evaluationsergebnissen
@@ -473,8 +584,8 @@ def run_tool_evaluation(
     
     start_time = time.time()
     
-    # Setze Modell
-    set_model_in_settings(model)
+    # Setze Modell und Provider
+    set_model_in_settings(model, provider)
     
     # Importiere nach Modell-Setting
     from eval.core.runner import (
@@ -532,8 +643,18 @@ def run_tool_evaluation(
     results = []
     
     for i, scenario in enumerate(scenarios, 1):
-        # Kompakte Ausgabe: alles in einer Zeile wie eval_old
-        print(f"[{i}/{len(scenarios)}] {scenario.short_id}...", end=" ", flush=True)
+        # Kompakte Ausgabe mit Testname: alles in einer Zeile wie eval_old
+        # Extrahiere kurzen Namen aus description (erste Zeile des Docstrings)
+        test_name = ""
+        if scenario.description:
+            first_line = scenario.description.strip().split('\n')[0].strip()
+            # Entferne "EASY:", "MEDIUM:", etc. und kürze auf max 40 Zeichen
+            test_name = first_line.replace("EASY:", "").replace("MEDIUM:", "").replace("HARD:", "").replace("MULTI_STEP:", "").strip()
+            if len(test_name) > 40:
+                test_name = test_name[:37] + "..."
+        
+        display_name = f"{scenario.short_id} ({test_name})" if test_name else scenario.short_id
+        print(f"[{i}/{len(scenarios)}] {display_name}...", end=" ", flush=True)
         
         try:
             result = run_single_scenario(agent, scenario, enable_trace=enable_trace)
@@ -619,16 +740,18 @@ def run_rag_evaluation(
     model: str,
     agent_type: str,
     output_dir: Path,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    provider: str = "ollama"
 ) -> Dict[str, Any]:
     """
     Führt die RAGAS-Evaluation durch.
     
     Args:
-        model: Ollama-Modellname
+        model: Modellname (Ollama oder OpenAI)
         agent_type: Agent-Typ (single, multi, etc.)
         output_dir: Ausgabeverzeichnis
         limit: Optionale Begrenzung der Testfragen
+        provider: LLM-Provider ('ollama' oder 'openai')
     
     Returns:
         Dictionary mit RAGAS-Ergebnissen
@@ -639,8 +762,8 @@ def run_rag_evaluation(
     
     start_time = time.time()
     
-    # Setze Modell
-    set_model_in_settings(model)
+    # Setze Modell und Provider
+    set_model_in_settings(model, provider)
     
     # Importiere RAGAS-Komponenten
     from eval.ragas.ragas_evaluation import (
@@ -762,13 +885,14 @@ def run_full_evaluation(
     tool_limit: Optional[int] = None,
     output_dir: Optional[Path] = None,
     test_ids: Optional[List[str]] = None,
-    enable_trace: bool = False
+    enable_trace: bool = False,
+    provider: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Führt die vollständige Evaluation für ein Modell durch.
     
     Args:
-        model: Ollama-Modellname
+        model: Modellname (Ollama oder OpenAI)
         agent_type: Agent-Typ
         mode: "all", "tools", oder "rag"
         rag_limit: Optionale Begrenzung für RAGAS-Testfragen
@@ -776,10 +900,15 @@ def run_full_evaluation(
         output_dir: Optionales Ausgabeverzeichnis (wenn None, wird neuer Timestamp erstellt)
         test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
         enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
+        provider: LLM-Provider ('ollama' oder 'openai', wenn None wird automatisch ermittelt)
     
     Returns:
         Zusammenfassung aller Ergebnisse
     """
+    # Provider automatisch ermitteln falls nicht angegeben
+    if provider is None:
+        provider = get_provider_for_model(model)
+    
     model_safe = get_model_safe_name(model)  # Für Hauptordner (lesbar: llama3.1-8b)
     model_folder = get_model_folder_name(model)  # Für Unterordner (llama3_1_8b)
     
@@ -794,6 +923,7 @@ def run_full_evaluation(
     print("🎯 VOLLSTÄNDIGE EVALUATION")
     print("=" * 80)
     print(f"   Modell:    {model}")
+    print(f"   Provider:  {provider}")
     print(f"   Agent:     {agent_type}")
     print(f"   Modus:     {mode}")
     print(f"   Ausgabe:   {output_dir}")
@@ -802,6 +932,7 @@ def run_full_evaluation(
     start_time = time.time()
     results = {
         "model": model,
+        "provider": provider,
         "agent_type": agent_type,
         "mode": mode,
         "timestamp": timestamp,
@@ -809,8 +940,8 @@ def run_full_evaluation(
     }
     
     # Modell prüfen/laden
-    print(f"\n⏳ Prüfe Modell {model}...")
-    if not pull_model_if_needed(model):
+    print(f"\n⏳ Prüfe Modell {model} ({provider})...")
+    if not pull_model_if_needed(model, provider):
         print(f"❌ Modell {model} nicht verfügbar!")
         return results
     print(f"   ✅ Modell bereit")
@@ -824,7 +955,8 @@ def run_full_evaluation(
                 output_dir, 
                 limit=tool_limit,
                 test_ids=test_ids,
-                enable_trace=enable_trace
+                enable_trace=enable_trace,
+                provider=provider
             )
         except Exception as e:
             print(f"\n❌ Tool-Evaluation fehlgeschlagen: {e}")
@@ -833,7 +965,7 @@ def run_full_evaluation(
     # RAGAS-Evaluation
     if mode in ("all", "rag"):
         try:
-            results["ragas"] = run_rag_evaluation(model, agent_type, output_dir, limit=rag_limit)
+            results["ragas"] = run_rag_evaluation(model, agent_type, output_dir, limit=rag_limit, provider=provider)
         except Exception as e:
             print(f"\n❌ RAGAS-Evaluation fehlgeschlagen: {e}")
             results["ragas"] = {"error": str(e)}
@@ -930,16 +1062,26 @@ def run_all_agents_evaluation(
     tool_limit: Optional[int] = None,
     agents: Optional[List[str]] = None,
     test_ids: Optional[List[str]] = None,
-    enable_trace: bool = False
+    enable_trace: bool = False,
+    provider: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Führt Evaluation für alle Agent-Typen durch.
     
     Args:
+        model: Modellname (Ollama oder OpenAI)
+        mode: Evaluationsmodus ('all', 'tools', 'rag')
+        rag_limit: Optionale Begrenzung für RAGAS-Testfragen
+        tool_limit: Optionale Begrenzung für Tool-Szenarien
         agents: Liste von Agenten (default: alle aus AGENT_TYPES)
         test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
         enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
+        provider: LLM-Provider ('ollama' oder 'openai', wenn None wird automatisch ermittelt)
     """
+    # Provider automatisch ermitteln falls nicht angegeben
+    if provider is None:
+        provider = get_provider_for_model(model)
+    
     # Verwende custom Agenten-Liste oder alle
     agent_list = agents if agents else AGENT_TYPES
     
@@ -947,6 +1089,7 @@ def run_all_agents_evaluation(
     print("🎯 EVALUATION ALLER AGENT-ARCHITEKTUREN")
     print("=" * 80)
     print(f"   Modell:    {model}")
+    print(f"   Provider:  {provider}")
     print(f"   Agents:    {agent_list}")
     print(f"   Modus:     {mode}")
     print("=" * 80)
@@ -976,7 +1119,8 @@ def run_all_agents_evaluation(
                 tool_limit=tool_limit,
                 output_dir=shared_output_dir,
                 test_ids=test_ids,
-                enable_trace=enable_trace
+                enable_trace=enable_trace,
+                provider=provider
             )
         except Exception as e:
             print(f"\n❌ Evaluation für {agent_type} fehlgeschlagen: {e}")
@@ -1028,8 +1172,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Beispiele:
-  # Einzelnes Modell, alle Agenten
+  # Einzelnes Modell, alle Agenten (Ollama)
   python -m eval.run_full_evaluation --model llama3.1:8b
+  
+  # OpenAI-Modell verwenden
+  python -m eval.run_full_evaluation --model gpt-4o-mini --provider openai
   
   # Nur ein Agent
   python -m eval.run_full_evaluation --model llama3.1:8b --agent single
@@ -1039,6 +1186,9 @@ Beispiele:
   
   # Mit Limits
   python -m eval.run_full_evaluation --model llama3.1:8b --tool-limit 20 --rag-limit 20
+  
+  # OpenAI GPT-4o mit Tool-Evaluation
+  python -m eval.run_full_evaluation --model gpt-4o --provider openai --mode tools
         """
     )
     
@@ -1046,7 +1196,15 @@ Beispiele:
         "--model", "-m",
         type=str,
         default="llama3.1:8b",
-        help=f"Ollama-Modell (verfügbar: {', '.join(AVAILABLE_MODELS.keys())})"
+        help=f"Modellname (verfügbar: {', '.join(AVAILABLE_MODELS.keys())})"
+    )
+    
+    parser.add_argument(
+        "--provider", "-p",
+        type=str,
+        choices=LLM_PROVIDERS,
+        default=None,
+        help="LLM-Provider: 'ollama' (lokal) oder 'openai' (API). Wenn nicht angegeben, wird automatisch ermittelt."
     )
     
     parser.add_argument(
@@ -1114,9 +1272,12 @@ Beispiele:
         models_to_eval = list(AVAILABLE_MODELS.keys()) if args.all_models else [args.model]
         
         for model in models_to_eval:
+            # Provider ermitteln (aus Argument oder automatisch)
+            provider = args.provider if args.provider else get_provider_for_model(model)
+            
             if len(models_to_eval) > 1:
                 print("\n" + "#" * 80)
-                print(f"# MODELL: {model}")
+                print(f"# MODELL: {model} ({provider})")
                 print("#" * 80)
             
             if args.agents:
@@ -1128,7 +1289,8 @@ Beispiele:
                     tool_limit=args.tool_limit,
                     agents=args.agents,
                     test_ids=args.test_ids,
-                    enable_trace=args.enable_trace
+                    enable_trace=args.enable_trace,
+                    provider=provider
                 )
             elif args.agent == "all":
                 # Alle Agent-Architekturen evaluieren
@@ -1138,7 +1300,8 @@ Beispiele:
                     rag_limit=args.rag_limit,
                     tool_limit=args.tool_limit,
                     test_ids=args.test_ids,
-                    enable_trace=args.enable_trace
+                    enable_trace=args.enable_trace,
+                    provider=provider
                 )
             else:
                 # Einzelnen Agent evaluieren
@@ -1149,7 +1312,8 @@ Beispiele:
                     rag_limit=args.rag_limit,
                     tool_limit=args.tool_limit,
                     test_ids=args.test_ids,
-                    enable_trace=args.enable_trace
+                    enable_trace=args.enable_trace,
+                    provider=provider
                 )
     except KeyboardInterrupt:
         print("\n\n⚠️  Evaluation abgebrochen!")

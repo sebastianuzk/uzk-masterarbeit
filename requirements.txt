@@ -7,6 +7,8 @@ langgraph>=0.0.26
 langchain-community>=0.0.13
 langchain-core>=0.1.0
 langchain-ollama>=0.1.0
+langchain-openai>=0.1.0           # OpenAI API Support
+openai>=1.0.0                     # OpenAI Python SDK for model validation
 
 # Configuration & Environment
 langsmith>=0.1.0

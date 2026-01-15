@@ -51,9 +51,9 @@ class ToolDecision(BaseModel):
     action: str = Field(
         description="'tool' wenn ein Tool aufgerufen werden soll, 'respond' für direkte Antwort, 'insufficient_data' wenn Daten fehlen"
     )
-    tool_name: Optional[str] = Field(
+    tool_names: Optional[List[str]] = Field(
         default=None,
-        description="Name des Tools (nur wenn action='tool')"
+        description="Liste der Tool-Namen (nur wenn action='tool'). Kann ein oder mehrere Tools enthalten."
     )
     reason: Optional[str] = Field(
         default=None,
@@ -70,6 +70,16 @@ class ToolDecision(BaseModel):
         if v not in ('tool', 'respond', 'insufficient_data'):
             raise ValueError("action must be 'tool', 'respond', or 'insufficient_data'")
         return v
+    
+    @field_validator('tool_names')
+    @classmethod
+    def validate_tool_names(cls, v, info):
+        """Stelle sicher, dass tool_names bei action='tool' vorhanden ist."""
+        action = info.data.get('action')
+        if action == 'tool' and not v:
+            raise ValueError("tool_names muss gesetzt sein wenn action='tool'")
+        # Bei insufficient_data ist tool_names optional (zeigt an welches Tool gemeint war)
+        return v
 
 
 class RegisterToolCall(BaseModel):
@@ -82,6 +92,14 @@ class RegisterToolCall(BaseModel):
     staatsangehoerigkeit: str = Field(description="Staatsangehörigkeit")
     geburtsname: Optional[str] = Field(default=None, description="Geburtsname falls abweichend")
     sprache: str = Field(default="Deutsch", description="Deutsch oder Englisch")
+
+    @field_validator('vorname', 'nachname')
+    @classmethod
+    def validate_not_empty(cls, v, info):
+        """Verhindere leere Strings für kritische Felder."""
+        if not v or not v.strip():
+            raise ValueError(f"{info.field_name} darf nicht leer sein")
+        return v.strip()
 
     @field_validator('geburtsdatum')
     @classmethod
@@ -155,6 +173,14 @@ class ApplyToolCall(BaseModel):
     prev_semesters: Optional[str] = Field(default=None)
     validate_only: bool = Field(default=False)
 
+    @field_validator('username', 'password', 'nationality', 'hzb_name')
+    @classmethod
+    def validate_not_empty(cls, v, info):
+        """Verhindere leere Strings für kritische Felder."""
+        if not v or not v.strip():
+            raise ValueError(f"{info.field_name} darf nicht leer sein")
+        return v.strip()
+
 
 class ChangeAddressToolCall(BaseModel):
     """Schema für klips2_change_address Tool-Aufruf."""
@@ -195,7 +221,6 @@ class SearchToolCall(BaseModel):
     """Schema für Suchanfragen (RAG, DuckDuckGo)."""
     query: str = Field(description="Suchanfrage")
 
-
 class WebScraperToolCall(BaseModel):
     """Schema für web_scraper Tool-Aufruf."""
     url: str = Field(description="URL der Webseite")
@@ -211,8 +236,8 @@ class WebScraperToolCall(BaseModel):
 
 class EmailToolCall(BaseModel):
     """Schema für send_email Tool-Aufruf."""
-    subject: str = Field(description="Betreff der E-Mail")
-    body: str = Field(description="Nachrichteninhalt")
+    subject:  Optional[str] = Field(description="Betreff der E-Mail")
+    body:  Optional[str] = Field(description="Nachrichteninhalt")
 
 
 class DirectResponse(BaseModel):
@@ -395,7 +420,7 @@ class ConstrainedAgent:
             "klips2_change_password": ["username", "old_password", "new_password"],
             "klips2_change_address": ["username", "password", "street", "zip_code", "city", "country"],
             "klips2_get_course_details": ["course_number"],
-            "send_email": ["recipient", "subject", "body"],
+            "send_email": [],  # No required fields - agent can generate subject/body if not provided
             "duckduckgo_search": ["query"],
             "university_knowledge_search": ["query"],
             "web_scraper": ["url"]
@@ -420,22 +445,154 @@ VERFÜGBARE TOOLS mit Pflichtfeldern:
 {tools_str}
 
 ENTSCHEIDUNGSLOGIK:
-1. Prüfe ob eine Tool-Aktion angefordert wird (z.B. "registriere mich", "bewerbe mich", "ändere Passwort")
-2. Prüfe ALLE Pflichtfelder für das gewählte Tool:
-   - Ist JEDES Pflichtfeld vorhanden (auch in vorherigen Nachrichten)?
-   - Sind die Werte sinnvoll (keine offensichtlichen Platzhalter wie "TBD", "N/A")?
-3. WENN ein oder mehrere Pflichtfelder fehlen → action='insufficient_data' mit missing_fields
-4. WENN ALLE Pflichtfelder vorhanden sind → action='tool'
-5. Bei reinen Fragen ohne Aktionswunsch → action='respond'
 
-WICHTIG: Sei STRENG bei Pflichtfeldern!
-- Fehlt ein Pflichtfeld KOMPLETT (z.B. keine Email erwähnt) → insufficient_data
-- Ist ein Pflichtfeld unvollständig (z.B. nur Nachname, kein Vorname) → insufficient_data
-- NUR wenn ALLE Pflichtfelder vorhanden sind → tool
-- Bei klips2_register: Vorname, Nachname, Geschlecht, Geburtsdatum, Email UND Staatsangehörigkeit MÜSSEN vorhanden sein
-- Bei klips2_apply_study: ALLE 14+ Pflichtfelder müssen vorhanden sein
+## 1. TOOL-TRIGGER: Wann welches Tool aufrufen?
 
-FORMAT-TOLERANZ (WICHTIG):
+**KLIPS2-Aktionen (Tool aufrufen):**
+- "Registriere mich" → klips2_register
+- "Bewerbe mich für [Studiengang]" → klips2_apply_study
+- "Ändere mein Passwort" → klips2_change_password
+- "Ändere meine Adresse" → klips2_change_address
+
+**KURS-ABFRAGEN (Tool aufrufen):**
+- "Mehr über Kurs [X] erfahren" → klips2_get_course_details
+- "Wann findet Kurs [X] statt?" → klips2_get_course_details
+- "Wer hält Kurs [X]?" → klips2_get_course_details
+- "Details zu Kurs [X]" → klips2_get_course_details
+
+**MULTI-TOOL-ANFRAGEN (MEHRERE TOOLS - WICHTIG!):**
+
+PRÜFE ZUERST: Fordert der User MEHRERE Aktionen nacheinander?
+
+Signalwörter für Multi-Tool (= MEHRERE Tools erforderlich):
+- "und dann", "danach", "anschließend"
+- "and then", "then", "after that"
+- Mehrere Verben in EINER Anfrage: "Suche... hole...", "Search... get...", "Schau... schicke..."
+
+BEISPIELE für Multi-Tool (= tool_names muss LISTE mit 2+ Tools sein):
+1. "Suche im Internet nach Kurs X **und** hole dann Details aus KLIPS"
+   → ["duckduckgo_search", "klips2_get_course_details"]
+   
+2. "Hole Kursdetails **und** sende E-Mail"
+   → ["klips2_get_course_details", "send_email"]
+   
+3. "Recherchiere X, **dann** Details zu Kurs Y"
+   → ["duckduckgo_search", "klips2_get_course_details"]
+
+4. "Schau nach Details zu Kurs X **und schicke** mir E-Mail"
+   → ["klips2_get_course_details", "send_email"]
+
+WICHTIG: 
+- Reihenfolge der Tools beachten (chronologisch wie in Anfrage)!
+- "Suche... UND hole..." = 2 Tools: zuerst duckduckgo_search, dann klips2_get_course_details
+- "Hole... UND sende..." = 2 Tools: zuerst klips2_get_course_details, dann send_email
+
+**WISSENS-SUCHE (Tool aufrufen):**
+
+WICHTIG - Entscheidungslogik für Suchen:
+
+1. **IMMER duckduckgo_search bei:**
+   - Expliziten Such-Keywords: "Search", "Suche", "Such", "Find", "Finde", "Look up" mit Suchbegriff
+   - "Search for [X]" → duckduckgo_search
+   - "Suche nach [X]" → duckduckgo_search
+   - "Such mal [X]" → duckduckgo_search
+   - "Find information about [X]" → duckduckgo_search
+   - "Google [X]" → duckduckgo_search
+   - "Recherchiere [X]" → duckduckgo_search
+   - "Was sagt Wikipedia über [X]?" → duckduckgo_search
+
+2. **NUR university_knowledge_search bei:**
+   - Direkten Fragen OHNE Such-Keywords:
+     * "Wie bewerbe ich mich für Master?" (Frage, kein Such-Keyword)
+     * "Welche Fristen gibt es?" (Frage, kein Such-Keyword)
+     * "Was kostet das Studium?" (Frage, kein Such-Keyword)
+     * "Was ist ein ECTS-Punkt?" (Frage, kein Such-Keyword)
+   
+REGEL: 
+  • "Search"/"Suche"/"Such"/"Find" → IMMER duckduckgo_search
+  • Direkte Frage (Wie/Was/Wann/Welche) ohne Such-Keyword → university_knowledge_search
+  • Bei Unsicherheit: Wenn "search"/"suche" im Text → duckduckgo_search
+
+**E-MAIL (Tool aufrufen):**
+- "Sende eine E-Mail" → send_email
+- "Schicke eine Mail" → send_email
+- "Verfasse eine E-Mail" → send_email
+- "Schreibe eine E-Mail" → send_email
+- "Sende eine Nachricht" → send_email
+- "E-Mail versenden" → send_email
+
+**KEINE TOOLS (respond):**
+- Begrüßungen: "Hallo!", "Wie geht's?", "Guten Tag", "Hi"
+- System-Fragen: "Was kannst du?", "Welche Funktionen hast du?", "Hilfe"
+- Einfache Berechnungen: "Was ist 2+2?", "Rechne 10 * 5"
+- Übersetzungen: "Übersetze X nach Y", "Was heißt X auf Englisch?"
+- Allgemeine Wissensfragen ohne Uni-Bezug: "Was ist ein Bachelor?" (generisch, nicht Uni-spezifisch)
+- Small Talk: "Wie ist das Wetter?", "Erzähl einen Witz"
+
+
+## 2. PFLICHTFELD-PRÜFUNG (STRENG!)
+
+PRÜFREGEL: Gehe Pflichtfeld für Pflichtfeld durch und notiere:
+  ✓ "vorname: [Wert aus Text]"
+  ✓ "nachname: [Wert aus Text]"  
+  ✓ "email: [Wert aus Text]"
+  ... etc.
+
+Wenn Tool identifiziert:
+- Prüfe JEDES EINZELNE Pflichtfeld für das gewählte Tool
+- Ist das Feld EXPLIZIT im Text genannt? (Nicht raten/ableiten!)
+- Sind die Werte konkret und vollständig?
+
+**KRITISCHE REGELN:**
+
+NAMES/IDENTITÄT (STRENGSTE PRÜFUNG!):
+  ✗ "Login: kim@uni-koeln.de" → KEINE NAMEN! → insufficient_data (fehlen: vorname, nachname)
+  ✗ "Divers, 01.01.2000, Berlin" → KEINE NAMEN! → insufficient_data (fehlen: vorname, nachname)
+  ✗ "Name: Thomas Klein" → UNKLAR ob Vor-/Nachname → insufficient_data (fehlt Trennung)
+  ✓ "Ich heiße Peter Bauer" → OK: "Peter" = vorname, "Bauer" = nachname
+  ✓ "Vorname: Lisa, Nachname: Müller" → OK: Explizit getrennt
+  
+  REGEL: Vorname UND Nachname müssen BEIDE EXPLIZIT identifizierbar sein!
+
+KLIPS-LOGIN (username/password):
+  ✗ "Bewerbung Informatik Bachelor" → KEINE Zugangsdaten! → insufficient_data (fehlen: username, password)
+  ✗ "Erststudium, 1. Semester" → KEINE Zugangsdaten! → insufficient_data (fehlen: username, password)
+  ✓ "Login: max@uni-koeln.de / pass123" → OK: username + password vorhanden
+
+PERSÖNLICHE DATEN (gender, birth_place, nationality):
+  ✗ "Bewerbung Informatik Bachelor" → NICHTS über Person! → insufficient_data (fehlen: gender, birth_place, nationality)
+  ✓ "männlich, geboren 15.03.1999 in Köln" → OK: gender + birth_place vorhanden
+  ✓ "Staatsangehörigkeit: deutsch" → OK: nationality vorhanden
+
+HZB-DATEN (hzb_date, hzb_type, hzb_name, hzb_grade, hzb_school, hzb_place):
+  ✗ "Abitur 2,3 vom 01.06.2018, Gymnasium Bonn" → hzb_name fehlt! → insufficient_data (fehlt: hzb_name)
+  ✓ "Abitur 2,3 vom 01.06.2018, Abitur Zeugnis, Gymnasium Bonn, Bonn" → OK: ALLE HZB-Felder
+  
+  WICHTIG: hzb_name = Bezeichnung des Zeugnisses (z.B. "Abitur Zeugnis", "Fachhochschulreife")
+
+EMAIL:
+  - MUSS @ enthalten: "max@test.de" ✓
+  - Fake-Emails ABLEHNEN: "noemail@nodomain.com", "keine-email@test.de" ✗
+  - Phrase "E-Mail: wird nachgereicht" → insufficient_data
+
+DATUM:
+  - "Geburtsdatum: 15.03.1999" ✓
+  - "Geboren 1999" → insufficient_data (nur Jahr)
+  - "Geburtsdatum: TBA" / "noch unklar" → insufficient_data
+
+VOLLSTÄNDIGKEIT:
+  - klips2_register: Vorname UND Nachname UND Email UND Geburtsdatum UND Geschlecht UND Staatsangehörigkeit
+  - klips2_apply_study: username UND password UND semester UND degree_type UND study_program UND gender UND birth_place UND nationality UND hzb_date UND hzb_type UND hzb_name UND hzb_grade UND hzb_school UND hzb_place
+  - Fehlt EIN EINZIGES Pflichtfeld → action='insufficient_data'
+  - Platzhalter wie "TBD", "N/A", "wird ergänzt" → insufficient_data
+
+**WENN Pflichtfelder fehlen:** action='insufficient_data' mit missing_fields
+**WENN ALLE Pflichtfelder vorhanden:** action='tool'
+
+WICHTIG: Lieber EINMAL ZU VIEL nachfragen als mit unvollständigen Daten Tool aufrufen!
+
+## 3. FORMAT-TOLERANZ (WICHTIG):
+
 ✓ ACCEPT verschiedene Formate:
   - Datum: "15.03.1995", "1995-03-15", "March 15, 1995" (alle gültig)
   - Geschlecht: "m", "w", "d", "männlich", "male", "female", "divers" (alle gültig)
@@ -450,22 +607,47 @@ FORMAT-TOLERANZ (WICHTIG):
   - Ungültiges Datum: "32.13.2020", "99.99.9999"
   - Fehlende Stadt bei Adresse: "Hauptstraße 1, PLZ 12345" (Stadt fehlt)
   - Vage Suche: "irgendwelche Kurse", "könnte ich Infos zu..."
-  - Komplett fehlende Pflichtfelder bei klips2_apply_study (16+ Felder erforderlich)
 
-SPEZIALFALL: Multi-Step-Konversationen
-Wenn "Previous conversation:" vorhanden ist:
-  1. Lies ZUERST die vorherigen Nachrichten (User + Assistant)
-  2. Sammle ALLE bereits erwähnten Daten aus vorherigen Nachrichten
-  3. Kombiniere mit aktueller Nachricht
-  4. Wenn Nutzer zusätzliche Daten nachliefert UND jetzt ALLE Pflichtfelder vorhanden → action='tool'
-  5. Bei Korrekturen ("sorry, ich meinte X statt Y") → action='tool' mit korrigierten Daten
+## 4. SPEZIALFALL: Multi-Step-Konversationen (KRITISCH!)
+
+**WICHTIG: Wenn "Previous conversation:" vorhanden ist:**
+
+SCHRITT 1 - DATEN SAMMELN:
+  - Lies ALLE vorherigen User-Nachrichten komplett durch
+  - Sammle JEDES erwähnte Datenfeld (auch aus mehreren Nachrichten!)
+  - Notiere dir: "In vorherigen Nachrichten habe ich: [Liste]"
+  
+SCHRITT 2 - AKTUELLE NACHRICHT:
+  - Lies die aktuelle User-Nachricht
+  - Notiere: "In aktueller Nachricht habe ich zusätzlich: [Liste]"
+  
+SCHRITT 3 - KOMBINIERE:
+  - Vereinige ALLE Daten (vorherige + aktuelle)
+  - Prüfe: Sind JETZT alle Pflichtfelder vorhanden?
+  - JA → action='tool' | NEIN → action='insufficient_data'
+
+TYPISCHE MULTI-STEP-MUSTER:
+  ✓ "Zugangsdaten nachliefern": User gibt initial Studiengang/Daten, später Username/Password → DANN tool aufrufen!
+  ✓ "Fehlende HZB": User gibt initial Persönliches, später Abitur-Daten → DANN tool aufrufen!
+  ✓ "Korrekturen": User sagt "sorry, ich meinte X statt Y" → Nutze korrigierten Wert und tool aufrufen!
+  
+  ✗ "Abbruch": User sagt "doch nicht" / "abbrechen" → action='respond'
+  ✗ "Immer noch unvollständig": Auch nach Nachfrage fehlen Pflichtfelder → action='insufficient_data'
 
 Antworte im JSON-Format:
-{{"action": "tool", "tool_name": "<name>", "reason": "Alle Pflichtfelder vorhanden"}}
-oder
-{{"action": "insufficient_data", "tool_name": "<name>", "reason": "Pflichtfelder fehlen", "missing_fields": ["feld1", "feld2"]}}
-oder
-{{"action": "respond", "reason": "Nur Frage/Information, keine Aktion gewünscht"}}"""
+
+**EIN TOOL:**
+{{"action": "tool", "tool_names": ["<name1>"], "reason": "Ein Tool identifiziert"}}
+
+**MEHRERE TOOLS (Multi-Tool bei "und dann", "und schicke", etc.):**
+{{"action": "tool", "tool_names": ["<name1>", "<name2>"], "reason": "Mehrere Tools identifiziert"}}
+Beispiel: "Suche X und hole dann Y" → {{"action": "tool", "tool_names": ["duckduckgo_search", "klips2_get_course_details"], "reason": "Multi-Tool: Suche + KLIPS"}}
+
+**FEHLENDE DATEN:**
+{{"action": "insufficient_data", "tool_names": ["<name>"], "reason": "Pflichtfelder fehlen", "missing_fields": ["feld1", "feld2"]}}
+
+**KEINE TOOLS:**
+{{"action": "respond", "reason": "Nur Frage/Information, keine Aktion gewünscht"}}"""""
 
     def _get_extraction_prompt(self, tool_name: str, schema: Type[BaseModel]) -> str:
         """Prompt für die Argument-Extraktion."""
@@ -656,64 +838,77 @@ PFLICHT-Felder sollten vorhanden sein (wurden bereits validiert)."""
                 return response_text
             
             # Schritt 4: Tool-Argumente extrahieren (mit erweitertem Kontext)
-            tool_name = decision_result.tool_name
-            if tool_name not in TOOL_SCHEMAS:
-                response_text = f"Unbekanntes Tool: {tool_name}"
+            tool_names = decision_result.tool_names
+            if not tool_names:
+                response_text = "Keine Tools identifiziert."
                 self.memory.append(AIMessage(content=response_text))
                 return response_text
             
-            schema = TOOL_SCHEMAS[tool_name]
-            extraction_prompt = self._get_extraction_prompt(tool_name, schema)
-            
-            extraction_messages = [
-                SystemMessage(content=extraction_prompt),
-                HumanMessage(content=f"Nutzertext (mit Kontext):\n{enriched_message}")
-            ]
-            
-            extraction_response = self.llm_json.invoke(extraction_messages)
-            validated_args, error = self._parse_and_validate(
-                extraction_response.content,
-                schema
-            )
-            
-            if error:
-                # Retry: Gebe Feedback und eine weitere Chance
-                retry_prompt = f"""Die vorherige JSON-Generierung hatte Fehler:
+            # Multi-Tool: Verarbeite alle Tools sequentiell
+            all_results = []
+            for tool_name in tool_names:
+                if tool_name not in TOOL_SCHEMAS:
+                    all_results.append(f"Unbekanntes Tool: {tool_name}")
+                    continue
+                
+                schema = TOOL_SCHEMAS[tool_name]
+                extraction_prompt = self._get_extraction_prompt(tool_name, schema)
+                
+                extraction_messages = [
+                    SystemMessage(content=extraction_prompt),
+                    HumanMessage(content=f"Nutzertext (mit Kontext):\n{enriched_message}")
+                ]
+                
+                extraction_response = self.llm_json.invoke(extraction_messages)
+                validated_args, error = self._parse_and_validate(
+                    extraction_response.content,
+                    schema
+                )
+                
+                if error:
+                    # Retry: Gebe Feedback und eine weitere Chance
+                    retry_prompt = f"""Die vorherige JSON-Generierung hatte Fehler:
 {error}
 
 Bitte korrigiere die Fehler und generiere das JSON erneut.
 Nur die fehlenden/fehlerhaften Felder müssen korrigiert werden.
 
 Ursprünglicher Nutzertext: {enriched_message}"""
+                    
+                    retry_messages = [
+                        SystemMessage(content=extraction_prompt),
+                        HumanMessage(content=f"Nutzertext (mit Kontext):\n{enriched_message}"),
+                        AIMessage(content=extraction_response.content),
+                        HumanMessage(content=retry_prompt)
+                    ]
+                    
+                    retry_response = self.llm_json.invoke(retry_messages)
+                    validated_args_retry, error_retry = self._parse_and_validate(
+                        retry_response.content,
+                        schema
+                    )
+                    
+                    if error_retry:
+                        # Auch nach Retry fehlgeschlagen
+                        all_results.append(f"{tool_name}: Fehler bei Datenverarbeitung: {error_retry}")
+                        continue
+                    
+                    # Retry erfolgreich - verwende korrigierte Args
+                    validated_args = validated_args_retry
                 
-                retry_messages = [
-                    SystemMessage(content=extraction_prompt),
-                    HumanMessage(content=f"Nutzertext (mit Kontext):\n{enriched_message}"),
-                    AIMessage(content=extraction_response.content),
-                    HumanMessage(content=retry_prompt)
-                ]
-                
-                retry_response = self.llm_json.invoke(retry_messages)
-                validated_args_retry, error_retry = self._parse_and_validate(
-                    retry_response.content,
-                    schema
-                )
-                
-                if error_retry:
-                    # Auch nach Retry fehlgeschlagen
-                    response_text = f"Ich konnte die Daten nicht korrekt verarbeiten: {error_retry}\nBitte überprüfe die Angaben."
-                    self.memory.append(AIMessage(content=response_text))
-                    return response_text
-                
-                # Retry erfolgreich - verwende korrigierte Args
-                validated_args = validated_args_retry
+                # Schritt 5: Tool ausführen
+                args_dict = validated_args.model_dump(exclude_none=True)
+                tool_result = self._execute_tool(tool_name, args_dict)
+                all_results.append(self._format_tool_response(tool_name, tool_result))
             
-            # Schritt 5: Tool ausführen
-            args_dict = validated_args.model_dump(exclude_none=True)
-            tool_result = self._execute_tool(tool_name, args_dict)
+            # Schritt 6: Kombiniere alle Ergebnisse
+            if not all_results:
+                response_text = "Keine Tools konnten erfolgreich ausgeführt werden."
+            elif len(all_results) == 1:
+                response_text = all_results[0]
+            else:
+                response_text = "\n\n---\n\n".join(all_results)
             
-            # Schritt 6: Antwort formulieren
-            response_text = self._format_tool_response(tool_name, tool_result)
             self.memory.append(AIMessage(content=response_text))
             return response_text
             
@@ -849,17 +1044,19 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
         
         print(f"✅ Conversation-Trace gespeichert: {output_path}")
     
-    def get_tool_selection(self, message: str, enable_trace: bool = False) -> List[Dict[str, Any]]:
+    def get_tool_selection(self, message: str, enable_trace: bool = False, max_retries: int = 1) -> List[Dict[str, Any]]:
         """
         Ermittle Tool-Auswahl mit Constrained-Decoding-Logik (für Evaluierung).
         
         Diese Methode führt die spezifische Constrained-Agent-Logik durch:
         1. Entscheidung ob Tool oder direkte Antwort (mit JSON-Mode)
         2. Argument-Extraktion mit Pydantic-Schema-Validierung
+        3. Bei Validierungsfehlern: Retry mit Feedback (max_retries Versuche)
         
         Args:
             message: Die Nutzeranfrage
             enable_trace: Wenn True, wird der Conversation-Trace aufgezeichnet
+            max_retries: Maximale Anzahl an Versuchen bei Validierungsfehlern (Standard: 2)
             
         Returns:
             Liste der ausgewählten Tool-Calls mit validierten Argumenten
@@ -909,131 +1106,157 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
             if decision_result.action == "respond":
                 return []  # Direkte Antwort, kein Tool
             
-            # Schritt 2: Tool-Argumente mit Schema extrahieren
-            tool_name = decision_result.tool_name
-            if tool_name not in TOOL_SCHEMAS:
-                return []  # Unbekanntes Tool
+            # Schritt 2: Tool-Argumente mit Schema extrahieren (Multi-Tool Support)
+            tool_names = decision_result.tool_names
+            if not tool_names:
+                return []  # Keine Tools identifiziert
             
-            schema = TOOL_SCHEMAS[tool_name]
-            extraction_prompt = self._get_extraction_prompt(tool_name, schema)
-            
-            extraction_messages = [
-                SystemMessage(content=extraction_prompt),
-                HumanMessage(content=f"Nutzertext: {message}")
-            ]
-            
-            extraction_response = self.llm_json.invoke(extraction_messages)
-            
-            # Log Step 2: Initial Extraction (optional)
-            if enable_trace:
-                trace_step = {
-                    "step": "extraction_initial",
-                    "tool_name": tool_name,
-                    "scenario": message,
-                    "prompt": extraction_prompt,
-                    "raw_output": extraction_response.content,
-                    "timestamp": datetime.now().isoformat()
-                }
-            
-            validated_args, error = self._parse_and_validate(
-                extraction_response.content,
-                schema
-            )
-            
-            if enable_trace:
-                trace_step["validation_success"] = error is None
-                trace_step["validation_error"] = error
-                trace_step["parsed_result"] = validated_args.model_dump() if validated_args else None
-                self.conversation_trace.append(trace_step)
-            
-            if error:
-                # Retry: Gebe Feedback und eine weitere Chance
-                retry_prompt = f"""Die vorherige JSON-Generierung hatte Fehler:
-{error}
-
-Bitte korrigiere die Fehler und generiere das JSON erneut.
-Nur die fehlenden/fehlerhaften Felder müssen korrigiert werden.
-
-Ursprünglicher Nutzertext: {message}"""
+            # Multi-Tool: Verarbeite alle Tools sequentiell
+            all_tool_calls = []
+            for tool_name in tool_names:
+                if tool_name not in TOOL_SCHEMAS:
+                    if enable_trace:
+                        trace_step = {
+                            "step": "error",
+                            "tool_name": tool_name,
+                            "scenario": message,
+                            "error": f"Unknown tool: {tool_name}",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        self.conversation_trace.append(trace_step)
+                    continue  # Skip unbekanntes Tool
                 
-                retry_messages = [
+                schema = TOOL_SCHEMAS[tool_name]
+                extraction_prompt = self._get_extraction_prompt(tool_name, schema)
+                
+                extraction_messages = [
                     SystemMessage(content=extraction_prompt),
-                    HumanMessage(content=f"Nutzertext: {message}"),
-                    AIMessage(content=extraction_response.content),
-                    HumanMessage(content=retry_prompt)
+                    HumanMessage(content=f"Nutzertext: {message}")
                 ]
                 
-                retry_response = self.llm_json.invoke(retry_messages)
+                extraction_response = self.llm_json.invoke(extraction_messages)
                 
-                # Log Step 3: Retry Extraction (optional)
+                # Log Step 2: Initial Extraction (optional)
                 if enable_trace:
                     trace_step = {
-                        "step": "extraction_retry",
+                        "step": "extraction_initial",
                         "tool_name": tool_name,
                         "scenario": message,
-                        "previous_error": error,
-                        "retry_prompt": retry_prompt,
-                        "raw_output": retry_response.content,
+                        "prompt": extraction_prompt,
+                        "raw_output": extraction_response.content,
                         "timestamp": datetime.now().isoformat()
                     }
                 
-                validated_args_retry, error_retry = self._parse_and_validate(
-                    retry_response.content,
+                validated_args, error = self._parse_and_validate(
+                    extraction_response.content,
                     schema
                 )
                 
                 if enable_trace:
-                    trace_step["validation_success"] = error_retry is None
-                    trace_step["validation_error"] = error_retry
-                    trace_step["parsed_result"] = validated_args_retry.model_dump() if validated_args_retry else None
+                    trace_step["validation_success"] = error is None
+                    trace_step["validation_error"] = error
+                    trace_step["parsed_result"] = validated_args.model_dump() if validated_args else None
                     self.conversation_trace.append(trace_step)
                 
-                if error_retry:
-                    # Auch nach Retry fehlgeschlagen
+                # Erfolg beim ersten Versuch
+                if not error:
+                    args_dict = validated_args.model_dump(exclude_none=True)
                     if enable_trace:
                         final_step = {
                             "step": "final_result",
                             "tool_name": tool_name,
                             "scenario": message,
-                            "status": "failed_after_retry",
-                            "reason": "Schema-Validierung fehlgeschlagen trotz Retry",
-                            "initial_error": error,
-                            "retry_error": error_retry,
-                            "result": {"name": tool_name, "args": {}},
+                            "status": "success_first_attempt",
+                            "reason": "Schema-Validierung erfolgreich beim ersten Versuch",
+                            "result": {"name": tool_name, "args": args_dict},
                             "timestamp": datetime.now().isoformat()
                         }
                         self.conversation_trace.append(final_step)
-                    return [{"name": tool_name, "args": {}}]
+                    all_tool_calls.append({"name": tool_name, "args": args_dict})
+                    continue  # Nächstes Tool
                 
-                # Retry erfolgreich
-                args_dict = validated_args_retry.model_dump(exclude_none=True)
-                if enable_trace:
-                    final_step = {
-                        "step": "final_result",
-                        "tool_name": tool_name,
-                        "scenario": message,
-                        "status": "success_after_retry",
-                        "reason": "Schema-Validierung erfolgreich nach Retry",
-                        "result": {"name": tool_name, "args": args_dict},
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    self.conversation_trace.append(final_step)
-                return [{"name": tool_name, "args": args_dict}]
+                # Bei Fehler: Retry-Schleife
+                last_response = extraction_response.content
+                last_error = error
+                messages_history = extraction_messages.copy()
+                
+                for retry_num in range(max_retries):
+                    retry_prompt = f"""Die vorherige JSON-Generierung hatte Fehler (Versuch {retry_num + 1}/{max_retries}):
+{last_error}
+
+Bitte korrigiere die Fehler und generiere das JSON erneut.
+Nur die fehlenden/fehlerhaften Felder müssen korrigiert werden.
+
+Ursprünglicher Nutzertext: {message}"""
+                    
+                    # History erweitern
+                    messages_history.append(AIMessage(content=last_response))
+                    messages_history.append(HumanMessage(content=retry_prompt))
+                    
+                    retry_response = self.llm_json.invoke(messages_history)
+                    
+                    # Log Retry (optional)
+                    if enable_trace:
+                        trace_step = {
+                            "step": f"extraction_retry_{retry_num + 1}",
+                            "tool_name": tool_name,
+                            "scenario": message,
+                            "previous_error": last_error,
+                            "retry_prompt": retry_prompt,
+                            "raw_output": retry_response.content,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    
+                    validated_args_retry, error_retry = self._parse_and_validate(
+                        retry_response.content,
+                        schema
+                    )
+                    
+                    if enable_trace:
+                        trace_step["validation_success"] = error_retry is None
+                        trace_step["validation_error"] = error_retry
+                        trace_step["parsed_result"] = validated_args_retry.model_dump() if validated_args_retry else None
+                        self.conversation_trace.append(trace_step)
+                    
+                    # Erfolg nach Retry
+                    if not error_retry:
+                        args_dict = validated_args_retry.model_dump(exclude_none=True)
+                        if enable_trace:
+                            final_step = {
+                                "step": "final_result",
+                                "tool_name": tool_name,
+                                "scenario": message,
+                                "status": f"success_after_retry_{retry_num + 1}",
+                                "reason": f"Schema-Validierung erfolgreich nach {retry_num + 1} Retry(s)",
+                                "result": {"name": tool_name, "args": args_dict},
+                                "timestamp": datetime.now().isoformat()
+                            }
+                            self.conversation_trace.append(final_step)
+                        all_tool_calls.append({"name": tool_name, "args": args_dict})
+                        break  # Retry erfolgreich, nächstes Tool
+                    
+                    # Update für nächste Iteration
+                    last_response = retry_response.content
+                    last_error = error_retry
+                else:
+                    # Alle Retries fehlgeschlagen für dieses Tool
+                    if enable_trace:
+                        final_step = {
+                            "step": "final_result",
+                            "tool_name": tool_name,
+                            "scenario": message,
+                            "status": f"failed_after_{max_retries}_retries",
+                            "reason": f"Schema-Validierung fehlgeschlagen nach {max_retries} Retry(s)",
+                            "initial_error": error,
+                            "final_error": last_error,
+                            "result": None,  # Kein Tool-Aufruf bei Validierungsfehler
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        self.conversation_trace.append(final_step)
+                    # Tool wird übersprungen, fahre mit nächstem fort
             
-            # Erfolgreiche Extraktion beim ersten Versuch
-            args_dict = validated_args.model_dump(exclude_none=True)
-            if enable_trace:
-                final_step = {
-                    "step": "final_result",
-                    "tool_name": tool_name,
-                    "scenario": message,
-                    "status": "success_first_attempt",
-                    "reason": "Schema-Validierung erfolgreich beim ersten Versuch",
-                    "result": {"name": tool_name, "args": args_dict},
-                    "timestamp": datetime.now().isoformat()
-                }
-                self.conversation_trace.append(final_step)
-            return [{"name": tool_name, "args": args_dict}]
+            # Gebe alle erfolgreich verarbeiteten Tools zurück
+            return all_tool_calls
             
         except Exception as e:
             if enable_trace:

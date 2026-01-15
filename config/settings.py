@@ -23,6 +23,14 @@ class Settings:
     OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:8b")
     OLLAMA_EVALUATION_TIMEOUT = int(os.getenv("OLLAMA_EVALUATION_TIMEOUT", "300"))  # 5 Minuten für RAGAS-Evaluationen
     
+    # OpenAI Konfiguration
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Default OpenAI Modell
+    OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # Optional: für Custom OpenAI-kompatible APIs
+    
+    # LLM Provider (ollama oder openai)
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
+    
     # RAGAS-Evaluation: Fester Judge für faire Vergleiche zwischen Modellen
     RAGAS_JUDGE_MODEL = os.getenv("RAGAS_JUDGE_MODEL", "qwen2.5:7b")
     REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "120"))  # 2 Minuten Timeout für LLM-Requests
@@ -66,15 +74,22 @@ class Settings:
     @classmethod
     def validate(cls):
         """Validiere erforderliche Konfigurationen"""
-        # Für Ollama sind keine API-Schlüssel erforderlich
-        # Nur prüfen, ob Ollama-Server erreichbar ist
         import requests
-        try:
-            response = requests.get(f"{cls.OLLAMA_BASE_URL}/api/tags", timeout=5)
-            if response.status_code != 200:
-                print("⚠️ Warnung: Ollama-Server nicht erreichbar. Stellen Sie sicher, dass Ollama läuft.")
-        except requests.RequestException:
-            print("⚠️ Warnung: Ollama-Server nicht erreichbar. Starten Sie Ollama mit: ollama serve")
+        
+        # Provider-spezifische Validierung
+        if cls.LLM_PROVIDER == "openai":
+            # OpenAI: API-Key erforderlich
+            if not cls.OPENAI_API_KEY:
+                print("⚠️ Warnung: OPENAI_API_KEY nicht gesetzt.")
+                print("   Bitte konfigurieren Sie OPENAI_API_KEY in der .env Datei.")
+        else:
+            # Ollama: Prüfen, ob Server erreichbar ist
+            try:
+                response = requests.get(f"{cls.OLLAMA_BASE_URL}/api/tags", timeout=5)
+                if response.status_code != 200:
+                    print("⚠️ Warnung: Ollama-Server nicht erreichbar. Stellen Sie sicher, dass Ollama läuft.")
+            except requests.RequestException:
+                print("⚠️ Warnung: Ollama-Server nicht erreichbar. Starten Sie Ollama mit: ollama serve")
         
         # E-Mail-Konfiguration prüfen
         if not cls.SMTP_USERNAME or not cls.SMTP_PASSWORD:

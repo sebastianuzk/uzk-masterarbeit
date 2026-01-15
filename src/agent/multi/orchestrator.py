@@ -172,6 +172,17 @@ class OrchestratorAgent:
         # Routing LLM (kann leichteres Modell sein)
         self.routing_llm = self.shared_llm
         
+        # JSON LLM für strukturierte Outputs (Multi-Step Detection, Decomposition)
+        self.json_llm = ChatOllama(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=0.1,  # Niedrig für konsistente JSON-Ausgaben
+            num_ctx=4096,
+            timeout=settings.REQUEST_TIMEOUT,
+            keep_alive=settings.OLLAMA_KEEP_ALIVE,
+            format="json",  # Erzwingt JSON-Ausgabe
+        )
+        
         # Memory für Konversationshistorie
         self.memory: List[Any] = []
         self._max_memory_size = settings.MEMORY_SIZE
@@ -453,50 +464,137 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
             )
     
     def _detect_multi_step(self, message: str) -> bool:
-        """Erkenne ob die Anfrage mehrere Schritte erfordert."""
-        multi_step_indicators = [
-            "dann", "und dann", "danach", "anschließend", "afterwards", "then",
-            "und schick", "und sende", "and send", "and email",
-            "suche.*und", "search.*and", "hole.*und", "get.*and"
-        ]
+        """
+        Erkenne ob die Anfrage mehrere Schritte/Tools erfordert.
+        
+        Verwendet Keyword-Matching für robuste Multi-Tool-Erkennung.
+        """
+        import re
+        
         msg_lower = message.lower()
-        return any(indicator in msg_lower for indicator in multi_step_indicators)
+        
+        # Explizite Multi-Step-Indikatoren
+        simple_indicators = [
+            "und dann", "danach", "anschließend", "afterwards", "then",
+            "und schick", "und sende", "and send", "and email",
+            "und hole", "und hol", "and get", "and retrieve"
+        ]
+        
+        # Einfacher String-Match
+        if any(ind in msg_lower for ind in simple_indicators):
+            print(f"📋 Multi-Step erkannt (Keyword-Match)")
+            return True
+        
+        # Regex für komplexere Muster
+        regex_patterns = [
+            r"suche.*und.*hole",       # "Suche X und hole Y"
+            r"search.*and.*get",       # "Search X and get Y"
+            r"hole.*und.*schick",      # "Hole X und schicke E-Mail"
+            r"get.*and.*send",         # "Get X and send email"
+            r"recherchiere.*und",      # "Recherchiere X und ..."
+        ]
+        
+        for pattern in regex_patterns:
+            if re.search(pattern, msg_lower):
+                print(f"📋 Multi-Step erkannt (Pattern: {pattern})")
+                return True
+        
+        return False
     
     def _decompose_query(self, message: str) -> List[str]:
         """
         Zerlege Multi-Step-Anfrage in einzelne Schritte.
         
-        Nutzt LLM um die Anfrage in ausführbare Teilschritte zu zerlegen.
+        LLM analysiert und zerlegt, Regex-Patterns dienen als Fallback.
         """
-        decompose_prompt = f"""Zerlege diese Anfrage in sequentielle Schritte:
+        decompose_prompt = f"""Zerlege diese Anfrage in sequentielle Teilschritte.
 
-{message}
+Anfrage: "{message}"
 
-Gib die Schritte als JSON-Array zurück:
-{{"steps": ["Schritt 1", "Schritt 2", ...]}}
+Jeder Schritt sollte eine eigenständige Aktion sein.
 
-Nur JSON zurückgeben!"""
-        
+Beispiele:
+- "Suche X und hole dann Y" → ["Suche X", "hole dann Y"]
+- "Hole Infos und schicke E-Mail" → ["Hole Infos", "schicke E-Mail"]
+- "Recherchiere X, hole Y und sende Z" → ["Recherchiere X", "hole Y", "sende Z"]
+
+Antworte NUR mit diesem JSON-Format (ohne Markdown):
+{{"steps": ["Schritt 1", "Schritt 2", ...]}}"""
+
         try:
-            response = self.routing_llm.invoke([SystemMessage(content=decompose_prompt)])
+            response = self.json_llm.invoke([SystemMessage(content=decompose_prompt)])
             content = response.content.strip()
             
-            # Parse JSON
+            # Entferne Markdown-Wrapper
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0].strip()
             
+            import json
             data = json.loads(content)
             steps = data.get("steps", [])
             
-            if len(steps) > 1:
-                print(f"📋 Query in {len(steps)} Schritte zerlegt")
+            if len(steps) >= 2:
+                print(f"📋 Query in {len(steps)} Schritte zerlegt (LLM-Analyse)")
                 return steps
+            
         except Exception as e:
-            print(f"⚠️ Decomposition fehlgeschlagen: {e}")
+            print(f"⚠️ LLM Decomposition fehlgeschlagen ({e}), nutze Regex-Fallback")
         
-        # Fallback: Original-Nachricht als einzelner Schritt
+        # Fallback: Regex-basierte Zerlegung
+        import re
+        
+        # Strategie 1: Split nach eindeutigen Konjunktionen
+        split_keywords = [
+            " und dann ", " danach ", " anschließend ",
+            " then ", " and then ",
+            " und schicke ", " und sende ", " und hole ",
+            " and send ", " and get ", " and email "
+        ]
+        
+        msg_lower = message.lower()
+        for keyword in split_keywords:
+            if keyword in msg_lower:
+                pos = msg_lower.find(keyword)
+                if pos > 0:
+                    step1 = message[:pos].strip()
+                    step2 = message[pos + len(keyword):].strip()
+                    if step1 and step2:
+                        steps = [step1, step2]
+                        print(f"📋 Query in {len(steps)} Schritte zerlegt (Regex-Fallback)")
+                        return steps
+        
+        # Strategie 2: Multiple "und" mit verschiedenen Verben
+        pattern = r"(recherchiere|suche|search|look up|find)(.*?)(,?\s+(?:und\s+)?(?:hole|hol|get|retrieve))(.*?)(,?\s+(?:und\s+)?(?:schick|sende|send|email))(.*)"
+        match = re.search(pattern, msg_lower, re.IGNORECASE | re.DOTALL)
+        if match:
+            start_pos = [match.start(1), match.start(3), match.start(5)]
+            end_pos = [match.end(2), match.end(4), match.end(6)]
+            
+            steps = []
+            for i in range(3):
+                step = message[start_pos[i]:end_pos[i]].strip().strip(',')
+                if step:
+                    steps.append(step)
+            
+            if len(steps) >= 2:
+                print(f"📋 Query in {len(steps)} Schritte zerlegt (Regex-Multi-Verb)")
+                return steps
+        
+        # Strategie 3: Zwei verschiedene Aktionsverben
+        pattern2 = r"(schau|check|get|hole|retrieve)(.*?)((?:und|and)\s+(?:schick|sende|send))(.*)"
+        match2 = re.search(pattern2, msg_lower, re.IGNORECASE | re.DOTALL)
+        if match2:
+            step1 = message[match2.start(1):match2.end(2)].strip()
+            step2 = message[match2.start(3):match2.end(4)].strip()
+            if step1 and step2:
+                steps = [step1, step2]
+                print(f"📋 Query in {len(steps)} Schritte zerlegt (Regex-Zwei-Verb)")
+                return steps
+        
+        # Final Fallback: Original-Nachricht
+        print(f"⚠️ Konnte Query nicht zerlegen, verwende Original")
         return [message]
     
     def process(self, message: str, session_id: Optional[str] = None) -> str:
