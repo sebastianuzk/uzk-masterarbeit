@@ -107,8 +107,9 @@ class UniversityRAGTool(BaseTool):
         
         # WICHTIG: Relative Paths benutzen! ChromaDB hat Bug mit absoluten Windows-Pfaden
         vector_db_paths = [
+            "eval/ragas/data/vector_db",
             "data/vector_db",
-            "src/scraper/vector_db"
+            "src/scraper/vector_db",
         ]
         
         for path_str in vector_db_paths:

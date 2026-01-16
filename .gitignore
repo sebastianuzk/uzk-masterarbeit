@@ -83,6 +83,8 @@ target/
 # Evaluation Checkpoints
 checkpoints/
 src/evaluation/checkpoints/
+*_checkpoint.pkl
+eval/ragas/data/responses_checkpoint.pkl
 
 # IPython
 profile_default/

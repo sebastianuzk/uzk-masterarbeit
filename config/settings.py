@@ -50,6 +50,7 @@ class Settings:
     # Agent Konfiguration
     MAX_ITERATIONS = 10
     MEMORY_SIZE = 100
+    AGENT_RECURSION_LIMIT = int(os.getenv("AGENT_RECURSION_LIMIT", "25"))  # Limit für Agent-Iterationen
     
     # Tool Konfiguration
     ENABLE_WEB_SCRAPER = True

@@ -238,7 +238,10 @@ class ReactAgent:
             self.tools
         )
         
-        # Füge System-Prompt manuell zum Memory hinzu
+        # Konfiguriere Recursion Limit für Agent
+        self.recursion_limit = getattr(settings, 'AGENT_RECURSION_LIMIT', 25)
+        
+        # Speichere System-Prompt als SystemMessage für Memory
         self.system_message = SystemMessage(content=system_prompt)
         
         # Memory für Konversationshistorie
@@ -418,20 +421,18 @@ Antworte in der Sprache des Nutzers."""
             }
 
             # Erstelle Config mit Metadaten für LangSmith-Tracing (falls aktiv)
-            config = None
+            config = {
+                "recursion_limit": self.recursion_limit
+            }
+            
             if settings.LANGSMITH_TRACING:
-                config = {
-                    "metadata": {
-                        "session_id": session_id,
-                        "user_message": message[:100] + "..." if len(message) > 100 else message,
-                        "available_tools": len(self.tools)
-                    }
+                config["metadata"] = {
+                    "session_id": session_id,
+                    "user_message": message[:100] + "..." if len(message) > 100 else message,
+                    "available_tools": len(self.tools)
                 }
 
-            if config is not None:
-                response = self.agent.invoke(agent_input, config=config)
-            else:
-                response = self.agent.invoke(agent_input)
+            response = self.agent.invoke(agent_input, config=config)
             
             # Extrahiere Antwort - prüfe verschiedene Message-Typen
             ai_message = response["messages"][-1]

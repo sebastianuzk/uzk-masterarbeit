@@ -35,6 +35,7 @@ import json
 import os
 import sys
 import time
+import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -121,6 +122,321 @@ def format_duration(seconds: float) -> str:
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         return f"{hours}h {minutes}m"
+
+
+def _generate_ragas_reports(
+    results_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    summary: Dict[str, Any],
+    output_dir: Path,
+    model: str,
+    agent_type: str,
+    judge_provider: Optional[str],
+    judge_model: Optional[str],
+    judge_workers: int
+) -> None:
+    """
+    Generiert detaillierte README und HTML Reports für RAGAS-Evaluation.
+    
+    Args:
+        results_df: DataFrame mit RAGAS-Ergebnissen
+        test_df: DataFrame mit Testfragen
+        summary: Summary-Dictionary
+        output_dir: Ausgabeverzeichnis
+        model: Agent-Modellname
+        agent_type: Agent-Typ
+        judge_provider: RAGAS Judge Provider
+        judge_model: RAGAS Judge Modell
+        judge_workers: Anzahl Workers
+    """
+    import pandas as pd
+    
+    # Add category and difficulty to results
+    results_df['category'] = test_df['category'].values[:len(results_df)]
+    results_df['difficulty'] = test_df['difficulty'].values[:len(results_df)]
+    
+    # Bestimme Judge-Info
+    judge_info = f"{judge_model or 'qwen2.5:7b'} ({judge_provider or 'ollama'})"
+    
+    # Generate README.md
+    readme_content = f"""# RAGAS Evaluation Report
+
+## Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| **Agent Model** | {model} |
+| **Agent Type** | {agent_type} |
+| **Judge** | {judge_info} |
+| **Workers** | {judge_workers} |
+| **Questions** | {summary['total_questions']} |
+| **Duration** | {format_duration(summary['duration_seconds'])} |
+| **Date** | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} |
+
+## Overall Metrics
+
+| Metric | Mean | Std Dev | Min | Max |
+|--------|------|---------|-----|-----|
+"""
+    
+    for metric, values in summary['metrics'].items():
+        readme_content += f"| **{metric.replace('_', ' ').title()}** | {values['mean']:.3f} | {values['std']:.3f} | {values['min']:.3f} | {values['max']:.3f} |\n"
+    
+    # By Category
+    readme_content += "\n## Metrics by Category\n\n"
+    categories = results_df['category'].dropna().unique()
+    
+    for category in sorted(categories):
+        cat_df = results_df[results_df['category'] == category]
+        readme_content += f"\n### {category} ({len(cat_df)} questions)\n\n"
+        readme_content += "| Metric | Mean | Std Dev |\n"
+        readme_content += "|--------|------|---------|\n"
+        
+        for metric in ['faithfulness', 'context_recall', 'context_precision']:
+            if metric in cat_df.columns:
+                mean_val = cat_df[metric].mean()
+                std_val = cat_df[metric].std()
+                readme_content += f"| {metric.replace('_', ' ').title()} | {mean_val:.3f} | {std_val:.3f} |\n"
+    
+    # By Difficulty
+    readme_content += "\n## Metrics by Difficulty\n\n"
+    difficulties = ['easy', 'medium', 'hard']
+    
+    for difficulty in difficulties:
+        diff_df = results_df[results_df['difficulty'] == difficulty]
+        if len(diff_df) > 0:
+            readme_content += f"\n### {difficulty.upper()} ({len(diff_df)} questions)\n\n"
+            readme_content += "| Metric | Mean | Std Dev |\n"
+            readme_content += "|--------|------|---------|\n"
+            
+            for metric in ['faithfulness', 'context_recall', 'context_precision']:
+                if metric in diff_df.columns:
+                    mean_val = diff_df[metric].mean()
+                    std_val = diff_df[metric].std()
+                    readme_content += f"| {metric.replace('_', ' ').title()} | {mean_val:.3f} | {std_val:.3f} |\n"
+    
+    # Distribution
+    readme_content += "\n## Score Distribution\n\n"
+    for metric in ['faithfulness', 'context_recall', 'context_precision']:
+        if metric in results_df.columns:
+            readme_content += f"\n### {metric.replace('_', ' ').title()}\n\n"
+            
+            # Bins
+            bins = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+            labels = ['0.0-0.2', '0.2-0.4', '0.4-0.6', '0.6-0.8', '0.8-1.0']
+            results_df[f'{metric}_bin'] = pd.cut(results_df[metric], bins=bins, labels=labels, include_lowest=True)
+            
+            distribution = results_df[f'{metric}_bin'].value_counts().sort_index()
+            
+            readme_content += "| Range | Count | Percentage |\n"
+            readme_content += "|-------|-------|------------|\n"
+            
+            total = len(results_df)
+            for label in labels:
+                count = distribution.get(label, 0)
+                percentage = (count / total * 100) if total > 0 else 0
+                readme_content += f"| {label} | {count} | {percentage:.1f}% |\n"
+    
+    readme_content += f"\n## Files\n\n- **CSV Results**: `ragas_results.csv`\n- **JSON Summary**: `ragas_summary.json`\n- **HTML Report**: `ragas_report.html`\n"
+    
+    # Save README
+    readme_path = output_dir / "README.md"
+    with open(readme_path, 'w', encoding='utf-8') as f:
+        f.write(readme_content)
+    
+    # Generate HTML Report
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAGAS Evaluation Report - {model}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }}
+        h2 {{
+            color: #34495e;
+            margin-top: 30px;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+        }}
+        h3 {{
+            color: #7f8c8d;
+            margin-top: 20px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }}
+        th, td {{
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }}
+        th {{
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+        }}
+        tr:hover {{
+            background-color: #f5f5f5;
+        }}
+        .metric-card {{
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            margin: 10px;
+            border-radius: 8px;
+            min-width: 250px;
+        }}
+        .metric-card h3 {{
+            margin: 0;
+            color: white;
+        }}
+        .metric-value {{
+            font-size: 2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }}
+        .metric-details {{
+            font-size: 0.9em;
+            opacity: 0.9;
+        }}
+        .config-table {{
+            background-color: #ecf0f1;
+        }}
+        .category-section {{
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+        }}
+        .score-excellent {{ background-color: #27ae60; color: white; }}
+        .score-good {{ background-color: #f39c12; color: white; }}
+        .score-poor {{ background-color: #e74c3c; color: white; }}
+        .badge {{
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 RAGAS Evaluation Report</h1>
+        
+        <h2>📋 Configuration</h2>
+        <table class="config-table">
+            <tr><th>Parameter</th><th>Value</th></tr>
+            <tr><td><strong>Agent Model</strong></td><td>{model}</td></tr>
+            <tr><td><strong>Agent Type</strong></td><td>{agent_type}</td></tr>
+            <tr><td><strong>Judge</strong></td><td>{judge_info}</td></tr>
+            <tr><td><strong>Workers</strong></td><td>{judge_workers}</td></tr>
+            <tr><td><strong>Questions</strong></td><td>{summary['total_questions']}</td></tr>
+            <tr><td><strong>Duration</strong></td><td>{format_duration(summary['duration_seconds'])}</td></tr>
+            <tr><td><strong>Date</strong></td><td>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</td></tr>
+        </table>
+        
+        <h2>📊 Overall Metrics</h2>
+        <div style="text-align: center;">
+"""
+    
+    # Metric cards
+    for metric, values in summary['metrics'].items():
+        score_class = "score-excellent" if values['mean'] >= 0.7 else ("score-good" if values['mean'] >= 0.5 else "score-poor")
+        html_content += f"""
+            <div class="metric-card {score_class}">
+                <h3>{metric.replace('_', ' ').title()}</h3>
+                <div class="metric-value">{values['mean']:.3f}</div>
+                <div class="metric-details">
+                    ± {values['std']:.3f} | Min: {values['min']:.3f} | Max: {values['max']:.3f}
+                </div>
+            </div>
+"""
+    
+    html_content += """
+        </div>
+        
+        <h2>📁 Metrics by Category</h2>
+"""
+    
+    # By Category
+    for category in sorted(categories):
+        cat_df = results_df[results_df['category'] == category]
+        html_content += f"""
+        <div class="category-section">
+            <h3>{category} <span class="badge">{len(cat_df)} questions</span></h3>
+            <table>
+                <tr><th>Metric</th><th>Mean</th><th>Std Dev</th></tr>
+"""
+        for metric in ['faithfulness', 'context_recall', 'context_precision']:
+            if metric in cat_df.columns:
+                mean_val = cat_df[metric].mean()
+                std_val = cat_df[metric].std()
+                html_content += f"<tr><td>{metric.replace('_', ' ').title()}</td><td>{mean_val:.3f}</td><td>{std_val:.3f}</td></tr>\n"
+        
+        html_content += """
+            </table>
+        </div>
+"""
+    
+    html_content += """
+        <h2>⚡ Metrics by Difficulty</h2>
+"""
+    
+    # By Difficulty
+    for difficulty in difficulties:
+        diff_df = results_df[results_df['difficulty'] == difficulty]
+        if len(diff_df) > 0:
+            html_content += f"""
+        <div class="category-section">
+            <h3>{difficulty.upper()} <span class="badge">{len(diff_df)} questions</span></h3>
+            <table>
+                <tr><th>Metric</th><th>Mean</th><th>Std Dev</th></tr>
+"""
+            for metric in ['faithfulness', 'context_recall', 'context_precision']:
+                if metric in diff_df.columns:
+                    mean_val = diff_df[metric].mean()
+                    std_val = diff_df[metric].std()
+                    html_content += f"<tr><td>{metric.replace('_', ' ').title()}</td><td>{mean_val:.3f}</td><td>{std_val:.3f}</td></tr>\n"
+            
+            html_content += """
+            </table>
+        </div>
+"""
+    
+    html_content += """
+    </div>
+</body>
+</html>
+"""
+    
+    # Save HTML
+    html_path = output_dir / "ragas_report.html"
+    with open(html_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
 
 
 def get_model_safe_name(model: str) -> str:
@@ -561,7 +877,8 @@ def run_tool_evaluation(
     limit: Optional[int] = None,
     test_ids: Optional[List[str]] = None,
     enable_trace: bool = False,
-    provider: str = "ollama"
+    provider: str = "ollama",
+    resume: bool = True
 ) -> Dict[str, Any]:
     """
     Führt die Tool-Evaluation durch.
@@ -574,15 +891,22 @@ def run_tool_evaluation(
         test_ids: Optionale Liste spezifischer Test-IDs (short_ids)
         enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
         provider: LLM-Provider ('ollama' oder 'openai')
+        resume: Wenn True, versuche von Checkpoint fortzusetzen; wenn False, starte neu
     
     Returns:
         Dictionary mit Evaluationsergebnissen
     """
+    import pickle
+    
     print("\n" + "=" * 80)
     print("🔧 TOOL-EVALUATION")
     print("=" * 80)
     
     start_time = time.time()
+    
+    # Checkpoint-Pfad
+    checkpoint_path = output_dir / "tool_eval_checkpoint.pkl"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Setze Modell und Provider
     set_model_in_settings(model, provider)
@@ -640,9 +964,42 @@ def run_tool_evaluation(
     if enable_trace and agent_type == "constrained":
         print("   📝 Conversation-Trace-Logging aktiviert")
     print("-" * 80)
+    
+    # Versuche Checkpoint zu laden
     results = []
+    start_idx = 0
+    completed_scenario_ids = set()
+    
+    if checkpoint_path.exists() and resume:
+        try:
+            with open(checkpoint_path, 'rb') as f:
+                checkpoint_data = pickle.load(f)
+                
+                # Validiere Checkpoint
+                checkpoint_model = checkpoint_data.get('model_name')
+                checkpoint_agent = checkpoint_data.get('agent_type')
+                
+                if checkpoint_model == model and checkpoint_agent == agent_type:
+                    results = checkpoint_data.get('results', [])
+                    completed_scenario_ids = checkpoint_data.get('completed_ids', set())
+                    start_idx = len(results)
+                    print(f"\n📂 Checkpoint gefunden: {start_idx} Szenarien bereits abgeschlossen")
+                    print(f"   Modell: {checkpoint_model}, Agent: {checkpoint_agent}")
+                    print(f"   Fortsetzung...\n")
+                else:
+                    print(f"\n⚠️ Checkpoint ist für anderes Modell/Agent ({checkpoint_model}/{checkpoint_agent})")
+                    print(f"   Starte frisch...\n")
+        except Exception as e:
+            print(f"\n⚠️ Checkpoint konnte nicht geladen werden: {e}")
+            print(f"   Starte frisch...\n")
+    elif checkpoint_path.exists() and not resume:
+        print(f"\n🗑️  Ignoriere vorhandenen Checkpoint (resume=False)")
+        print(f"   Starte frisch...\n")
     
     for i, scenario in enumerate(scenarios, 1):
+        # Überspringe bereits abgeschlossene Szenarien
+        if scenario.short_id in completed_scenario_ids:
+            continue
         # Kompakte Ausgabe mit Testname: alles in einer Zeile wie eval_old
         # Extrahiere kurzen Namen aus description (erste Zeile des Docstrings)
         test_name = ""
@@ -659,11 +1016,30 @@ def run_tool_evaluation(
         try:
             result = run_single_scenario(agent, scenario, enable_trace=enable_trace)
             results.append(result)
+            completed_scenario_ids.add(scenario.short_id)
             
             status = "✓" if result.exact_match else "✗"
-            print(f"{status} (F1={result.tool_f1:.2f}, {result.latency_ms:.0f}ms)")
+            print(f"{status} (F1={result.tool_f1:.2f}, {result.latency_ms:.0f}ms)", end="")
+            
+            # Checkpoint nach jedem Szenario speichern
+            checkpoint_data = {
+                'model_name': model,
+                'agent_type': agent_type,
+                'results': results,
+                'completed_ids': completed_scenario_ids,
+                'last_scenario': scenario.short_id
+            }
+            with open(checkpoint_path, 'wb') as f:
+                pickle.dump(checkpoint_data, f)
+            print(f" 💾")
+            
         except Exception as e:
             print(f"ERROR: {str(e)[:50]}")
+    
+    # Lösche Checkpoint nach erfolgreicher Evaluation
+    if checkpoint_path.exists():
+        checkpoint_path.unlink()
+        print(f"\n🗑️  Checkpoint gelöscht (Evaluation abgeschlossen)")
     
     # Ergebnisse aggregieren
     from eval.core.runner import EvaluationReport
@@ -741,7 +1117,11 @@ def run_rag_evaluation(
     agent_type: str,
     output_dir: Path,
     limit: Optional[int] = None,
-    provider: str = "ollama"
+    provider: str = "ollama",
+    judge_provider: Optional[str] = None,
+    judge_model: Optional[str] = None,
+    judge_workers: int = 8,
+    resume: bool = True
 ) -> Dict[str, Any]:
     """
     Führt die RAGAS-Evaluation durch.
@@ -752,6 +1132,10 @@ def run_rag_evaluation(
         output_dir: Ausgabeverzeichnis
         limit: Optionale Begrenzung der Testfragen
         provider: LLM-Provider ('ollama' oder 'openai')
+        judge_provider: Judge LLM Provider (None = auto-detect)
+        judge_model: Judge-Modell (None = use default from settings)
+        judge_workers: Anzahl paralleler Workers für Judge (default: 8)
+        resume: Wenn True, versuche von Checkpoint fortzusetzen; wenn False, starte neu
     
     Returns:
         Dictionary mit RAGAS-Ergebnissen
@@ -764,6 +1148,12 @@ def run_rag_evaluation(
     
     # Setze Modell und Provider
     set_model_in_settings(model, provider)
+    
+    # RAGAS-Evaluation: Deaktiviere DuckDuckGo und Web Scraper
+    # Diese Tools verfälschen die RAG-Evaluation, da sie externe Quellen nutzen
+    settings.ENABLE_DUCKDUCKGO = False
+    settings.ENABLE_WEB_SCRAPER = False
+    print("   🔒 DuckDuckGo und Web-Scraper deaktiviert für reine RAG-Evaluation")
     
     # Importiere RAGAS-Komponenten
     from eval.ragas.ragas_evaluation import (
@@ -815,11 +1205,17 @@ def run_rag_evaluation(
     
     # Antworten generieren
     print(f"\n🚀 Generiere Chatbot-Antworten ({len(test_df)} Fragen)...")
-    dataset = generate_chatbot_responses(test_df, agent, langsmith_client)
+    dataset = generate_chatbot_responses(test_df, agent, langsmith_client, model_name=model, resume=resume)
     
     # RAGAS-Evaluation
     print("\n📊 Führe RAGAS-Evaluation durch...")
-    results_df = run_ragas_evaluation(dataset, model=model)
+    results_df = run_ragas_evaluation(
+        dataset, 
+        model=model,
+        judge_provider=judge_provider,
+        judge_model=judge_model,
+        max_workers=judge_workers
+    )
     
     # Ergebnisse speichern - in model+agent/ragas Unterordner
     model_folder = get_model_folder_name(model)
@@ -857,6 +1253,9 @@ def run_rag_evaluation(
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
     
+    # Generiere detaillierte Reports (README + HTML)
+    _generate_ragas_reports(results_df, test_df, summary, ragas_dir, model, agent_type, judge_provider, judge_model, judge_workers)
+    
     # Zusammenfassung anzeigen
     print("\n" + "-" * 80)
     print("📊 RAGAS-EVALUATION ERGEBNISSE")
@@ -869,6 +1268,8 @@ def run_rag_evaluation(
     for metric, values in summary["metrics"].items():
         print(f"   {metric:20s}: {values['mean']:.3f} (±{values['std']:.3f})")
     print(f"\n   Ergebnisse:       {csv_path}")
+    print(f"   README:           {ragas_dir / 'README.md'}")
+    print(f"   HTML Report:      {ragas_dir / 'ragas_report.html'}")
     
     return summary
 
@@ -886,7 +1287,11 @@ def run_full_evaluation(
     output_dir: Optional[Path] = None,
     test_ids: Optional[List[str]] = None,
     enable_trace: bool = False,
-    provider: Optional[str] = None
+    provider: Optional[str] = None,
+    ragas_judge_provider: Optional[str] = None,
+    ragas_judge_model: Optional[str] = None,
+    ragas_workers: int = 8,
+    resume: bool = True
 ) -> Dict[str, Any]:
     """
     Führt die vollständige Evaluation für ein Modell durch.
@@ -901,6 +1306,10 @@ def run_full_evaluation(
         test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
         enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
         provider: LLM-Provider ('ollama' oder 'openai', wenn None wird automatisch ermittelt)
+        ragas_judge_provider: RAGAS Judge Provider ('openai' oder 'ollama')
+        ragas_judge_model: RAGAS Judge Modell
+        ragas_workers: Anzahl paralleler Workers für RAGAS Judge
+        resume: Wenn True, versuche von Checkpoint fortzusetzen; wenn False, starte neu
     
     Returns:
         Zusammenfassung aller Ergebnisse
@@ -956,7 +1365,8 @@ def run_full_evaluation(
                 limit=tool_limit,
                 test_ids=test_ids,
                 enable_trace=enable_trace,
-                provider=provider
+                provider=provider,
+                resume=resume
             )
         except Exception as e:
             print(f"\n❌ Tool-Evaluation fehlgeschlagen: {e}")
@@ -965,7 +1375,17 @@ def run_full_evaluation(
     # RAGAS-Evaluation
     if mode in ("all", "rag"):
         try:
-            results["ragas"] = run_rag_evaluation(model, agent_type, output_dir, limit=rag_limit, provider=provider)
+            results["ragas"] = run_rag_evaluation(
+                model, 
+                agent_type, 
+                output_dir, 
+                limit=rag_limit, 
+                provider=provider,
+                judge_provider=ragas_judge_provider,
+                judge_model=ragas_judge_model,
+                judge_workers=ragas_workers,
+                resume=resume
+            )
         except Exception as e:
             print(f"\n❌ RAGAS-Evaluation fehlgeschlagen: {e}")
             results["ragas"] = {"error": str(e)}
@@ -1063,7 +1483,11 @@ def run_all_agents_evaluation(
     agents: Optional[List[str]] = None,
     test_ids: Optional[List[str]] = None,
     enable_trace: bool = False,
-    provider: Optional[str] = None
+    provider: Optional[str] = None,
+    ragas_judge_provider: Optional[str] = None,
+    ragas_judge_model: Optional[str] = None,
+    ragas_workers: int = 8,
+    resume: bool = True
 ) -> Dict[str, Any]:
     """
     Führt Evaluation für alle Agent-Typen durch.
@@ -1077,6 +1501,10 @@ def run_all_agents_evaluation(
         test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
         enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
         provider: LLM-Provider ('ollama' oder 'openai', wenn None wird automatisch ermittelt)
+        ragas_judge_provider: RAGAS Judge Provider
+        ragas_judge_model: RAGAS Judge Modell
+        ragas_workers: Anzahl paralleler Workers für RAGAS Judge
+        resume: Wenn True, versuche von Checkpoint fortzusetzen; wenn False, starte neu
     """
     # Provider automatisch ermitteln falls nicht angegeben
     if provider is None:
@@ -1120,7 +1548,11 @@ def run_all_agents_evaluation(
                 output_dir=shared_output_dir,
                 test_ids=test_ids,
                 enable_trace=enable_trace,
-                provider=provider
+                provider=provider,
+                ragas_judge_provider=ragas_judge_provider,
+                ragas_judge_model=ragas_judge_model,
+                ragas_workers=ragas_workers,
+                resume=resume
             )
         except Exception as e:
             print(f"\n❌ Evaluation für {agent_type} fehlgeschlagen: {e}")
@@ -1265,6 +1697,34 @@ Beispiele:
         help="Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)"
     )
     
+    parser.add_argument(
+        "--ragas-judge-provider",
+        type=str,
+        choices=["openai", "ollama"],
+        default=None,
+        help="RAGAS Judge Provider (openai oder ollama, default: auto-detect)"
+    )
+    
+    parser.add_argument(
+        "--ragas-judge-model",
+        type=str,
+        default=None,
+        help="RAGAS Judge Modell (default: gpt-4o-mini für OpenAI, qwen2.5:7b für Ollama)"
+    )
+    
+    parser.add_argument(
+        "--ragas-workers",
+        type=int,
+        default=8,
+        help="Anzahl paralleler Workers für RAGAS Judge (default: 8, OpenAI empfohlen: 150)"
+    )
+    
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Ignoriere vorhandene Checkpoints und starte Evaluation neu"
+    )
+    
     args = parser.parse_args()
     
     try:
@@ -1290,7 +1750,11 @@ Beispiele:
                     agents=args.agents,
                     test_ids=args.test_ids,
                     enable_trace=args.enable_trace,
-                    provider=provider
+                    provider=provider,
+                    ragas_judge_provider=args.ragas_judge_provider,
+                    ragas_judge_model=args.ragas_judge_model,
+                    ragas_workers=args.ragas_workers,
+                    resume=not args.no_resume
                 )
             elif args.agent == "all":
                 # Alle Agent-Architekturen evaluieren
@@ -1301,7 +1765,11 @@ Beispiele:
                     tool_limit=args.tool_limit,
                     test_ids=args.test_ids,
                     enable_trace=args.enable_trace,
-                    provider=provider
+                    provider=provider,
+                    ragas_judge_provider=args.ragas_judge_provider,
+                    ragas_judge_model=args.ragas_judge_model,
+                    ragas_workers=args.ragas_workers,
+                    resume=not args.no_resume
                 )
             else:
                 # Einzelnen Agent evaluieren
@@ -1313,7 +1781,11 @@ Beispiele:
                     tool_limit=args.tool_limit,
                     test_ids=args.test_ids,
                     enable_trace=args.enable_trace,
-                    provider=provider
+                    provider=provider,
+                    ragas_judge_provider=args.ragas_judge_provider,
+                    ragas_judge_model=args.ragas_judge_model,
+                    ragas_workers=args.ragas_workers,
+                    resume=not args.no_resume
                 )
     except KeyboardInterrupt:
         print("\n\n⚠️  Evaluation abgebrochen!")

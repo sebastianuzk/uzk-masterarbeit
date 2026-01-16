@@ -92,16 +92,67 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
         return ["LangSmith-Fehler"]  # Als Liste
 
 
-def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> EvaluationDataset:
+def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client, model_name: str = None, resume: bool = True) -> EvaluationDataset:
     """
     Generiert Chatbot-Antworten für alle Fragen und sammelt RAG-Kontexte.
+    Speichert nach jeder Frage einen Checkpoint für Resume-Fähigkeit.
+    
+    Args:
+        df: DataFrame mit Fragen
+        agent: Agent-Instanz
+        langsmith_client: LangSmith Client
+        model_name: Name des verwendeten Modells (für Checkpoint-Validierung)
+        resume: Wenn True, versuche von Checkpoint fortzusetzen; wenn False, starte neu
     """
     print("\n🤖 Generiere Chatbot-Antworten...")
     print("=" * 80)
     
-    samples = []
+    # Checkpoint-Pfad
+    checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
+    checkpoint_path.parent.mkdir(exist_ok=True)
     
-    for idx, row in df.iterrows():
+    # Versuche vorhandenen Checkpoint zu laden
+    samples = []
+    start_idx = 0
+    
+    if checkpoint_path.exists() and resume:
+        import pickle
+        try:
+            with open(checkpoint_path, 'rb') as f:
+                checkpoint_data = pickle.load(f)
+                
+                # Validiere Checkpoint
+                checkpoint_valid = True
+                checkpoint_model = checkpoint_data.get('model_name')
+                
+                # Prüfe ob Checkpoint für gleiches Modell
+                if model_name and checkpoint_model and checkpoint_model != model_name:
+                    print(f"⚠️ Checkpoint ist für anderes Modell ({checkpoint_model} vs {model_name})")
+                    print(f"   Starte frisch...")
+                    checkpoint_valid = False
+                
+                # Prüfe ob Checkpoint vollständige Daten hat
+                if checkpoint_valid and 'samples' in checkpoint_data:
+                    samples = checkpoint_data['samples']
+                    start_idx = len(samples)
+                    print(f"📂 Checkpoint gefunden: {start_idx} Fragen bereits beantwortet")
+                    print(f"   Modell: {checkpoint_model or 'unbekannt'}")
+                    print(f"   Fortsetzung ab Frage {start_idx + 1}...\n")
+                else:
+                    samples = []
+                    start_idx = 0
+                    
+        except Exception as e:
+            print(f"⚠️ Checkpoint konnte nicht geladen werden: {e}")
+            print(f"   Starte frisch...\n")
+            samples = []
+            start_idx = 0
+    elif checkpoint_path.exists() and not resume:
+        print(f"🗑️  Ignoriere vorhandenen Checkpoint (--no-resume gesetzt)")
+        print(f"   Starte frisch...\n")
+    
+    # Beantworte verbleibende Fragen
+    for idx, row in df.iloc[start_idx:].iterrows():
         question = row['question']
         expected_answer = row['expected_answer']
         
@@ -157,29 +208,47 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
             reference=expected_answer
         )
         samples.append(sample)
+        
+        # Checkpoint nach jeder Frage speichern (schnell: ~1-5ms)
+        import pickle
+        checkpoint_data = {
+            'samples': samples,
+            'test_df': df,
+            'last_idx': idx,
+            'model_name': model_name  # Speichere Modellname
+        }
+        with open(checkpoint_path, 'wb') as f:
+            pickle.dump(checkpoint_data, f)
+        print(f"   💾 Checkpoint gespeichert ({len(samples)}/{len(df)} Fragen)")
     
     print("\n" + "=" * 80)
     print(f"✅ {len(samples)} Antworten generiert\n")
     
-    # Zwischenspeicherung der Antworten und Kontexte
+    # Finale Dataset-Konvertierung
     dataset = EvaluationDataset(samples=samples)
-    checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
-    checkpoint_path.parent.mkdir(exist_ok=True)
     
-    import pickle
+    # Finales Checkpoint mit vollständigem Dataset
     checkpoint_data = {
         'dataset': dataset,
-        'test_df': df
+        'samples': samples,
+        'test_df': df,
+        'model_name': model_name  # Speichere Modellname
     }
     with open(checkpoint_path, 'wb') as f:
         pickle.dump(checkpoint_data, f)
-    print(f"💾 Checkpoint gespeichert: {checkpoint_path}")
+    print(f"💾 Finaler Checkpoint gespeichert: {checkpoint_path}")
     print(f"   (Antworten + Kontexte für alle {len(samples)} Fragen)\n")
     
     return dataset
 
 
-def run_ragas_evaluation(dataset: EvaluationDataset, model: str = None) -> pd.DataFrame:
+def run_ragas_evaluation(
+    dataset: EvaluationDataset, 
+    model: str = None,
+    judge_provider: str = None,
+    judge_model: str = None,
+    max_workers: int = 8
+) -> pd.DataFrame:
     """
     Führt RAGAS-Evaluation durch.
     Verwendet 3 Standard-RAGAS-Metriken: faithfulness, context_recall, context_precision.
@@ -187,21 +256,48 @@ def run_ragas_evaluation(dataset: EvaluationDataset, model: str = None) -> pd.Da
     
     Args:
         dataset: RAGAS EvaluationDataset mit Samples
-        model: Agent-Modell (nur für Dokumentation, Judge ist immer RAGAS_JUDGE_MODEL)
+        model: Agent-Modell (nur für Dokumentation)
+        judge_provider: 'openai' oder 'ollama' (None = auto-detect)
+        judge_model: Judge-Modell (None = use RAGAS_JUDGE_MODEL from settings)
+        max_workers: Anzahl paralleler Workers (default: 8)
     """
     print("🚀 Starte RAGAS-Evaluation...")
     print("=" * 80)
     
     # Verwende immer den festen RAGAS Judge für faire Vergleiche
     print(f"   Agent-Modell:  {model if model else 'N/A'}")
-    print(f"   RAGAS-Judge:   {RAGAS_JUDGE_MODEL}")
     
-    # Ollama LLM konfigurieren mit festem Judge
-    llm = ChatOllama(
-        model=RAGAS_JUDGE_MODEL,
-        base_url=OLLAMA_BASE_URL,
-        temperature=0.0
-    )
+    # Bestimme Judge-Provider und -Modell
+    final_judge_provider = judge_provider
+    final_judge_model = judge_model or RAGAS_JUDGE_MODEL
+    
+    # Auto-detect provider if not specified
+    if final_judge_provider is None:
+        if final_judge_model.startswith('gpt-'):
+            final_judge_provider = 'openai'
+        else:
+            final_judge_provider = 'ollama'
+    
+    print(f"   RAGAS-Judge:   {final_judge_model} ({final_judge_provider})")
+    print(f"   Max Workers:   {max_workers}")
+    
+    # LLM konfigurieren basierend auf Provider
+    if final_judge_provider == 'openai':
+        from langchain_openai import ChatOpenAI
+        from config.settings import OPENAI_API_KEY
+        llm = ChatOpenAI(
+            model=final_judge_model,
+            temperature=0.0,
+            api_key=OPENAI_API_KEY,
+            max_retries=3
+        )
+    else:
+        # Ollama LLM konfigurieren
+        llm = ChatOllama(
+            model=final_judge_model,
+            base_url=OLLAMA_BASE_URL,
+            temperature=0.0
+        )
     
     # Ollama Embeddings für answer_relevancy (später aktivieren)
     # embeddings = OllamaEmbeddings(
@@ -219,10 +315,13 @@ def run_ragas_evaluation(dataset: EvaluationDataset, model: str = None) -> pd.Da
     ]
     print(f"   Metriken: {[m.name for m in metrics]}")
     print(f"\n   ⏳ Evaluiere {len(dataset.samples)} Samples...")
-    print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
+    if final_judge_provider == 'openai' and max_workers > 50:
+        print(f"   💡 Mit {max_workers} Workern - OpenAI kann sehr schnell sein!\n")
+    else:
+        print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
-    # RunConfig für parallele Requests an Ollama
-    run_config = RunConfig(max_workers=8)
+    # RunConfig für parallele Requests
+    run_config = RunConfig(max_workers=max_workers)
     
     # Evaluation durchführen
     results = evaluate(
