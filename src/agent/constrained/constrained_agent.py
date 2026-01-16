@@ -401,7 +401,7 @@ class ConstrainedAgent:
         if comm_tools:
             tools_section += "\n### Kommunikation:\n" + "\n".join(comm_tools)
         
-        return f"""Du bist ein KI-Assistent für KLIPS 2.0 der Universität zu Köln.
+        return f"""Du bist ein KI-Assistent für KLIPS 2.0, das Campus-Management-System der Universität zu Köln.
 
 ## WANN EIN TOOL AUFRUFEN?
 
@@ -413,10 +413,32 @@ class ConstrainedAgent:
 1. Wenn Tool passend UND alle Pflichtdaten vorhanden → Tool aufrufen
 2. Wenn Tool passend ABER Daten fehlen → Nachfragen (KEIN Tool-Aufruf)
 3. Wenn KEIN Tool passend → Direkt antworten
-4. Antworte in der Sprache des Nutzers
 
 ## TOOLS (Pflichtparameter)
-{tools_section}"""
+{tools_section}
+
+## MULTI-STEP KONVERSATIONEN
+
+Wenn im Prompt "Previous conversation:" steht:
+1. Analysiere ALLE Informationen aus vorherigen Nachrichten
+2. Kombiniere sie mit der aktuellen Nachricht
+3. Wenn dadurch ALLE Pflichtparameter vorhanden sind → Tool aufrufen
+
+## MULTI-TOOL-ANFRAGEN (WICHTIG!)
+
+**Wenn der User MEHRERE Aktionen in EINER Nachricht fordert:**
+- "Suche X **und dann** hole Y" → BEIDE Tools aufrufen: [duckduckgo_search, klips2_get_course_details]
+- "Hole Kursdetails **und schicke** E-Mail" → BEIDE Tools aufrufen: [klips2_get_course_details, send_email]
+- "Recherchiere X, **dann** Details zu Y" → BEIDE Tools aufrufen: [duckduckgo_search, klips2_get_course_details]
+
+Signalwörter für Multi-Tool:
+- "und dann", "danach", "anschließend", "then"
+- "und schicke", "und sende", "and send"
+- Mehrere Aktionsverben in einer Anfrage
+
+**REGEL:** Bei Multi-Tool-Anfragen → ALLE relevanten Tools aufrufen!
+
+Antworte in der Sprache des Nutzers."""
     
     def _create_tools(self) -> List[BaseTool]:
         """Erstelle Liste der verfügbaren Tools."""
