@@ -329,3 +329,4 @@ $RECYCLE.BIN/
 *.old
 *_backup
 *_old
+eval/ragas/data/responses_checkpoint.pkl
