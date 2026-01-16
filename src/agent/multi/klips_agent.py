@@ -138,6 +138,9 @@ class KlipsAgent(BaseSpecializedAgent):
         """Erstelle alle KLIPS2-Tools."""
         tools = []
         
+        if not settings.ENABLE_KLIPS:
+            return tools
+        
         tool_creators = [
             ("KLIPS2-Registrierung", create_klips2_register_tool),
             ("KLIPS2-Bewerbung", create_klips2_apply_tool),

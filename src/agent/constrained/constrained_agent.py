@@ -396,21 +396,23 @@ class ConstrainedAgent:
         except Exception as e:
             print(f"  ⚠️ RAG-Tool konnte nicht geladen werden: {e}")
         
-        try:
-            tools.append(create_email_tool())
-            print("  ✅ E-Mail-Tool geladen")
-        except Exception as e:
-            print(f"  ⚠️ E-Mail-Tool konnte nicht geladen werden: {e}")
+        if settings.ENABLE_EMAIL:
+            try:
+                tools.append(create_email_tool())
+                print("  ✅ E-Mail-Tool geladen")
+            except Exception as e:
+                print(f"  ⚠️ E-Mail-Tool konnte nicht geladen werden: {e}")
         
-        try:
-            tools.append(create_klips2_register_tool())
-            tools.append(create_klips2_apply_tool())
-            tools.append(create_klips2_change_password_tool())
-            tools.append(create_klips2_get_course_details_tool())
-            tools.append(create_klips2_change_address_tool())
-            print("  ✅ KLIPS2-Tools geladen")
-        except Exception as e:
-            print(f"  ⚠️ KLIPS2-Tools konnten nicht geladen werden: {e}")
+        if settings.ENABLE_KLIPS:
+            try:
+                tools.append(create_klips2_register_tool())
+                tools.append(create_klips2_apply_tool())
+                tools.append(create_klips2_change_password_tool())
+                tools.append(create_klips2_get_course_details_tool())
+                tools.append(create_klips2_change_address_tool())
+                print("  ✅ KLIPS2-Tools geladen")
+            except Exception as e:
+                print(f"  ⚠️ KLIPS2-Tools konnten nicht geladen werden: {e}")
         
         return tools
     

@@ -370,33 +370,35 @@ Antworte in der Sprache des Nutzers."""
             print(f"⚠️  Universitäts-RAG-Tool konnte nicht geladen werden: {e}")
             print("   → Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal")
         
-        # E-Mail-Tool für Support-Eskalation immer hinzufügen
-        try:
-            email_tool = create_email_tool()
-            tools.append(email_tool)
-            print("✅ E-Mail-Tool erfolgreich geladen")
-        except Exception as e:
-            print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
-            print("   → Support-Eskalation per E-Mail nicht verfügbar")
+        # E-Mail-Tool für Support-Eskalation
+        if settings.ENABLE_EMAIL:
+            try:
+                email_tool = create_email_tool()
+                tools.append(email_tool)
+                print("✅ E-Mail-Tool erfolgreich geladen")
+            except Exception as e:
+                print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
+                print("   → Support-Eskalation per E-Mail nicht verfügbar")
         
-        # KLIPS2-Registrierungs-Tool hinzufügen
-        try:
-            klips2_tool = create_klips2_register_tool()
-            tools.append(klips2_tool)
-            print("✅ KLIPS2-Registrierungs-Tool erfolgreich geladen")
-        except Exception as e:
-            print(f"⚠️  KLIPS2-Registrierungs-Tool konnte nicht geladen werden: {e}")
-            print("   → KLIPS2-Account-Erstellung nicht verfügbar")
-            
-        # KLIPS2-Erweiterte Tools hinzufügen
-        try:
-            tools.append(create_klips2_apply_tool())
-            tools.append(create_klips2_change_password_tool())
-            tools.append(create_klips2_get_course_details_tool())
-            tools.append(create_klips2_change_address_tool())
-            print("✅ KLIPS2-Erweiterte Tools erfolgreich geladen")
-        except Exception as e:
-            print(f"⚠️  KLIPS2-Erweiterte Tools konnten nicht geladen werden: {e}")
+        # KLIPS2-Tools
+        if settings.ENABLE_KLIPS:
+            try:
+                klips2_tool = create_klips2_register_tool()
+                tools.append(klips2_tool)
+                print("✅ KLIPS2-Registrierungs-Tool erfolgreich geladen")
+            except Exception as e:
+                print(f"⚠️  KLIPS2-Registrierungs-Tool konnte nicht geladen werden: {e}")
+                print("   → KLIPS2-Account-Erstellung nicht verfügbar")
+                
+            # KLIPS2-Erweiterte Tools hinzufügen
+            try:
+                tools.append(create_klips2_apply_tool())
+                tools.append(create_klips2_change_password_tool())
+                tools.append(create_klips2_get_course_details_tool())
+                tools.append(create_klips2_change_address_tool())
+                print("✅ KLIPS2-Erweiterte Tools erfolgreich geladen")
+            except Exception as e:
+                print(f"⚠️  KLIPS2-Erweiterte Tools konnten nicht geladen werden: {e}")
         
         return tools
     

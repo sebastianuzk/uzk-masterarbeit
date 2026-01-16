@@ -1149,11 +1149,13 @@ def run_rag_evaluation(
     # Setze Modell und Provider
     set_model_in_settings(model, provider)
     
-    # RAGAS-Evaluation: Deaktiviere DuckDuckGo und Web Scraper
+    # RAGAS-Evaluation: Deaktiviere alle Tools außer RAG
     # Diese Tools verfälschen die RAG-Evaluation, da sie externe Quellen nutzen
     settings.ENABLE_DUCKDUCKGO = False
     settings.ENABLE_WEB_SCRAPER = False
-    print("   🔒 DuckDuckGo und Web-Scraper deaktiviert für reine RAG-Evaluation")
+    settings.ENABLE_EMAIL = False
+    settings.ENABLE_KLIPS = False
+    print("   🔒 Alle Tools außer RAG deaktiviert für reine RAG-Evaluation")
     
     # Importiere RAGAS-Komponenten
     from eval.ragas.ragas_evaluation import (
