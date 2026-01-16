@@ -250,9 +250,16 @@ class ReactAgent:
     def _get_system_prompt(self) -> str:
         """Erstelle den System-Prompt mit detaillierten Tool-Spezifikationen."""
         
-        # Formatiere Tool-Spezifikationen
+        # Erstelle Set der verfügbaren Tool-Namen
+        available_tool_names = {tool.name for tool in self.tools}
+        
+        # Formatiere Tool-Spezifikationen NUR für verfügbare Tools
         tools_info = []
         for tool_name, spec in TOOL_SPECS.items():
+            # Skip tools that are not actually loaded
+            if tool_name not in available_tool_names:
+                continue
+                
             info = f"\n### {tool_name}\n"
             info += f"**Beschreibung:** {spec['description']}\n\n"
             
@@ -272,6 +279,21 @@ class ReactAgent:
         
         tools_spec_text = "".join(tools_info)
         
+        # Generate dynamic tool usage guidance based on available tools
+        tool_usage_examples = []
+        if "klips2_register" in available_tool_names or "klips2_apply_study" in available_tool_names:
+            tool_usage_examples.append("- KLIPS2-Aktionen: Wenn ALLE Pflichtparameter vorhanden sind")
+        if "university_knowledge_search" in available_tool_names:
+            tool_usage_examples.append("- Wissensfragen zur Universität → university_knowledge_search")
+        if "duckduckgo_search" in available_tool_names:
+            tool_usage_examples.append("- Explizite Internet-Suche (\"Suche im Internet\", \"Search for\") → duckduckgo_search")
+        if "web_scraper" in available_tool_names:
+            tool_usage_examples.append("- URL genannt → web_scraper")
+        if "send_email" in available_tool_names:
+            tool_usage_examples.append("- E-Mail senden gewünscht → send_email (mit Betreff und Text)")
+        
+        tool_usage_text = "\n".join(tool_usage_examples) if tool_usage_examples else "- Nutze die verfügbaren Tools je nach Anfrage"
+        
         return f"""Du bist ein KI-Assistent für KLIPS 2.0, das Campus-Management-System der Universität zu Köln.
 
 ## VERFÜGBARE TOOLS MIT EXAKTEN PARAMETER-ANFORDERUNGEN
@@ -281,11 +303,7 @@ class ReactAgent:
 ## WANN EIN TOOL AUFRUFEN?
 
 ✅ Tool aufrufen bei:
-- KLIPS2-Aktionen: Wenn ALLE Pflichtparameter vorhanden sind
-- Wissensfragen zur Universität → university_knowledge_search
-- Explizite Internet-Suche ("Suche im Internet", "Search for") → duckduckgo_search
-- URL genannt → web_scraper
-- E-Mail senden gewünscht → send_email (mit Betreff und Text)
+{tool_usage_text}
 
 ❌ KEIN Tool bei:
 - Begrüßungen ("Hallo!", "Wie geht's?")

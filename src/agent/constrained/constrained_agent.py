@@ -349,11 +349,63 @@ class ConstrainedAgent:
     
     def _get_system_prompt(self) -> str:
         """Kompakter System-Prompt für Constrained Agent."""
-        return """Du bist ein KI-Assistent für KLIPS 2.0 der Universität zu Köln.
+        # Erstelle Set der verfügbaren Tool-Namen
+        available_tool_names = {tool.name for tool in self.tools}
+        
+        # Dynamische Tool-Kategorien
+        tool_categories = []
+        if any(name.startswith("klips2_") for name in available_tool_names):
+            tool_categories.append("KLIPS2-Aktionen")
+        if "university_knowledge_search" in available_tool_names:
+            tool_categories.append("Uni-Wissensfragen")
+        if "duckduckgo_search" in available_tool_names:
+            tool_categories.append("Internet-Suche")
+        if "web_scraper" in available_tool_names:
+            tool_categories.append("URLs")
+        if "send_email" in available_tool_names:
+            tool_categories.append("E-Mails")
+        
+        tool_categories_text = ", ".join(tool_categories) if tool_categories else "Verfügbare Tools je nach Anfrage"
+        
+        # Dynamische Tool-Liste mit Pflichtparametern
+        klips_tools = []
+        if "klips2_register" in available_tool_names:
+            klips_tools.append("- klips2_register: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit")
+        if "klips2_apply_study" in available_tool_names:
+            klips_tools.append("- klips2_apply_study: username, password, semester, degree_type, study_program (+ weitere)")
+        if "klips2_change_address" in available_tool_names:
+            klips_tools.append("- klips2_change_address: username, password, street, zip_code, city")
+        if "klips2_change_password" in available_tool_names:
+            klips_tools.append("- klips2_change_password: username, password, new_password")
+        if "klips2_get_course_details" in available_tool_names:
+            klips_tools.append("- klips2_get_course_details: course_id")
+        
+        search_tools = []
+        if "duckduckgo_search" in available_tool_names:
+            search_tools.append("- duckduckgo_search: query (bei \"Search for\", \"Suche im Internet\", \"online\")")
+        if "university_knowledge_search" in available_tool_names:
+            search_tools.append("- university_knowledge_search: query (bei Uni-Fragen ohne Internet-Keywords)")
+        if "web_scraper" in available_tool_names:
+            search_tools.append("- web_scraper: url (bei URLs)")
+        
+        comm_tools = []
+        if "send_email" in available_tool_names:
+            comm_tools.append("- send_email: subject, body")
+        
+        # Baue Tool-Sektionen zusammen
+        tools_section = ""
+        if klips_tools:
+            tools_section += "\n### KLIPS2-Aktionen:\n" + "\n".join(klips_tools) + "\n"
+        if search_tools:
+            tools_section += "\n### Suche & Wissen:\n" + "\n".join(search_tools) + "\n"
+        if comm_tools:
+            tools_section += "\n### Kommunikation:\n" + "\n".join(comm_tools)
+        
+        return f"""Du bist ein KI-Assistent für KLIPS 2.0 der Universität zu Köln.
 
 ## WANN EIN TOOL AUFRUFEN?
 
-✅ Tool aufrufen bei: KLIPS2-Aktionen, Uni-Wissensfragen, Internet-Suche, URLs, E-Mails
+✅ Tool aufrufen bei: {tool_categories_text}
 ❌ KEIN Tool bei: Begrüßungen, Fragen über dich, Rechenaufgaben, allgemeine Fragen
 
 ## REGELN
@@ -364,21 +416,7 @@ class ConstrainedAgent:
 4. Antworte in der Sprache des Nutzers
 
 ## TOOLS (Pflichtparameter)
-
-### KLIPS2-Aktionen:
-- klips2_register: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit
-- klips2_apply_study: username, password, semester, degree_type, study_program (+ weitere)
-- klips2_change_address: username, password, street, zip_code, city
-- klips2_change_password: username, password, new_password
-- klips2_get_course_details: course_id
-
-### Suche & Wissen:
-- duckduckgo_search: query (bei "Search for", "Suche im Internet", "online")
-- university_knowledge_search: query (bei Uni-Fragen ohne Internet-Keywords)
-- web_scraper: url (bei URLs)
-
-### Kommunikation:
-- send_email: subject, body"""
+{tools_section}"""
     
     def _create_tools(self) -> List[BaseTool]:
         """Erstelle Liste der verfügbaren Tools."""

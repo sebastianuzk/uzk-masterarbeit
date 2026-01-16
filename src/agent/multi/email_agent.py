@@ -47,9 +47,11 @@ class EmailAgent(BaseSpecializedAgent):
     def _create_tools(self) -> List[BaseTool]:
         """Erstelle das E-Mail-Tool."""
         tools = []
-                if not settings.ENABLE_EMAIL:
+        
+        if not settings.ENABLE_EMAIL:
             return tools
-                try:
+        
+        try:
             email_tool = create_email_tool()
             tools.append(email_tool)
         except Exception as e:

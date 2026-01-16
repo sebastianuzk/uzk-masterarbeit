@@ -493,19 +493,69 @@ Sei STRENG bei Pflichtfeldern, FAIR bei Formaten."""
     
     def _get_system_prompt(self) -> str:
         """System-Prompt für den Confirmation Agent."""
-        return """Du bist ein KI-Assistent für KLIPS 2.0, das Campus-Management-System der Universität zu Köln.
+        # Erstelle Set der verfügbaren Tool-Namen
+        available_tool_names = {tool.name for tool in self.tools}
+        
+        # Dynamische Tool-Liste basierend auf verfügbaren Tools
+        tool_examples = []
+        if any(name in available_tool_names for name in ["klips2_register", "klips2_apply_study", "klips2_change_password", "klips2_change_address"]):
+            tool_examples.append("- KLIPS2-Aktionen (registrieren, bewerben, Adresse/Passwort ändern, Kurs abfragen)\n  * NUR wenn ALLE erforderlichen Daten VOLLSTÄNDIG vorliegen\n  * NUR wenn die Anfrage SPEZIFISCH und KLAR ist")
+        if "university_knowledge_search" in available_tool_names:
+            tool_examples.append("- Wissensfragen zur Universität → university_knowledge_search\n  * NUR bei SPEZIFISCHEN Fragen (z.B. \"Wie sind die Öffnungszeiten der Bibliothek?\")")
+        if "duckduckgo_search" in available_tool_names:
+            tool_examples.append("- Explizite Internet-Suche → duckduckgo_search (bei \"Search for\", \"Suche im Internet\")")
+        if "web_scraper" in available_tool_names:
+            tool_examples.append("- URL genannt → web_scraper")
+        if "send_email" in available_tool_names:
+            tool_examples.append("- E-Mail senden → send_email (mit vollständigem Betreff und Text)")
+        
+        tool_examples_text = "\n".join(tool_examples) if tool_examples else "- Nutze die verfügbaren Tools je nach Anfrage"
+        
+        # Dynamische Tool-Liste für kritische Tools
+        critical_tools_list = []
+        if "klips2_register" in available_tool_names:
+            critical_tools_list.append("- **klips2_register**: Pflicht: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit")
+        if "klips2_apply_study" in available_tool_names:
+            critical_tools_list.append("- **klips2_apply_study**: Pflicht: username, password, semester, degree_type, study_program")
+        if "klips2_change_password" in available_tool_names:
+            critical_tools_list.append("- **klips2_change_password**: Pflicht: username, password, new_password")
+        if "klips2_change_address" in available_tool_names:
+            critical_tools_list.append("- **klips2_change_address**: Pflicht: username, password, street, zip_code, city")
+        if "send_email" in available_tool_names:
+            critical_tools_list.append("- **send_email**: Pflicht: subject, body")
+        
+        critical_tools_text = "\n".join(critical_tools_list) if critical_tools_list else ""
+        
+        # Nicht-kritische Tools
+        noncritical_tools_list = []
+        if "university_knowledge_search" in available_tool_names:
+            noncritical_tools_list.append("- **university_knowledge_search**: Bei Uni-Wissensfragen")
+        if "duckduckgo_search" in available_tool_names:
+            noncritical_tools_list.append("- **duckduckgo_search**: Bei \"Search for\", \"Suche im Internet\"")
+        if "web_scraper" in available_tool_names:
+            noncritical_tools_list.append("- **web_scraper**: Bei konkreten URLs")
+        if "klips2_get_course_details" in available_tool_names:
+            noncritical_tools_list.append("- **klips2_get_course_details**: Bei Kursabfragen")
+        
+        noncritical_tools_text = "\n".join(noncritical_tools_list) if noncritical_tools_list else ""
+        
+        # Baue den Prompt zusammen
+        critical_section = f"""
+### Kritische Tools (mit Validierung):
+{critical_tools_text}
+""" if critical_tools_text else ""
+        
+        noncritical_section = f"""
+### Nicht-kritische Tools:
+{noncritical_tools_text}
+""" if noncritical_tools_text else ""
+        
+        return f"""Du bist ein KI-Assistent für KLIPS 2.0, das Campus-Management-System der Universität zu Köln.
 
 ## WANN EIN TOOL AUFRUFEN?
 
 ✅ Tool aufrufen bei:
-- KLIPS2-Aktionen (registrieren, bewerben, Adresse/Passwort ändern, Kurs abfragen)
-  * NUR wenn ALLE erforderlichen Daten VOLLSTÄNDIG vorliegen
-  * NUR wenn die Anfrage SPEZIFISCH und KLAR ist
-- Wissensfragen zur Universität → university_knowledge_search
-  * NUR bei SPEZIFISCHEN Fragen (z.B. "Wie sind die Öffnungszeiten der Bibliothek?")
-- Explizite Internet-Suche → duckduckgo_search (bei "Search for", "Suche im Internet")
-- URL genannt → web_scraper
-- E-Mail senden → send_email (mit vollständigem Betreff und Text)
+{tool_examples_text}
 
 ❌ KEIN Tool bei:
 - Begrüßungen ("Hallo!", "Wie geht's?")
@@ -523,19 +573,7 @@ Vor jedem kritischen Tool-Aufruf prüft das System automatisch:
 2. Ob die Parameter im korrekten Format vorliegen
 
 ## VERFÜGBARE TOOLS
-
-### Kritische Tools (mit Validierung):
-- **klips2_register**: Pflicht: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit
-- **klips2_apply_study**: Pflicht: username, password, semester, degree_type, study_program
-- **klips2_change_password**: Pflicht: username, password, new_password
-- **klips2_change_address**: Pflicht: username, password, street, zip_code, city
-- **send_email**: Pflicht: subject, body
-
-### Nicht-kritische Tools:
-- **university_knowledge_search**: Bei Uni-Wissensfragen
-- **duckduckgo_search**: Bei "Search for", "Suche im Internet"
-- **web_scraper**: Bei konkreten URLs
-- **klips2_get_course_details**: Bei Kursabfragen
+{critical_section}{noncritical_section}
 
 ## PARAMETER-EXTRAKTION
 
