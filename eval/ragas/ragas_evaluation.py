@@ -49,7 +49,7 @@ def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.Da
     return df
 
 
-def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
+def get_rag_context_from_langsmith(client: Client, trace_id: str, debug: bool = False) -> List[str]:
     """
     Holt RAG-Kontext aus LangSmith für eine spezifische Trace-ID.
     
@@ -59,6 +59,7 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
     Args:
         client: LangSmith Client
         trace_id: Die Trace-ID der Session
+        debug: Wenn True, gebe Debug-Informationen aus
         
     Returns:
         Liste von RAG-Context-Chunks aus den Retriever-Documents
@@ -71,9 +72,15 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
             is_root=False
         ))
         
-        # Suche nach Retriever-Run
+        if debug:
+            print(f"      🔍 DEBUG: {len(child_runs)} child runs gefunden")
+            for i, child in enumerate(child_runs[:10]):  # Nur erste 10 zeigen
+                print(f"         [{i}] Type: {child.run_type}, Name: {child.name}")
+        
+        # Suche nach Retriever-Run oder Tool-Run mit RAG
         contexts = []
         for child in child_runs:
+            # Prüfe verschiedene Möglichkeiten
             if child.run_type == "retriever":
                 if child.outputs and isinstance(child.outputs, dict):
                     # Documents sind unter 'output' Key (nicht 'documents')!
@@ -81,18 +88,48 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
                     for doc in documents:
                         if isinstance(doc, dict) and 'page_content' in doc:
                             contexts.append(doc['page_content'])
+            
+            # Auch Tool-Runs prüfen (university_knowledge_search)
+            elif child.run_type == "tool" and "university_knowledge" in str(child.name).lower():
+                if child.outputs:
+                    if debug:
+                        print(f"      🔍 DEBUG: Found university_knowledge tool run")
+                        print(f"         Output type: {type(child.outputs)}")
+                        print(f"         Output (first 200 chars): {str(child.outputs)[:200]}")
+                    
+                    # Outputs könnte ein String mit RAG-Ergebnis sein
+                    # oder ein Dict mit weiteren Infos
+                    if isinstance(child.outputs, dict) and 'output' in child.outputs:
+                        contexts.append(str(child.outputs['output']))
+                    elif isinstance(child.outputs, str):
+                        contexts.append(child.outputs)
         
         if contexts:
+            if debug:
+                print(f"      ✅ DEBUG: {len(contexts)} Kontexte gefunden")
             return contexts  # Liste von Chunks zurückgeben
         
+        if debug:
+            print(f"      ⚠️ DEBUG: Keine Kontexte gefunden")
         return ["Kein RAG-Kontext gefunden"]  # Als Liste
     
     except Exception as e:
         print(f"      ⚠️ LangSmith-Fehler: {str(e)[:100]}")
+        if debug:
+            import traceback
+            traceback.print_exc()
         return ["LangSmith-Fehler"]  # Als Liste
 
 
-def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client, model_name: str = None, resume: bool = True) -> EvaluationDataset:
+def generate_chatbot_responses(
+    df: pd.DataFrame, 
+    agent, 
+    langsmith_client: Client, 
+    model_name: str = None, 
+    resume: bool = True,
+    retry_questions: List[int] = None,
+    agent_type: str = "single"
+) -> EvaluationDataset:
     """
     Generiert Chatbot-Antworten für alle Fragen und sammelt RAG-Kontexte.
     Speichert nach jeder Frage einen Checkpoint für Resume-Fähigkeit.
@@ -103,13 +140,19 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         langsmith_client: LangSmith Client
         model_name: Name des verwendeten Modells (für Checkpoint-Validierung)
         resume: Wenn True, versuche von Checkpoint fortzusetzen; wenn False, starte neu
+        retry_questions: Liste von Frage-Nummern (1-basiert) die wiederholt werden sollen
+        agent_type: Agent-Typ (single, multi, constrained, confirmation) für agent-spezifischen Checkpoint
     """
     print("\n🤖 Generiere Chatbot-Antworten...")
     print("=" * 80)
     
-    # Checkpoint-Pfad
-    checkpoint_path = Path(__file__).parent / "data" / "responses_checkpoint.pkl"
-    checkpoint_path.parent.mkdir(exist_ok=True)
+    # Checkpoint-Pfad (agent-spezifisch)
+    checkpoint_filename = f"responses_checkpoint_{agent_type}.pkl"
+    checkpoint_path = Path(__file__).parent / "data" / checkpoint_filename
+    checkpoint_path.parent.mkdir(exist_ok=True, parents=True)
+    print(f"📁 Checkpoint-Pfad: {checkpoint_path}")
+    print(f"   Verzeichnis existiert: {checkpoint_path.parent.exists()}")
+    print(f"   Verzeichnis beschreibbar: {checkpoint_path.parent.is_dir()}\n")
     
     # Versuche vorhandenen Checkpoint zu laden
     samples = []
@@ -151,8 +194,46 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         print(f"🗑️  Ignoriere vorhandenen Checkpoint (--no-resume gesetzt)")
         print(f"   Starte frisch...\n")
     
-    # Beantworte verbleibende Fragen
-    for idx, row in df.iloc[start_idx:].iterrows():
+    # Retry-Questions verarbeiten: Fragen wiederholen während bestehender Progress beibehalten wird
+    questions_to_process = set()
+    
+    if retry_questions:
+        # Konvertiere 1-basierte Indizes zu 0-basierten
+        retry_indices = {q - 1 for q in retry_questions if 0 <= q - 1 < len(df)}
+        
+        if retry_indices:
+            print(f"\n🔄 Wiederhole {len(retry_indices)} Fragen: {sorted(q + 1 for q in retry_indices)}\n")
+            questions_to_process = retry_indices
+            
+            # Wenn Samples vorhanden: Entferne alte Antworten für diese Fragen
+            if samples:
+                # Erstelle Mapping von Index zu Sample für alle vorhandenen Samples
+                # WICHTIG: Wir müssen herausfinden, welche Fragen schon beantwortet sind
+                # Die samples Liste hat len(samples) Einträge, die zu den ersten len(samples) Fragen gehören
+                samples_to_keep = []
+                for i in range(len(samples)):
+                    if i not in retry_indices:
+                        samples_to_keep.append(samples[i])
+                    else:
+                        print(f"   🗑️  Lösche alte Antwort für Frage {i + 1}")
+                samples = samples_to_keep
+            
+            # Füge alle noch nicht beantworteten Fragen hinzu
+            if samples:
+                # start_idx ist die Anzahl der schon beantworteten Fragen
+                for i in range(len(samples), len(df)):
+                    questions_to_process.add(i)
+    
+    # Wenn keine Retry-Questions: Normale Fortsetzung ab start_idx
+    if not questions_to_process:
+        questions_to_process = set(range(start_idx, len(df)))
+    
+    # Beantworte Fragen (entweder retry oder continuation)
+    for idx in sorted(questions_to_process):
+        if idx >= len(df):
+            continue
+            
+        row = df.iloc[idx]
         question = row['question']
         expected_answer = row['expected_answer']
         
@@ -173,29 +254,65 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         # Warten damit LangSmith Trace vollständig ist
         time.sleep(1)  # Reduziert von 3s auf 1s
         
-        # RAG-Kontext aus LangSmith holen - nur den letzten Run abrufen
+        # RAG-Kontext aus LangSmith holen
+        # WICHTIG: Wir müssen den LangGraph-Run finden, NICHT den self-reflection-Run!
+        # Self-reflection Runs sind separate LLM calls die NACH dem LangGraph-Agent laufen.
         print(f"   🔍 Hole RAG-Kontext aus LangSmith...")
         
-        # Optimiert: Nur den letzten Run holen (statt alle)
+        # Strategie: Hole mehrere kürzliche Runs und finde den LangGraph-Run
         recent_runs = list(langsmith_client.list_runs(
             project_name=LANGSMITH_PROJECT,
             is_root=True,
-            limit=1  # Nur den letzten Run
+            limit=20  # Mehr Runs holen um den richtigen zu finden
         ))
         
         contexts = ["Kein RAG-Kontext gefunden"]  # Default als Liste
         matching_run = None
         
-        # Der letzte Run sollte unser Run sein
-        if recent_runs:
-            matching_run = recent_runs[0]
+        # Suche den LangGraph-Run (nicht self_reflection oder ChatOllama)
+        # LangGraph-Runs haben typischerweise name="LangGraph" und run_type="chain"
+        for run in recent_runs:
+            run_name = str(run.name).lower() if run.name else ""
+            
+            # Skip self-reflection und ChatOllama Runs
+            if "self_reflection" in run_name or "chatollama" in run_name:
+                continue
+            
+            # Finde LangGraph Run (oder Agent-ähnlichen Run)
+            if "langgraph" in run_name or run.run_type == "chain":
+                # Zusätzliche Validierung: Prüfe session_id in Metadata
+                run_metadata = run.extra.get("metadata", {}) if run.extra else {}
+                run_session_id = run_metadata.get("session_id", "")
+                
+                # Wenn session_id passt, ist es definitiv unser Run
+                if run_session_id == session_id:
+                    matching_run = run
+                    print(f"   ✅ LangGraph-Run gefunden (session_id match): {run.name}")
+                    break
+                
+                # Fallback: Wenn kein session_id-Match, nimm trotzdem LangGraph-Run
+                # (aber nur wenn wir noch keinen gefunden haben)
+                if matching_run is None:
+                    matching_run = run
+        
+        # Fallback: Wenn kein LangGraph-Run gefunden, nimm den neuesten Run
+        # der NICHT self_reflection ist
+        if matching_run is None:
+            for run in recent_runs:
+                run_name = str(run.name).lower() if run.name else ""
+                if "self_reflection" not in run_name and "chatollama" not in run_name:
+                    matching_run = run
+                    print(f"   ⚠️ Fallback: Verwende Run '{run.name}' (kein LangGraph gefunden)")
+                    break
         
         if matching_run:
             trace_id = matching_run.trace_id
-            contexts = get_rag_context_from_langsmith(langsmith_client, trace_id)
-            print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
+            # Enable debug for first question to see what's happening
+            debug_enabled = (idx == start_idx)
+            contexts = get_rag_context_from_langsmith(langsmith_client, trace_id, debug=debug_enabled)
+            print(f"   ✅ Run gefunden: {matching_run.name} (type: {matching_run.run_type})")
         else:
-            print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
+            print(f"   ⚠️ Kein passender Run gefunden für Session-ID {session_id[:8]}...")
         
         total_chars = sum(len(c) for c in contexts)
         print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
@@ -207,19 +324,31 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
             retrieved_contexts=contexts,  # Jetzt bereits eine Liste von Chunks
             reference=expected_answer
         )
-        samples.append(sample)
+        
+        # Wenn retry: Sample an richtiger Stelle einfügen; sonst: append
+        if retry_questions:
+            # Samples als Dict verwalten für gezielte Updates
+            samples_dict = {i: samples[i] for i in range(len(samples))}
+            samples_dict[idx] = sample
+            samples = [samples_dict[i] for i in sorted(samples_dict.keys())]
+        else:
+            samples.append(sample)
         
         # Checkpoint nach jeder Frage speichern (schnell: ~1-5ms)
         import pickle
-        checkpoint_data = {
-            'samples': samples,
-            'test_df': df,
-            'last_idx': idx,
-            'model_name': model_name  # Speichere Modellname
-        }
-        with open(checkpoint_path, 'wb') as f:
-            pickle.dump(checkpoint_data, f)
-        print(f"   💾 Checkpoint gespeichert ({len(samples)}/{len(df)} Fragen)")
+        try:
+            checkpoint_data = {
+                'samples': samples,
+                'test_df': df,
+                'last_idx': idx,
+                'model_name': model_name  # Speichere Modellname
+            }
+            with open(checkpoint_path, 'wb') as f:
+                pickle.dump(checkpoint_data, f)
+            print(f"   💾 Checkpoint gespeichert ({len(samples)}/{len(df)} Fragen)")
+            print(f"      Pfad: {checkpoint_path}")
+        except Exception as e:
+            print(f"   ⚠️ FEHLER beim Checkpoint-Speichern: {e}")
     
     print("\n" + "=" * 80)
     print(f"✅ {len(samples)} Antworten generiert\n")
@@ -228,16 +357,19 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
     dataset = EvaluationDataset(samples=samples)
     
     # Finales Checkpoint mit vollständigem Dataset
-    checkpoint_data = {
-        'dataset': dataset,
-        'samples': samples,
-        'test_df': df,
-        'model_name': model_name  # Speichere Modellname
-    }
-    with open(checkpoint_path, 'wb') as f:
-        pickle.dump(checkpoint_data, f)
-    print(f"💾 Finaler Checkpoint gespeichert: {checkpoint_path}")
-    print(f"   (Antworten + Kontexte für alle {len(samples)} Fragen)\n")
+    try:
+        checkpoint_data = {
+            'dataset': dataset,
+            'samples': samples,
+            'test_df': df,
+            'model_name': model_name  # Speichere Modellname
+        }
+        with open(checkpoint_path, 'wb') as f:
+            pickle.dump(checkpoint_data, f)
+        print(f"💾 Finaler Checkpoint gespeichert: {checkpoint_path}")
+        print(f"   (Antworten + Kontexte für alle {len(samples)} Fragen)\n")
+    except Exception as e:
+        print(f"⚠️ FEHLER beim finalen Checkpoint: {e}\n")
     
     return dataset
 
@@ -284,11 +416,11 @@ def run_ragas_evaluation(
     # LLM konfigurieren basierend auf Provider
     if final_judge_provider == 'openai':
         from langchain_openai import ChatOpenAI
-        from config.settings import OPENAI_API_KEY
+        from config.settings import settings
         llm = ChatOpenAI(
             model=final_judge_model,
             temperature=0.0,
-            api_key=OPENAI_API_KEY,
+            api_key=settings.OPENAI_API_KEY,
             max_retries=3
         )
     else:

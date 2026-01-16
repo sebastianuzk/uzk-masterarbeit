@@ -227,6 +227,9 @@ class ConfirmationAgent:
         """Erstelle Liste der verfügbaren Tools."""
         tools = []
         
+        # Debug: Print actual flag values
+        print(f"  🔍 DEBUG Tool Flags: WEB={settings.ENABLE_WEB_SCRAPER}, DDG={settings.ENABLE_DUCKDUCKGO}, EMAIL={settings.ENABLE_EMAIL}, KLIPS={settings.ENABLE_KLIPS}")
+        
         if settings.ENABLE_WEB_SCRAPER:
             tools.append(create_web_scraper_tool())
         
@@ -501,7 +504,7 @@ Sei STRENG bei Pflichtfeldern, FAIR bei Formaten."""
         if any(name in available_tool_names for name in ["klips2_register", "klips2_apply_study", "klips2_change_password", "klips2_change_address"]):
             tool_examples.append("- KLIPS2-Aktionen (registrieren, bewerben, Adresse/Passwort ändern, Kurs abfragen)\n  * NUR wenn ALLE erforderlichen Daten VOLLSTÄNDIG vorliegen\n  * NUR wenn die Anfrage SPEZIFISCH und KLAR ist")
         if "university_knowledge_search" in available_tool_names:
-            tool_examples.append("- Wissensfragen zur Universität → university_knowledge_search\n  * NUR bei SPEZIFISCHEN Fragen (z.B. \"Wie sind die Öffnungszeiten der Bibliothek?\")")
+            tool_examples.append("- **IMMER** bei Fragen zur Universität zu Köln → university_knowledge_search\n  * Studiengänge, Fakultäten, Einrichtungen, Prozesse, Termine\n  * Nutze das Tool für ALLE universitätsbezogenen Wissensfragen")
         if "duckduckgo_search" in available_tool_names:
             tool_examples.append("- Explizite Internet-Suche → duckduckgo_search (bei \"Search for\", \"Suche im Internet\")")
         if "web_scraper" in available_tool_names:
@@ -529,7 +532,7 @@ Sei STRENG bei Pflichtfeldern, FAIR bei Formaten."""
         # Nicht-kritische Tools
         noncritical_tools_list = []
         if "university_knowledge_search" in available_tool_names:
-            noncritical_tools_list.append("- **university_knowledge_search**: Bei Uni-Wissensfragen")
+            noncritical_tools_list.append("- **university_knowledge_search**: PFLICHT für alle Fragen zur Universität Köln (Studiengänge, Fakultäten, Einrichtungen, Prozesse, Termine)")
         if "duckduckgo_search" in available_tool_names:
             noncritical_tools_list.append("- **duckduckgo_search**: Bei \"Search for\", \"Suche im Internet\"")
         if "web_scraper" in available_tool_names:
@@ -618,15 +621,6 @@ Antworte in der Sprache des Nutzers."""
             # Reset confirmation tracking für diesen Chat
             self.last_confirmation_result = None
             
-            # PRE-CHECK: Prüfe auf vage Anfragen BEVOR Tools aufgerufen werden
-            if self._is_vague_request(message):
-                # Direkte Antwort ohne Tool-Aufruf
-                vague_response = self._generate_direct_response_for_vague(message)
-                ai_response = AIMessage(content=vague_response)
-                self.memory.append(HumanMessage(content=message))
-                self.memory.append(ai_response)
-                return vague_response
-            
             human_message = HumanMessage(content=message)
             self.memory.append(human_message)
             
@@ -701,65 +695,6 @@ Antworte in der Sprache des Nutzers."""
             "confirmation_rate": confirmation_rate,
             "last_confirmation": self.last_confirmation_result
         }
-    
-    def _is_vague_request(self, message: str) -> bool:
-        """
-        Prüfe ob eine Anfrage zu vage ist für Tool-Aufrufe.
-        
-        Vage Anfragen sollten direkt beantwortet werden ohne Tool.
-        """
-        msg_lower = message.lower()
-        
-        # Vage Muster
-        vague_patterns = [
-            r"\birgendwann\b",
-            r"\birgendwie\b", 
-            r"\birgendwelche?\b",
-            r"\birgendwo\b",
-            r"\bvielleicht\b",
-            r"\bwürde gerne\b",
-            r"\bkönnte ich\b",
-            r"\bwäre es möglich\b",
-        ]
-        
-        # Reine Fragen ohne Handlungsabsicht
-        question_patterns = [
-            r"^kann man\b",
-            r"^ist es möglich\b",
-            r"^gibt es\b",
-            r"^wie viel\b",
-            r"^wann\b",
-        ]
-        
-        # Prüfe vage Patterns
-        for pattern in vague_patterns:
-            if re.search(pattern, msg_lower):
-                return True
-        
-        # Prüfe Frage-Patterns (nur am Anfang)
-        for pattern in question_patterns:
-            if re.search(pattern, msg_lower):
-                # Zusätzlich: Keine spezifischen Daten (Zahlen, @-Zeichen)
-                if not re.search(r'\d|@', message):
-                    return True
-        
-        return False
-    
-    def _generate_direct_response_for_vague(self, message: str) -> str:
-        """
-        Generiere eine direkte Antwort für vage Anfragen.
-        
-        Nutzt das LLM ohne Tools.
-        """
-        prompt = f"""Beantworte die folgende Frage direkt und hilfreich, OHNE Tools zu verwenden.
-Die Frage ist zu vage oder allgemein für eine Tool-Ausführung.
-
-Frage: {message}
-
-Gib eine informative Antwort und ermutige den Nutzer bei Bedarf, spezifischer zu werden."""
-
-        response = self.llm.invoke([HumanMessage(content=prompt)])
-        return response.content
     
     def _self_reflect_on_response(self, user_message: str, draft_response: str, max_iterations: int = 3) -> str:
         """
@@ -858,12 +793,26 @@ PROBLEME:
 VERBESSERUNGSVORSCHLAG:
 {suggestion}
 
-AUFGABE:
-Schreibe eine VERBESSERTE Version der Antwort, die diese Probleme behebt.
-Antworte DIREKT mit der verbesserten Antwort (kein JSON, keine Metakommentare)."""
+KRITISCH WICHTIG:
+Antworte NUR mit der verbesserten Antwort selbst.
+Wiederhole NICHT die Nutzerfrage.
+Füge KEINE Labels wie "VERBESSERTE ANTWORT:" hinzu.
+Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
 
                 improved_response = self.llm.invoke([HumanMessage(content=improvement_prompt)])
-                current_response = improved_response.content.strip()
+                raw_response = improved_response.content.strip()
+                
+                # Extrahiere nur die finale Antwort, falls LLM Labels hinzugefügt hat
+                if "VERBESSERTE ANTWORT:" in raw_response:
+                    # Falls LLM trotzdem Labels hinzugefügt hat, extrahiere nur die Antwort
+                    parts = raw_response.split("VERBESSERTE ANTWORT:", 1)
+                    current_response = parts[1].strip() if len(parts) > 1 else raw_response
+                elif "NUTZERFRAGE:" in raw_response and "ANTWORT:" in raw_response:
+                    # Falls vollständige Struktur vorhanden, nimm nur letzten Teil
+                    parts = raw_response.split("ANTWORT:")
+                    current_response = parts[-1].strip()
+                else:
+                    current_response = raw_response
                 
             except json.JSONDecodeError as e:
                 logger.warning(f"Self-Reflection JSON-Parse-Fehler: {e}. Behalte aktuelle Antwort.")
