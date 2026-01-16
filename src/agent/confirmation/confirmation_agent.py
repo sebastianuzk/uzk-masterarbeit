@@ -211,6 +211,9 @@ class ConfirmationAgent:
             self.wrapped_tools
         )
         
+        # Recursion Limit
+        self.recursion_limit = getattr(settings, 'CONFIRMATION_AGENT_RECURSION_LIMIT', 25)
+        
         # Memory
         self.memory = []
         
@@ -601,13 +604,15 @@ Antworte in der Sprache des Nutzers."""
                         "session_id": session_id,
                         "agent_type": "confirmation",
                         "user_message": message[:100] + "..." if len(message) > 100 else message,
-                    }
+                    },
+                    "recursion_limit": self.recursion_limit
+                }
+            else:
+                config = {
+                    "recursion_limit": self.recursion_limit
                 }
             
-            if config is not None:
-                response = self.agent.invoke(agent_input, config=config)
-            else:
-                response = self.agent.invoke(agent_input)
+            response = self.agent.invoke(agent_input, config=config)
             
             ai_message = response["messages"][-1]
             response_text = ai_message.content

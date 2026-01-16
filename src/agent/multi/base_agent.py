@@ -49,6 +49,9 @@ class BaseSpecializedAgent(ABC):
         # Agent mit LangGraph erstellen
         self.agent = create_langgraph_agent(self.llm, self.tools)
         
+        # Recursion Limit
+        self.recursion_limit = getattr(settings, 'MULTI_AGENT_RECURSION_LIMIT', 25)
+        
         # Memory für Konversationshistorie (begrenzt)
         self.memory: List[Any] = []
         self._max_memory_size = 20  # Kleinere Memory für spezialisierte Agenten
@@ -108,7 +111,11 @@ class BaseSpecializedAgent(ABC):
                 "messages": [self.system_message] + self.memory
             }
             
-            response = self.agent.invoke(agent_input)
+            config = {
+                "recursion_limit": self.recursion_limit
+            }
+            
+            response = self.agent.invoke(agent_input, config=config)
             
             # Store the full response for evaluation/debugging
             self.last_agent_response = response

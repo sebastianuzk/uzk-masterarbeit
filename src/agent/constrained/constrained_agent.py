@@ -333,6 +333,9 @@ class ConstrainedAgent:
         # System message für Kompatibilität mit Evaluation Harness
         self.system_message = SystemMessage(content=self._get_system_prompt())
         
+        # Recursion Limit
+        self.recursion_limit = getattr(settings, 'CONSTRAINED_AGENT_RECURSION_LIMIT', 25)
+        
         # Memory
         self.memory: List[Union[HumanMessage, AIMessage]] = []
         
