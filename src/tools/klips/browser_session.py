@@ -3,6 +3,11 @@ import os
 from typing import Optional
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext, Playwright
 
+from config.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 class KLIPSBrowserSession:
     """
     Manages a Playwright browser session for KLIPS2 interactions.

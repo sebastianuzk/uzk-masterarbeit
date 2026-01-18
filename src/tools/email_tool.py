@@ -160,21 +160,16 @@ Diese E-Mail wurde automatisch vom Chatbot-System gesendet."""
                 return True
                 
         except smtplib.SMTPAuthenticationError:
-            print("❌ SMTP-Authentifizierung fehlgeschlagen.")
-            print("💡 Für Gmail: Verwenden Sie ein App-Passwort statt Ihres normalen Passworts!")
-            print("   1. Aktivieren Sie 2-Faktor-Authentifizierung in Ihrem Google-Konto")
-            print("   2. Gehen Sie zu Sicherheit > 2-Faktor-Authentifizierung > App-Passwörter")
-            print("   3. Erstellen Sie ein neues App-Passwort für 'Mail'")
-            print("   4. Verwenden Sie dieses App-Passwort in settings.py")
+            logger.error("SMTP-Authentifizierung fehlgeschlagen. Für Gmail: Verwenden Sie ein App-Passwort!")
             return False
         except smtplib.SMTPRecipientsRefused:
-            print("❌ Empfänger-E-Mail-Adresse wurde abgelehnt.")
+            logger.error("Empfänger-E-Mail-Adresse wurde abgelehnt.")
             return False
         except smtplib.SMTPException as e:
-            print(f"❌ SMTP-Fehler: {str(e)}")
+            logger.error(f"SMTP-Fehler: {str(e)}")
             return False
         except Exception as e:
-            print(f"❌ Allgemeiner Fehler beim E-Mail-Versand: {str(e)}")
+            logger.error(f"Allgemeiner Fehler beim E-Mail-Versand: {str(e)}")
             return False
 
 

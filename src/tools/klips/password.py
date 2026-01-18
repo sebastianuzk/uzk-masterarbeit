@@ -3,8 +3,13 @@ KLIPS2 Passwort-Änderungs-Tool
 """
 from typing import Type
 from pydantic import BaseModel, Field
+
+from config.logging_config import get_logger
 from .base import KLIPS2BaseTool, KLIPS2AuthenticatedInput
 from .browser_session import KLIPSBrowserSession
+
+logger = get_logger(__name__)
+
 
 class KLIPS2ChangePasswordInput(KLIPS2AuthenticatedInput):
     """Input für Passwortänderung"""

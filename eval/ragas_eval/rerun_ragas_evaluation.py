@@ -19,8 +19,13 @@ import pandas as pd
 from pathlib import Path
 from typing import List
 import json
+import os
+
+# Disable RAGAS analytics to prevent network hangs
+os.environ["RAGAS_DO_NOT_TRACK"] = "true"
 
 # Import RAGAS library FIRST (before adding project_root to avoid shadowing)
+# Using deprecated imports for now as collections metrics have compatibility issues
 from ragas import evaluate
 from ragas.metrics import faithfulness, context_recall, context_precision
 from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
@@ -118,7 +123,7 @@ def run_ragas_evaluation(
             temperature=0.0
         )
     
-    # RAGAS metrics
+    # RAGAS metrics (using deprecated imports until collections API stabilizes)
     metrics = [
         faithfulness,
         context_recall,

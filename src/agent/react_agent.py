@@ -10,7 +10,9 @@ from langchain_core.tools import BaseTool
 from langchain_ollama import ChatOllama
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
 
+from config.logging_config import get_logger
 from config.settings import settings
+from src.agent.tool_specs import TOOL_SPECS
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.email_tool import create_email_tool
 from src.tools.klips import (
@@ -22,6 +24,8 @@ from src.tools.klips import (
 )
 from src.tools.rag_tool import create_university_rag_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
+
+logger = get_logger(__name__)
 
 
 def create_llm(provider: Optional[str] = None, model: Optional[str] = None):
@@ -58,7 +62,7 @@ def create_llm(provider: Optional[str] = None, model: Optional[str] = None):
         if settings.OPENAI_BASE_URL:
             openai_kwargs["base_url"] = settings.OPENAI_BASE_URL
         
-        print(f"🤖 Initialisiere ChatOpenAI mit Modell: {_model} (temperature={openai_kwargs['temperature']})")
+        logger.info(f"Initialisiere ChatOpenAI mit Modell: {_model} (temperature={openai_kwargs['temperature']})")
         return ChatOpenAI(**openai_kwargs)
     
     else:
@@ -82,7 +86,7 @@ def create_llm(provider: Optional[str] = None, model: Optional[str] = None):
                 ctx_size = ctx_value
                 break
         
-        print(f"🤖 Initialisiere ChatOllama mit Modell: {_model} (ctx_size={ctx_size}, temperature={settings.TEMPERATURE})")
+        logger.info(f"Initialisiere ChatOllama mit Modell: {_model} (ctx_size={ctx_size}, temperature={settings.TEMPERATURE})")
         
         return ChatOllama(
             model=_model,
@@ -94,118 +98,7 @@ def create_llm(provider: Optional[str] = None, model: Optional[str] = None):
         )
 
 
-# ============================================================================
-# TOOL PARAMETER SPECIFICATIONS
-# ============================================================================
-
-TOOL_SPECS = {
-    "klips2_register": {
-        "description": "KLIPS2-Account erstellen",
-        "required_params": {
-            "vorname": "Vorname der Person",
-            "nachname": "Nachname der Person",
-            "geschlecht": "männlich, weiblich oder divers",
-            "geburtsdatum": "Geburtsdatum im Format TT.MM.JJJJ",
-            "email": "E-Mail-Adresse mit @",
-            "staatsangehoerigkeit": "Staatsangehörigkeit"
-        },
-        "optional_params": {
-            "geburtsname": "Geburtsname falls abweichend vom Nachnamen",
-            "sprache": "Deutsch oder Englisch (Standard: Deutsch)"
-        }
-    },
-    "klips2_apply_study": {
-        "description": "Studienbewerbung einreichen",
-        "required_params": {
-            "username": "KLIPS2-Benutzername",
-            "password": "KLIPS2-Passwort",
-            "semester": "Zielsemester (z.B. Wintersemester 2024/25, WS 2024)",
-            "degree_type": "Bachelor, Master oder Promotion",
-            "study_program": "Name des Studiengangs (z.B. Informatik, Medizin)",
-            "gender": "Geschlecht (männlich, weiblich, divers)",
-            "birth_place": "Geburtsort",
-            "nationality": "Staatsangehörigkeit",
-            "hzb_date": "Datum der Hochschulzugangsberechtigung (z.B. 15.06.2018)",
-            "hzb_type": "Art der HZB (z.B. Abitur, Fachhochschulreife)",
-            "hzb_name": "Bezeichnung des Zeugnisses (z.B. Allgemeine Hochschulreife)",
-            "hzb_grade": "Note der HZB (z.B. 2,3 oder 2.3)",
-            "hzb_school": "Name der Schule",
-            "hzb_place": "Ort der HZB"
-        },
-        "optional_params": {
-            "entry_semester": "Fachsemester (Standard: 1)",
-            "study_form": "Erststudium oder Zweitstudium (Standard: Erststudium)",
-            "birth_country": "Geburtsland (Standard: Deutschland)",
-            "hzb_country": "Land der HZB (Standard: Deutschland)",
-            "street": "Straße und Hausnummer",
-            "zip_code": "Postleitzahl",
-            "city": "Stadt",
-            "country": "Land (Standard: Deutschland)"
-        }
-    },
-    "klips2_change_address": {
-        "description": "KLIPS2-Adresse ändern",
-        "required_params": {
-            "username": "KLIPS2-Benutzername",
-            "password": "KLIPS2-Passwort",
-            "street": "Straße und Hausnummer",
-            "zip_code": "Postleitzahl",
-            "city": "Stadt (MUSS explizit genannt werden!)"
-        },
-        "optional_params": {
-            "country": "Land (Standard: Deutschland)"
-        }
-    },
-    "klips2_change_password": {
-        "description": "KLIPS2-Passwort ändern",
-        "required_params": {
-            "username": "KLIPS2-Benutzername",
-            "password": "Aktuelles Passwort",
-            "new_password": "Neues Passwort"
-        },
-        "optional_params": {}
-    },
-    "klips2_get_course_details": {
-        "description": "Kursdetails aus KLIPS2 abrufen",
-        "required_params": {
-            "course_id": "Kursnummer (z.B. 14302.0001)"
-        },
-        "optional_params": {
-            "semester": "Semester (z.B. WS 2024/25)"
-        }
-    },
-    "send_email": {
-        "description": "E-Mail senden",
-        "required_params": {
-            "subject": "Betreff der E-Mail",
-            "body": "Text der E-Mail"
-        },
-        "optional_params": {
-            "to": "Empfänger-Adresse (Standard: Studierendensekretariat)"
-        }
-    },
-    "university_knowledge_search": {
-        "description": "Universitäts-Wissensdatenbank durchsuchen",
-        "required_params": {
-            "query": "Suchanfrage zur Universität"
-        },
-        "optional_params": {}
-    },
-    "duckduckgo_search": {
-        "description": "Internet-Suche mit DuckDuckGo",
-        "required_params": {
-            "query": "Suchanfrage für Internet-Suche"
-        },
-        "optional_params": {}
-    },
-    "web_scraper": {
-        "description": "Webseite scrapen",
-        "required_params": {
-            "url": "URL der Webseite"
-        },
-        "optional_params": {}
-    }
-}
+# TOOL_SPECS werden jetzt aus src/agent/tool_specs.py importiert
 
 
 class ReactAgent:
@@ -221,7 +114,7 @@ class ReactAgent:
             os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
             os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
             os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
-            print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
+            logger.info(f"LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
         
         # Initialisiere LLM (Ollama oder OpenAI basierend auf settings.LLM_PROVIDER)
         self.llm = create_llm()

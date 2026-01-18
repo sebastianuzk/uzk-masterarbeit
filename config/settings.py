@@ -52,10 +52,21 @@ class Settings:
     MEMORY_SIZE = 100
     
     # Recursion Limits für verschiedene Agent-Typen
-    AGENT_RECURSION_LIMIT = int(os.getenv("AGENT_RECURSION_LIMIT", "25"))  # Limit für Standard ReactAgent
-    CONFIRMATION_AGENT_RECURSION_LIMIT = int(os.getenv("CONFIRMATION_AGENT_RECURSION_LIMIT", "25"))  # Limit für Confirmation Agent
-    CONSTRAINED_AGENT_RECURSION_LIMIT = int(os.getenv("CONSTRAINED_AGENT_RECURSION_LIMIT", "25"))  # Limit für Constrained Agent
-    MULTI_AGENT_RECURSION_LIMIT = int(os.getenv("MULTI_AGENT_RECURSION_LIMIT", "25"))  # Limit für Multi-Agent System
+    # Alle Agenten nutzen ein gemeinsames Standard-Limit mit optionalen Overrides
+    DEFAULT_RECURSION_LIMIT = int(os.getenv("DEFAULT_RECURSION_LIMIT", "25"))
+    
+    RECURSION_LIMITS = {
+        "single": int(os.getenv("AGENT_RECURSION_LIMIT", str(DEFAULT_RECURSION_LIMIT))),
+        "multi": int(os.getenv("MULTI_AGENT_RECURSION_LIMIT", str(DEFAULT_RECURSION_LIMIT))),
+        "confirmation": int(os.getenv("CONFIRMATION_AGENT_RECURSION_LIMIT", str(DEFAULT_RECURSION_LIMIT))),
+        "constrained": int(os.getenv("CONSTRAINED_AGENT_RECURSION_LIMIT", str(DEFAULT_RECURSION_LIMIT))),
+    }
+    
+    # Backward compatibility - deprecated, use RECURSION_LIMITS instead
+    AGENT_RECURSION_LIMIT = RECURSION_LIMITS["single"]
+    CONFIRMATION_AGENT_RECURSION_LIMIT = RECURSION_LIMITS["confirmation"]
+    CONSTRAINED_AGENT_RECURSION_LIMIT = RECURSION_LIMITS["constrained"]
+    MULTI_AGENT_RECURSION_LIMIT = RECURSION_LIMITS["multi"]
     
     # Tool Konfiguration
     ENABLE_WEB_SCRAPER = True
@@ -83,31 +94,30 @@ class Settings:
     def validate(cls):
         """Validiere erforderliche Konfigurationen"""
         import requests
+        from config.logging_config import get_logger
+        
+        logger = get_logger(__name__)
         
         # Provider-spezifische Validierung
         if cls.LLM_PROVIDER == "openai":
             # OpenAI: API-Key erforderlich
             if not cls.OPENAI_API_KEY:
-                print("⚠️ Warnung: OPENAI_API_KEY nicht gesetzt.")
-                print("   Bitte konfigurieren Sie OPENAI_API_KEY in der .env Datei.")
+                logger.warning("OPENAI_API_KEY nicht gesetzt. Bitte konfigurieren Sie OPENAI_API_KEY in der .env Datei.")
         else:
             # Ollama: Prüfen, ob Server erreichbar ist
             try:
                 response = requests.get(f"{cls.OLLAMA_BASE_URL}/api/tags", timeout=5)
                 if response.status_code != 200:
-                    print("⚠️ Warnung: Ollama-Server nicht erreichbar. Stellen Sie sicher, dass Ollama läuft.")
+                    logger.warning("Ollama-Server nicht erreichbar. Stellen Sie sicher, dass Ollama läuft.")
             except requests.RequestException:
-                print("⚠️ Warnung: Ollama-Server nicht erreichbar. Starten Sie Ollama mit: ollama serve")
+                logger.warning("Ollama-Server nicht erreichbar. Starten Sie Ollama mit: ollama serve")
         
         # E-Mail-Konfiguration prüfen
         if not cls.SMTP_USERNAME or not cls.SMTP_PASSWORD:
-            print("⚠️ Warnung: E-Mail-Konfiguration unvollständig.")
-            print("   Bitte konfigurieren Sie SMTP_USERNAME und SMTP_PASSWORD in der .env Datei.")
-            print("   Siehe EMAIL_SETUP.md für Anweisungen.")
+            logger.warning("E-Mail-Konfiguration unvollständig. Bitte konfigurieren Sie SMTP_USERNAME und SMTP_PASSWORD in der .env Datei. Siehe EMAIL_SETUP.md für Anweisungen.")
         
         if not cls.DEFAULT_RECIPIENT:
-            print("⚠️ Warnung: DEFAULT_RECIPIENT nicht konfiguriert.")
-            print("   E-Mails können nicht gesendet werden ohne Empfänger-Adresse.")
+            logger.warning("DEFAULT_RECIPIENT nicht konfiguriert. E-Mails können nicht gesendet werden ohne Empfänger-Adresse.")
 
 # Exportiere Settings-Instanz
 settings = Settings()

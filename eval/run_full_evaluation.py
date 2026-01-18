@@ -93,6 +93,12 @@ AVAILABLE_MODELS = {
         "description": "OpenAI GPT-3.5 Turbo (günstig)",
         "provider": "openai"
     },
+    "gpt-5": {
+        "name": "GPT-5",
+        "ctx_size": 200000,
+        "description": "OpenAI GPT-5 (latest)",
+        "provider": "openai"
+    },
 }
 
 # Agent-Typen

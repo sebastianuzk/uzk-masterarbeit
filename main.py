@@ -21,14 +21,20 @@ Verwendung:
 
 import argparse
 import sys
+import traceback
 from pathlib import Path
+from typing import NoReturn
 
 # Projekt-Root zum Pfad hinzufügen
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+from config.logging_config import get_logger, setup_logging
 
-def parse_arguments():
+logger = get_logger(__name__)
+
+
+def parse_arguments() -> argparse.Namespace:
     """Parse Kommandozeilenargumente."""
     parser = argparse.ArgumentParser(
         description="Autonomer Chatbot-Agent für KLIPS 2.0",
@@ -65,7 +71,7 @@ Beispiele:
     return parser.parse_args()
 
 
-def run_cli(agent_mode: str, debug: bool = False):
+def run_cli(agent_mode: str, debug: bool = False) -> None:
     """
     Starte den Agenten im CLI-Modus.
     
@@ -81,6 +87,7 @@ def run_cli(agent_mode: str, debug: bool = False):
     print()
     
     # Agent erstellen
+    logger.info(f"Initialisiere Agent im {agent_mode.upper()}-Modus...")
     print(f"Initialisiere Agent im {agent_mode.upper()}-Modus...")
     agent = create_agent(mode=agent_mode)
     print()
@@ -138,13 +145,13 @@ def run_cli(agent_mode: str, debug: bool = False):
             print("\n\n👋 Auf Wiedersehen!")
             break
         except Exception as e:
+            logger.error(f"Fehler während der Ausführung: {e}", exc_info=debug)
             print(f"\n❌ Fehler: {e}\n")
             if debug:
-                import traceback
                 traceback.print_exc()
 
 
-def run_streamlit(agent_mode: str):
+def run_streamlit(agent_mode: str) -> NoReturn:
     """
     Starte Streamlit Web-Interface.
     
@@ -162,13 +169,19 @@ def run_streamlit(agent_mode: str):
         f"--agent-mode={agent_mode}"
     ]
     
+    logger.info(f"Starte Streamlit UI im {agent_mode.upper()}-Modus...")
     print(f"🚀 Starte Streamlit UI im {agent_mode.upper()}-Modus...")
     subprocess.run(cmd)
+    sys.exit(0)
 
 
-def main():
+def main() -> None:
     """Hauptfunktion."""
     args = parse_arguments()
+    
+    # Logging einrichten
+    log_level = "DEBUG" if args.debug else "INFO"
+    setup_logging(level=log_level)
     
     if args.ui:
         run_streamlit(args.agent_mode)
