@@ -21,7 +21,7 @@ class Settings:
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:3b")  # Kleineres Modell für begrenzte RAM-Systeme
     OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:8b")
-    OLLAMA_EVALUATION_TIMEOUT = int(os.getenv("OLLAMA_EVALUATION_TIMEOUT", "300"))  # 5 Minuten für RAGAS-Evaluationen
+    OLLAMA_EVALUATION_TIMEOUT = int(os.getenv("OLLAMA_EVALUATION_TIMEOUT", "600"))  # 10 Minuten für RAGAS-Evaluationen
     
     # OpenAI Konfiguration
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -33,7 +33,7 @@ class Settings:
     
     # RAGAS-Evaluation: Fester Judge für faire Vergleiche zwischen Modellen
     RAGAS_JUDGE_MODEL = os.getenv("RAGAS_JUDGE_MODEL", "qwen2.5:7b")
-    REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "120"))  # 2 Minuten Timeout für LLM-Requests
+    REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "600"))  # 10 Minuten Timeout für LLM-Requests
     
     # Ollama Server-Optimierungen (aus Umgebungsvariablen)
     OLLAMA_FLASH_ATTENTION = os.getenv("OLLAMA_FLASH_ATTENTION", "1") == "1"

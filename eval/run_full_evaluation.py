@@ -1158,7 +1158,7 @@ def run_rag_evaluation(
     print("   🔒 Alle Tools außer RAG deaktiviert für reine RAG-Evaluation")
     
     # Importiere RAGAS-Komponenten
-    from eval.ragas.ragas_evaluation import (
+    from eval.ragas_eval.ragas_evaluation import (
         load_testset,
         generate_chatbot_responses,
         run_ragas_evaluation,
@@ -1198,7 +1198,7 @@ def run_rag_evaluation(
     
     # Testset laden
     print("\n📂 Lade Testset...")
-    testset_path = PROJECT_ROOT / "eval" / "ragas" / "data" / "Testset.CSV"
+    testset_path = PROJECT_ROOT / "eval" / "ragas_eval" / "data" / "Testset.CSV"
     if not testset_path.exists():
         # Fallback-Pfad
         testset_path = PROJECT_ROOT / "data" / "Testset.CSV"

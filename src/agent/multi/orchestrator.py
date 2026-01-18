@@ -201,11 +201,23 @@ class OrchestratorAgent:
     
     def _initialize_agents(self) -> None:
         """Initialisiere alle spezialisierten Agenten."""
-        agent_classes: List[Type[BaseSpecializedAgent]] = [
-            KlipsAgent,
-            EmailAgent,
-            KnowledgeAgent,
-        ]
+        # Bestimme welche Agenten basierend auf Settings aktiviert werden sollen
+        agent_classes: List[Type[BaseSpecializedAgent]] = []
+        
+        # KLIPS Agent nur wenn KLIPS aktiviert ist
+        if settings.ENABLE_KLIPS:
+            agent_classes.append(KlipsAgent)
+        
+        # Email Agent nur wenn Email aktiviert ist
+        if settings.ENABLE_EMAIL:
+            agent_classes.append(EmailAgent)
+        
+        # Knowledge Agent immer (enthält RAG)
+        agent_classes.append(KnowledgeAgent)
+        
+        # Nur Knowledge Agent im RAG-Only Modus
+        if not settings.ENABLE_KLIPS and not settings.ENABLE_EMAIL:
+            print("🎯 RAG-Evaluation-Modus: Nur Wissens-Agent aktiv")
         
         for agent_class in agent_classes:
             try:

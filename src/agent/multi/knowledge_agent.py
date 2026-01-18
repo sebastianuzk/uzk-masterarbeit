@@ -53,7 +53,7 @@ class KnowledgeAgent(BaseSpecializedAgent):
         """Erstelle alle Wissens-Tools."""
         tools = []
         
-        # RAG-Tool für Universitäts-Wissensdatenbank
+        # RAG-Tool für Universitäts-Wissensdatenbank (immer geladen)
         try:
             rag_tool = create_university_rag_tool()
             tools.append(rag_tool)
@@ -61,7 +61,7 @@ class KnowledgeAgent(BaseSpecializedAgent):
         except Exception as e:
             print(f"  ⚠️  RAG-Tool konnte nicht geladen werden: {e}")
         
-        # DuckDuckGo-Suche
+        # DuckDuckGo-Suche (nur wenn aktiviert)
         if settings.ENABLE_DUCKDUCKGO:
             try:
                 ddg_tool = create_duckduckgo_tool()
@@ -69,8 +69,10 @@ class KnowledgeAgent(BaseSpecializedAgent):
                 print("  ✅ DuckDuckGo-Tool geladen")
             except Exception as e:
                 print(f"  ⚠️  DuckDuckGo-Tool konnte nicht geladen werden: {e}")
+        else:
+            print("  ⏭️  DuckDuckGo-Tool deaktiviert (RAG-Evaluation-Modus)")
         
-        # Web-Scraper
+        # Web-Scraper (nur wenn aktiviert)
         if settings.ENABLE_WEB_SCRAPER:
             try:
                 scraper_tool = create_web_scraper_tool()
@@ -78,51 +80,90 @@ class KnowledgeAgent(BaseSpecializedAgent):
                 print("  ✅ Web-Scraper-Tool geladen")
             except Exception as e:
                 print(f"  ⚠️  Web-Scraper-Tool konnte nicht geladen werden: {e}")
+        else:
+            print("  ⏭️  Web-Scraper-Tool deaktiviert (RAG-Evaluation-Modus)")
         
         return tools
     
     def _get_system_prompt(self) -> str:
-        """Erstelle den System-Prompt für den Knowledge-Agenten."""
-        return """Du bist der Wissens-Spezialist, ein KI-Agent für Informationssuche und Wissensabfragen.
+        """Erstelle den System-Prompt für den Knowledge-Agenten (dynamisch basierend auf verfügbaren Tools)."""
+        # Sammle verfügbare Tool-Namen
+        available_tool_names = {tool.name for tool in self.tools}
+        
+        has_rag = "university_knowledge_search" in available_tool_names
+        has_duckduckgo = "duckduckgo_search" in available_tool_names
+        has_scraper = "web_scraper" in available_tool_names
+        
+        # Basis-Prompt
+        prompt = """Du bist der Wissens-Spezialist, ein KI-Agent für Informationssuche und Wissensabfragen.
 
 ## KRITISCHE REGEL: IMMER EIN TOOL AUFRUFEN
 
 ⚠️ Du MUSST bei jeder Anfrage mindestens ein Tool aufrufen! Antworte NIEMALS ohne Tool-Aufruf.
 
 ## TOOL-AUSWAHL
-
-### 1. duckduckgo_search - NUTZEN BEI EXPLIZITEN SUCH-KEYWORDS:
+"""
+        
+        # Dynamische Tool-Beschreibungen basierend auf verfügbaren Tools
+        tool_count = 1
+        examples = []
+        decision_logic = []
+        
+        if has_duckduckgo:
+            prompt += f"""
+### {tool_count}. duckduckgo_search - NUTZEN BEI EXPLIZITEN SUCH-KEYWORDS:
    Wenn der Nutzer eines dieser Wörter/Phrasen verwendet → duckduckgo_search:
    - Deutsch: "im Internet", "online", "im Web", "google", "such im Netz"
    - Deutsch: "Suche nach", "Such nach", "Suche im Internet"
    - English: "Search for", "search online", "look up", "find online", "google"
    - Aktuelle Infos: "aktuelle Nachrichten", "neuesten News", "current news"
-   
-### 2. university_knowledge_search (RAG) - STANDARD für Uni-Fragen:
-   Für alle anderen Fragen zur Universität:
+"""
+            tool_count += 1
+            examples.extend([
+                '"Search for University of Cologne requirements" → duckduckgo_search',
+                '"Suche im Internet nach Bewerbungsfristen" → duckduckgo_search',
+                '"Such online nach Öffnungszeiten" → duckduckgo_search',
+            ])
+            decision_logic.append('1. Beginnt mit "Search for" oder "Suche nach/im Internet"? → duckduckgo_search')
+        
+        if has_rag:
+            prompt += f"""
+### {tool_count}. university_knowledge_search (RAG) - {"STANDARD für Uni-Fragen" if not has_duckduckgo else "Für Uni-Fragen"}:
+   Für alle {"" if has_duckduckgo else ""}Fragen zur Universität:
    - Fragen zur Uni Köln, WiSo-Fakultät, KLIPS2
    - Prüfungsordnungen, Studienablauf, interne Prozesse
    - Studiengänge, Bewerbungen, Fristen
-   - DIES IST DAS BEVORZUGTE TOOL wenn keine expliziten Internet-Keywords
-
-### 3. web_scraper - NUR bei konkreten URLs:
+   {"- DIES IST DAS BEVORZUGTE TOOL wenn keine expliziten Internet-Keywords" if has_duckduckgo else ""}
+"""
+            tool_count += 1
+            examples.extend([
+                '"Wann sind die Bewerbungsfristen?" → university_knowledge_search',
+                '"Wie funktioniert KLIPS?" → university_knowledge_search',
+            ])
+            if has_scraper:
+                decision_logic.append(f'{len(decision_logic)+1}. Hat der Nutzer eine URL genannt? → web_scraper')
+            decision_logic.append(f'{len(decision_logic)+1}. Sonst (Uni-Fragen{" ohne Such-Keywords" if has_duckduckgo else ""}) → university_knowledge_search')
+        
+        if has_scraper:
+            prompt += f"""
+### {tool_count}. web_scraper - NUR bei konkreten URLs:
    - Wenn eine URL mit http:// oder https:// genannt wird
    - "Inhalt von [URL]", "Lies die Seite [URL]"
-
-## ENTSCHEIDUNGSLOGIK
-
-1. Beginnt mit "Search for" oder "Suche nach/im Internet"? → duckduckgo_search
-2. Hat der Nutzer eine URL genannt? → web_scraper  
-3. Sonst (Uni-Fragen ohne Such-Keywords) → university_knowledge_search
-
-## BEISPIELE
-
-"Search for University of Cologne requirements" → duckduckgo_search
-"Suche im Internet nach Bewerbungsfristen" → duckduckgo_search
-"Such online nach Öffnungszeiten" → duckduckgo_search
-"Wann sind die Bewerbungsfristen?" → university_knowledge_search
-"Wie funktioniert KLIPS?" → university_knowledge_search
-"Zeig mir https://example.com" → web_scraper
-
-## SPRACHANPASSUNG
-Antworte in der Sprache des Nutzers."""
+"""
+            examples.append('"Zeig mir https://example.com" → web_scraper')
+            if not has_rag:  # Only add to decision logic if not already added above
+                decision_logic.append(f'{len(decision_logic)+1}. Hat der Nutzer eine URL genannt? → web_scraper')
+        
+        # Füge Entscheidungslogik hinzu
+        if decision_logic:
+            prompt += "\n## ENTSCHEIDUNGSLOGIK\n\n"
+            prompt += "\n".join(decision_logic)
+        
+        # Füge Beispiele hinzu
+        if examples:
+            prompt += "\n\n## BEISPIELE\n\n"
+            prompt += "\n".join(examples)
+        
+        prompt += "\n\n## SPRACHANPASSUNG\nAntworte in der Sprache des Nutzers."
+        
+        return prompt

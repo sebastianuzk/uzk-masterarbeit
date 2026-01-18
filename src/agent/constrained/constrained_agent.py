@@ -401,6 +401,33 @@ class ConstrainedAgent:
         if comm_tools:
             tools_section += "\n### Kommunikation:\n" + "\n".join(comm_tools)
         
+        # Dynamic multi-tool examples based on available tools
+        multi_tool_examples = []
+        if len(available_tool_names) >= 2:
+            if "duckduckgo_search" in available_tool_names and "klips2_get_course_details" in available_tool_names:
+                multi_tool_examples.append('- "Suche X **und dann** hole Y" → BEIDE Tools aufrufen: [duckduckgo_search, klips2_get_course_details]')
+            if "klips2_get_course_details" in available_tool_names and "send_email" in available_tool_names:
+                multi_tool_examples.append('- "Hole Kursdetails **und schicke** E-Mail" → BEIDE Tools aufrufen: [klips2_get_course_details, send_email]')
+            if "duckduckgo_search" in available_tool_names and "klips2_get_course_details" in available_tool_names:
+                multi_tool_examples.append('- "Recherchiere X, **dann** Details zu Y" → BEIDE Tools aufrufen: [duckduckgo_search, klips2_get_course_details]')
+        
+        # Build multi-tool section
+        multi_tool_section = ""
+        if multi_tool_examples:
+            multi_tool_section = f"""## MULTI-TOOL-ANFRAGEN (WICHTIG!)
+
+**Wenn der User MEHRERE Aktionen in EINER Nachricht fordert:**
+{chr(10).join(multi_tool_examples)}
+
+Signalwörter für Multi-Tool:
+- "und dann", "danach", "anschließend", "then"
+- "und schicke", "und sende", "and send"
+- Mehrere Aktionsverben in einer Anfrage
+
+**REGEL:** Bei Multi-Tool-Anfragen → ALLE relevanten Tools aufrufen!
+
+"""
+        
         return f"""Du bist ein KI-Assistent für KLIPS 2.0, das Campus-Management-System der Universität zu Köln.
 
 ## WANN EIN TOOL AUFRUFEN?
@@ -424,21 +451,7 @@ Wenn im Prompt "Previous conversation:" steht:
 2. Kombiniere sie mit der aktuellen Nachricht
 3. Wenn dadurch ALLE Pflichtparameter vorhanden sind → Tool aufrufen
 
-## MULTI-TOOL-ANFRAGEN (WICHTIG!)
-
-**Wenn der User MEHRERE Aktionen in EINER Nachricht fordert:**
-- "Suche X **und dann** hole Y" → BEIDE Tools aufrufen: [duckduckgo_search, klips2_get_course_details]
-- "Hole Kursdetails **und schicke** E-Mail" → BEIDE Tools aufrufen: [klips2_get_course_details, send_email]
-- "Recherchiere X, **dann** Details zu Y" → BEIDE Tools aufrufen: [duckduckgo_search, klips2_get_course_details]
-
-Signalwörter für Multi-Tool:
-- "und dann", "danach", "anschließend", "then"
-- "und schicke", "und sende", "and send"
-- Mehrere Aktionsverben in einer Anfrage
-
-**REGEL:** Bei Multi-Tool-Anfragen → ALLE relevanten Tools aufrufen!
-
-Antworte in der Sprache des Nutzers."""
+{multi_tool_section}Antworte in der Sprache des Nutzers."""
     
     def _create_tools(self) -> List[BaseTool]:
         """Erstelle Liste der verfügbaren Tools."""
@@ -491,14 +504,111 @@ Antworte in der Sprache des Nutzers."""
             "web_scraper": ["url"]
         }
         
+        # Erstelle Set der verfügbaren Tool-Namen basierend auf self.tools
+        available_tool_names = {tool.name for tool in self.tools}
+        
+        # Nur Tools auflisten, die auch tatsächlich verfügbar sind
         tool_list = []
         for name, schema in TOOL_SCHEMAS.items():
+            if name not in available_tool_names:
+                continue  # Tool ist deaktiviert, überspringe es
             desc = schema.__doc__ or 'Keine Beschreibung'
             required = tool_requirements.get(name, [])
             req_str = ", ".join(required) if required else "keine"
             tool_list.append(f"- {name}: {desc}\n  PFLICHT: {req_str}")
         
         tools_str = "\n".join(tool_list)
+        
+        # Build dynamic tool trigger sections based on available tools
+        tool_trigger_sections = []
+        
+        if "klips2_register" in available_tool_names or "klips2_apply_study" in available_tool_names or \
+           "klips2_change_password" in available_tool_names or "klips2_change_address" in available_tool_names:
+            klips_examples = []
+            if "klips2_register" in available_tool_names:
+                klips_examples.append('- "Registriere mich" → klips2_register')
+            if "klips2_apply_study" in available_tool_names:
+                klips_examples.append('- "Bewerbe mich für [Studiengang]" → klips2_apply_study')
+            if "klips2_change_password" in available_tool_names:
+                klips_examples.append('- "Ändere mein Passwort" → klips2_change_password')
+            if "klips2_change_address" in available_tool_names:
+                klips_examples.append('- "Ändere meine Adresse" → klips2_change_address')
+            
+            tool_trigger_sections.append("**KLIPS2-Aktionen (Tool aufrufen):**\n" + "\n".join(klips_examples))
+        
+        if "klips2_get_course_details" in available_tool_names:
+            tool_trigger_sections.append('''**KURS-ABFRAGEN (Tool aufrufen):**
+- "Mehr über Kurs [X] erfahren" → klips2_get_course_details
+- "Wann findet Kurs [X] statt?" → klips2_get_course_details
+- "Wer hält Kurs [X]?" → klips2_get_course_details
+- "Details zu Kurs [X]" → klips2_get_course_details''')
+        
+        # Multi-tool examples (only if we have 2+ tools available)
+        if len(available_tool_names) >= 2:
+            multi_tool_examples = []
+            if "duckduckgo_search" in available_tool_names and "klips2_get_course_details" in available_tool_names:
+                multi_tool_examples.append('1. "Suche im Internet nach Kurs X **und** hole dann Details aus KLIPS"\n   → ["duckduckgo_search", "klips2_get_course_details"]')
+            if "klips2_get_course_details" in available_tool_names and "send_email" in available_tool_names:
+                multi_tool_examples.append('2. "Hole Kursdetails **und** sende E-Mail"\n   → ["klips2_get_course_details", "send_email"]')
+            if "duckduckgo_search" in available_tool_names and "klips2_get_course_details" in available_tool_names:
+                multi_tool_examples.append('3. "Recherchiere X, **dann** Details zu Kurs Y"\n   → ["duckduckgo_search", "klips2_get_course_details"]')
+            
+            if multi_tool_examples:
+                tool_trigger_sections.append(f'''**MULTI-TOOL-ANFRAGEN (MEHRERE TOOLS - WICHTIG!):**
+
+PRÜFE ZUERST: Fordert der User MEHRERE Aktionen nacheinander?
+
+Signalwörter für Multi-Tool (= MEHRERE Tools erforderlich):
+- "und dann", "danach", "anschließend"
+- "and then", "then", "after that"
+- Mehrere Verben in EINER Anfrage: "Suche... hole...", "Search... get...", "Schau... schicke..."
+
+BEISPIELE für Multi-Tool (= tool_names muss LISTE mit 2+ Tools sein):
+{chr(10).join(multi_tool_examples)}
+
+WICHTIG: 
+- Reihenfolge der Tools beachten (chronologisch wie in Anfrage)!''')
+        
+        if "university_knowledge_search" in available_tool_names or "duckduckgo_search" in available_tool_names:
+            search_rules = []
+            if "duckduckgo_search" in available_tool_names:
+                search_rules.append('''1. **IMMER duckduckgo_search bei:**
+   - Expliziten Such-Keywords: "Search", "Suche", "Such", "Find", "Finde", "Look up" mit Suchbegriff
+   - "Search for [X]" → duckduckgo_search
+   - "Suche nach [X]" → duckduckgo_search
+   - "Google [X]" → duckduckgo_search''')
+            
+            if "university_knowledge_search" in available_tool_names:
+                search_rules.append('''2. **NUR university_knowledge_search bei:**
+   - Direkten Fragen OHNE Such-Keywords:
+     * "Wie bewerbe ich mich für Master?" (Frage, kein Such-Keyword)
+     * "Welche Fristen gibt es?" (Frage, kein Such-Keyword)
+     * "Was kostet das Studium?" (Frage, kein Such-Keyword)''')
+            
+            if search_rules:
+                tool_trigger_sections.append("**WISSENS-SUCHE (Tool aufrufen):**\n\nWICHTIG - Entscheidungslogik für Suchen:\n\n" + "\n\n".join(search_rules))
+        
+        if "send_email" in available_tool_names:
+            tool_trigger_sections.append('''**E-MAIL (Tool aufrufen):**
+- "Sende eine E-Mail" → send_email
+- "Schicke eine Mail" → send_email
+- "Verfasse eine E-Mail" → send_email''')
+        
+        tool_trigger_text = "\n\n".join(tool_trigger_sections) if tool_trigger_sections else "Keine Tool-spezifischen Trigger definiert."
+        
+        # Build completeness rules section dynamically
+        completeness_rules = []
+        if "klips2_register" in available_tool_names:
+            completeness_rules.append("  - klips2_register: Vorname UND Nachname UND Email UND Geburtsdatum UND Geschlecht UND Staatsangehörigkeit")
+        if "klips2_apply_study" in available_tool_names:
+            completeness_rules.append("  - klips2_apply_study: username UND password UND semester UND degree_type UND study_program UND gender UND birth_place UND nationality UND hzb_date UND hzb_type UND hzb_name UND hzb_grade UND hzb_school UND hzb_place")
+        completeness_text = "\n".join(completeness_rules) if completeness_rules else "  (Keine tool-spezifischen Regeln)"
+        
+        # JSON example only if both tools are available
+        if "duckduckgo_search" in available_tool_names and "klips2_get_course_details" in available_tool_names:
+            json_example = '\nBeispiel: "Suche X und hole dann Y" → {{"action": "tool", "tool_names": ["duckduckgo_search", "klips2_get_course_details"], "reason": "Multi-Tool: Suche + KLIPS"}}'
+        else:
+            json_example = ""
         
         return f"""Du bist ein KI-Assistent für KLIPS 2.0 der Universität zu Köln.
 
@@ -513,78 +623,7 @@ ENTSCHEIDUNGSLOGIK:
 
 ## 1. TOOL-TRIGGER: Wann welches Tool aufrufen?
 
-**KLIPS2-Aktionen (Tool aufrufen):**
-- "Registriere mich" → klips2_register
-- "Bewerbe mich für [Studiengang]" → klips2_apply_study
-- "Ändere mein Passwort" → klips2_change_password
-- "Ändere meine Adresse" → klips2_change_address
-
-**KURS-ABFRAGEN (Tool aufrufen):**
-- "Mehr über Kurs [X] erfahren" → klips2_get_course_details
-- "Wann findet Kurs [X] statt?" → klips2_get_course_details
-- "Wer hält Kurs [X]?" → klips2_get_course_details
-- "Details zu Kurs [X]" → klips2_get_course_details
-
-**MULTI-TOOL-ANFRAGEN (MEHRERE TOOLS - WICHTIG!):**
-
-PRÜFE ZUERST: Fordert der User MEHRERE Aktionen nacheinander?
-
-Signalwörter für Multi-Tool (= MEHRERE Tools erforderlich):
-- "und dann", "danach", "anschließend"
-- "and then", "then", "after that"
-- Mehrere Verben in EINER Anfrage: "Suche... hole...", "Search... get...", "Schau... schicke..."
-
-BEISPIELE für Multi-Tool (= tool_names muss LISTE mit 2+ Tools sein):
-1. "Suche im Internet nach Kurs X **und** hole dann Details aus KLIPS"
-   → ["duckduckgo_search", "klips2_get_course_details"]
-   
-2. "Hole Kursdetails **und** sende E-Mail"
-   → ["klips2_get_course_details", "send_email"]
-   
-3. "Recherchiere X, **dann** Details zu Kurs Y"
-   → ["duckduckgo_search", "klips2_get_course_details"]
-
-4. "Schau nach Details zu Kurs X **und schicke** mir E-Mail"
-   → ["klips2_get_course_details", "send_email"]
-
-WICHTIG: 
-- Reihenfolge der Tools beachten (chronologisch wie in Anfrage)!
-- "Suche... UND hole..." = 2 Tools: zuerst duckduckgo_search, dann klips2_get_course_details
-- "Hole... UND sende..." = 2 Tools: zuerst klips2_get_course_details, dann send_email
-
-**WISSENS-SUCHE (Tool aufrufen):**
-
-WICHTIG - Entscheidungslogik für Suchen:
-
-1. **IMMER duckduckgo_search bei:**
-   - Expliziten Such-Keywords: "Search", "Suche", "Such", "Find", "Finde", "Look up" mit Suchbegriff
-   - "Search for [X]" → duckduckgo_search
-   - "Suche nach [X]" → duckduckgo_search
-   - "Such mal [X]" → duckduckgo_search
-   - "Find information about [X]" → duckduckgo_search
-   - "Google [X]" → duckduckgo_search
-   - "Recherchiere [X]" → duckduckgo_search
-   - "Was sagt Wikipedia über [X]?" → duckduckgo_search
-
-2. **NUR university_knowledge_search bei:**
-   - Direkten Fragen OHNE Such-Keywords:
-     * "Wie bewerbe ich mich für Master?" (Frage, kein Such-Keyword)
-     * "Welche Fristen gibt es?" (Frage, kein Such-Keyword)
-     * "Was kostet das Studium?" (Frage, kein Such-Keyword)
-     * "Was ist ein ECTS-Punkt?" (Frage, kein Such-Keyword)
-   
-REGEL: 
-  • "Search"/"Suche"/"Such"/"Find" → IMMER duckduckgo_search
-  • Direkte Frage (Wie/Was/Wann/Welche) ohne Such-Keyword → university_knowledge_search
-  • Bei Unsicherheit: Wenn "search"/"suche" im Text → duckduckgo_search
-
-**E-MAIL (Tool aufrufen):**
-- "Sende eine E-Mail" → send_email
-- "Schicke eine Mail" → send_email
-- "Verfasse eine E-Mail" → send_email
-- "Schreibe eine E-Mail" → send_email
-- "Sende eine Nachricht" → send_email
-- "E-Mail versenden" → send_email
+{tool_trigger_text}
 
 **KEINE TOOLS (respond):**
 - Begrüßungen: "Hallo!", "Wie geht's?", "Guten Tag", "Hi"
@@ -646,8 +685,7 @@ DATUM:
   - "Geburtsdatum: TBA" / "noch unklar" → insufficient_data
 
 VOLLSTÄNDIGKEIT:
-  - klips2_register: Vorname UND Nachname UND Email UND Geburtsdatum UND Geschlecht UND Staatsangehörigkeit
-  - klips2_apply_study: username UND password UND semester UND degree_type UND study_program UND gender UND birth_place UND nationality UND hzb_date UND hzb_type UND hzb_name UND hzb_grade UND hzb_school UND hzb_place
+{completeness_text}
   - Fehlt EIN EINZIGES Pflichtfeld → action='insufficient_data'
   - Platzhalter wie "TBD", "N/A", "wird ergänzt" → insufficient_data
 
@@ -706,7 +744,7 @@ Antworte im JSON-Format:
 
 **MEHRERE TOOLS (Multi-Tool bei "und dann", "und schicke", etc.):**
 {{"action": "tool", "tool_names": ["<name1>", "<name2>"], "reason": "Mehrere Tools identifiziert"}}
-Beispiel: "Suche X und hole dann Y" → {{"action": "tool", "tool_names": ["duckduckgo_search", "klips2_get_course_details"], "reason": "Multi-Tool: Suche + KLIPS"}}
+{json_example}
 
 **FEHLENDE DATEN:**
 {{"action": "insufficient_data", "tool_names": ["<name>"], "reason": "Pflichtfelder fehlen", "missing_fields": ["feld1", "feld2"]}}
@@ -974,6 +1012,10 @@ Ursprünglicher Nutzertext: {enriched_message}"""
             else:
                 response_text = "\n\n---\n\n".join(all_results)
             
+            # Safety check: Ensure we never return raw JSON to users
+            if response_text.strip().startswith('{') and '"action"' in response_text:
+                response_text = "Entschuldigung, ich hatte ein technisches Problem. Bitte formulieren Sie Ihre Frage erneut."
+            
             self.memory.append(AIMessage(content=response_text))
             return response_text
             
@@ -996,20 +1038,87 @@ Falls Informationen für einen Tool-Aufruf fehlen, frage gezielt nach."""
         response = self.llm.invoke(messages)
         return response.content
     
+    def _synthesize_rag_response(self, rag_result: str) -> str:
+        """Synthesiere RAG-Ergebnisse in eine kohärente Antwort.
+        
+        Args:
+            rag_result: Rohe RAG-Tool-Ausgabe mit Context-Chunks
+            
+        Returns:
+            Natürliche, kohärente Antwort basierend auf dem RAG-Kontext
+        """
+        # Wenn RAG-Tool keine Ergebnisse fand
+        if "Keine relevanten Informationen" in rag_result or "❌" in rag_result:
+            return rag_result
+        
+        # Hole die letzte User-Nachricht für Kontext
+        last_user_message = ""
+        for msg in reversed(self.memory):
+            if isinstance(msg, HumanMessage):
+                last_user_message = msg.content
+                break
+        
+        synthesis_prompt = f"""Du bist ein hilfreicher Universitäts-Assistent. 
+
+Die folgende Frage wurde gestellt:
+{last_user_message}
+
+Hierzu wurden folgende Informationen aus der Wissensdatenbank abgerufen:
+{rag_result}
+
+Aufgabe: Beantworte die Frage präzise und natürlich basierend auf den abgerufenen Informationen.
+
+REGELN:
+1. Formuliere eine direkte, kohärente Antwort (NICHT "Laut Wissensdatenbank...")  
+2. Integriere die relevanten Informationen nahtlos
+3. Behalte wichtige Details bei (Zahlen, Namen, Anforderungen)
+4. Strukturiere die Antwort übersichtlich (Absätze, Aufzählungen wenn sinnvoll)
+5. Vermeide Redundanzen
+6. Schreibe NICHT die ursprüngliche Frage oder Einleitungen wie "Die Antwort ist:"
+
+Antworte direkt und natürlich:"""
+        
+        try:
+            messages = [
+                SystemMessage(content=synthesis_prompt)
+            ]
+            response = self.llm.invoke(messages)
+            synthesized = response.content.strip()
+            
+            # Entferne mögliche Meta-Sätze die das LLM trotzdem hinzufügt
+            patterns_to_remove = [
+                r"^(Basierend auf|Laut|Gemäß|Nach) (den|der) (abgerufenen )?Informationen[^.]*[.:]\s*",
+                r"^Die Antwort (lautet|ist)[^.]*[.:]\s*",
+                r"^Hier ist die Antwort[^.]*[.:]\s*",
+            ]
+            
+            for pattern in patterns_to_remove:
+                synthesized = re.sub(pattern, "", synthesized, flags=re.IGNORECASE)
+            
+            return synthesized.strip()
+            
+        except Exception as e:
+            logger.error(f"Fehler bei RAG-Synthese: {e}", exc_info=True)
+            # Fallback: Gebe RAG-Ergebnis direkt zurück
+            return rag_result
+    
     def _generate_fallback_response(self, message: str) -> str:
         """Fallback wenn Entscheidung nicht geparst werden konnte."""
         return self._generate_direct_response(message)
     
     def _format_tool_response(self, tool_name: str, result: str) -> str:
         """Formatiere Tool-Ergebnis für Nutzer."""
-        # Kurze Zusammenfassung + Ergebnis
+        # Für RAG-Tool: Synthesiere Antwort aus Kontext
+        if tool_name == "university_knowledge_search":
+            return self._synthesize_rag_response(result)
+        
+        # Für andere Tools: Standard-Formatierung
         tool_descriptions = {
             "klips2_register": "KLIPS2-Registrierung",
             "klips2_apply_study": "Studienbewerbung",
             "klips2_change_address": "Adressänderung",
             "klips2_change_password": "Passwortänderung",
             "klips2_get_course_details": "Kursdetails",
-            "university_knowledge_search": "Wissensdatenbank-Suche",
             "duckduckgo_search": "Web-Suche",
             "web_scraper": "Webseiten-Inhalt",
             "send_email": "E-Mail-Versand",
