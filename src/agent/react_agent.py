@@ -52,12 +52,16 @@ class ReactAgent:
         print(f"🤖 Initialisiere ChatOllama mit Modell: {settings.OLLAMA_MODEL} (ctx_size={ctx_size})")
 
         # seed=42 für Reproduzierbarkeit (zusammen mit temperature aus settings)
+        # timeout=90 für max 90s pro Request (verhindert endloses Hängen)
+        # num_predict=2048 begrenzt Output-Tokens (verhindert Endlos-Generierung)
         self.llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
             temperature=settings.TEMPERATURE,
             seed=42,  # Reproduzierbarkeit
             num_ctx=ctx_size,  # Adaptiver Context für schnellere Antworten
+            timeout=90,  # Max 90 Sekunden pro LLM-Request
+            #num_predict=2048,  # Max 2048 Output-Tokens (verhindert Endlos-Generierung)
         )
         
         # Initialisiere Tools (einschließlich E-Mail-Tool)

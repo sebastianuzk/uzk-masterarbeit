@@ -286,13 +286,14 @@ def create_dedup_excel(unique_docs: list, removed_docs: list, dedup_stats: dict,
     import random
     
     if output_path is None:
-        excel_path = Path("src/advanced_rag/data/deduplication_overview.xlsx")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        excel_path = Path(f"data/deduplication/exact_deduplication_{timestamp}.xlsx")
     else:
         excel_path = Path(output_path)
     
     excel_path.parent.mkdir(parents=True, exist_ok=True)
     
-    print(f"\n   📊 Erstelle Deduplication Excel: {excel_path}")
+    print(f"\n   📊 Erstelle Exact-Deduplication Excel: {excel_path}")
     
     all_docs = unique_docs + removed_docs
     

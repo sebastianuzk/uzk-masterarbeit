@@ -60,9 +60,12 @@ if USE_DEDUPLICATION:
     from src.advanced_rag.pre_retrieval.deduplication import (
         ContentDeduplicator, 
         deduplicate_documents_exact, 
-        create_dedup_excel,
-        deduplicate_documents_near,
-        create_near_dedup_excel
+        create_dedup_excel
+    )
+    # MinHash + LSH Near-Deduplication (datasketch Framework)
+    from src.advanced_rag.pre_retrieval.deduplication_MinHash_LSH_Framework import (
+        deduplicate_documents_datasketch,
+        create_near_dedup_excel_datasketch
     )
 if USE_MULTI_COLLECTION:
     from src.advanced_rag.pre_retrieval.collection_categorizer import CollectionCategorizer
@@ -280,6 +283,50 @@ def naive_chunk_text(text: str, chunk_size: int, overlap: int) -> list:
         start = end - overlap
     
     return chunks
+
+
+def create_skipped_docs_excel(skipped_docs: list, output_dir: Path = None) -> str:
+    """
+    Erstellt eine minimalistische Excel-Übersicht für übersprungene Dokumente.
+    
+    Args:
+        skipped_docs: Liste von dicts mit {doc_id, url, title, content_type, reason}
+        output_dir: Optionales Ausgabeverzeichnis (default: data/deduplication/)
+        
+    Returns:
+        Pfad zur erstellten Excel-Datei
+    """
+    if not skipped_docs:
+        print("   ℹ️  Keine übersprungenen Dokumente - kein Excel erstellt")
+        return None
+    
+    if output_dir is None:
+        output_dir = Path("data/deduplication")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # DataFrame erstellen
+    df = pd.DataFrame(skipped_docs)
+    
+    # Sortieren nach content_type, dann title
+    df = df.sort_values(['content_type', 'title'])
+    
+    # Excel schreiben
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    excel_path = output_dir / f"skipped_documents_{timestamp}.xlsx"
+    
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Skipped Documents', index=False)
+        
+        # Spaltenbreiten anpassen
+        worksheet = writer.sheets['Skipped Documents']
+        worksheet.column_dimensions['A'].width = 8   # doc_id
+        worksheet.column_dimensions['B'].width = 60  # url
+        worksheet.column_dimensions['C'].width = 50  # title
+        worksheet.column_dimensions['D'].width = 12  # content_type
+        worksheet.column_dimensions['E'].width = 35  # reason
+    
+    print(f"   📊 Skipped-Docs Excel: {excel_path}")
+    return str(excel_path)
 
 
 def extract_document_text(doc_id, url, title, content, content_type, content_cleaner=None):
@@ -689,6 +736,7 @@ def run_production_scraper():
             # ================================================================
             print("📝 Phase 1a: Text extrahieren...")
             all_docs_text = []
+            skipped_docs = []  # Sammle übersprungene Dokumente für Report
             
             with tqdm(total=total_docs, desc="📝 Phase 1a: Text extrahieren", unit="doc") as pbar:
                 for row in cursor:
@@ -708,6 +756,13 @@ def run_production_scraper():
                         all_docs_text.append(result)
                     else:
                         stats['skipped'] += 1
+                        skipped_docs.append({
+                            'doc_id': doc_id,
+                            'url': url,
+                            'title': title,
+                            'content_type': content_type,
+                            'reason': 'Text nach Cleaning < 50 Zeichen'
+                        })
                     
                     pbar.set_postfix({
                         'Extracted': len(all_docs_text),
@@ -716,6 +771,11 @@ def run_production_scraper():
                     pbar.update(1)
             
             print(f"\n✅ Phase 1a abgeschlossen: {len(all_docs_text):,} Dokumente extrahiert")
+            
+            # Excel-Report für übersprungene Dokumente (falls vorhanden)
+            if skipped_docs:
+                print(f"   ⚠️  {len(skipped_docs)} Dokumente übersprungen (zu wenig Text nach Cleaning)")
+                create_skipped_docs_excel(skipped_docs)
             
             # ================================================================
             # PHASE 1b: Exact-Deduplication
@@ -741,67 +801,63 @@ def run_production_scraper():
             create_dedup_excel(unique_docs, removed_docs, dedup_stats)
             
             # ================================================================
-            # PHASE 1b2: Near-Deduplication (Teil von Deduplication)
+            # PHASE 1b2: Near-Deduplication mit MinHash + LSH (datasketch)
             # ================================================================
             print("\n" + "-" * 80)
-            print("🔍 Phase 1b2: Near-Deduplication (Document-Level)...")
+            print("🔍 Phase 1b2: Near-Deduplication (MinHash + LSH via datasketch)...")
             print("-" * 80)
             
-            near_unique_docs, near_removed_docs, near_dedup_stats = deduplicate_documents_near(
+            near_unique_docs, near_removed_docs, near_dedup_stats = deduplicate_documents_datasketch(
                 unique_docs, 
                 text_key='text', 
-                id_key='doc_id',
-                shingle_k=rag_config.near_deduplication_shingle_k,
-                similarity_threshold=rag_config.near_deduplication_similarity_threshold,
-                min_words=rag_config.near_deduplication_min_words
+                id_key='doc_id'
             )
-            
-            print(f"   📊 Input:    {near_dedup_stats['total']:,} Dokumente")
-            print(f"   📊 Unique:   {near_dedup_stats['unique']:,} Dokumente")
-            print(f"   📊 Entfernt: {near_dedup_stats['duplicates_removed']:,} Near-Duplicates")
-            print(f"   📊 Cluster:  {near_dedup_stats['clusters']:,}")
-            print(f"   📊 Kandidatenpaare: {near_dedup_stats['candidate_pairs']:,}")
-            print(f"   📊 Verifizierte Paare: {near_dedup_stats['verified_pairs']:,}")
-            print(f"   📊 Reduktion: {near_dedup_stats['reduction_percent']:.1f}%")
             
             # Speichere Near-Dedup-Stats für späteren Report
             stats['near_dedup'] = near_dedup_stats
             
             # Excel-Übersicht für Near-Deduplication erstellen
-            create_near_dedup_excel(near_unique_docs, near_removed_docs, near_dedup_stats)
+            create_near_dedup_excel_datasketch(near_unique_docs, near_removed_docs, near_dedup_stats)
             
             # Überschreibe unique_docs für die nächste Phase
             unique_docs = near_unique_docs
             
             # ================================================================
-            # PHASE 1c: Chunking (nur unique Dokumente)
+            # PHASE 1c: Chunking (DEAKTIVIERT - nur Deduplication-Run)
             # ================================================================
             print("\n" + "-" * 80)
-            print(f"✂️  Phase 1c: Chunking ({len(unique_docs):,} unique Dokumente)...")
+            print(f"⏭️  Phase 1c: Chunking ÜBERSPRUNGEN (nur Deduplication-Run)")
+            print(f"   {len(unique_docs):,} unique Dokumente bereit für Chunking")
             print("-" * 80)
             
-            with tqdm(total=len(unique_docs), desc="✂️  Phase 1c: Chunking", unit="doc") as pbar:
-                for doc_dict in unique_docs:
-                    short_title = doc_dict['title'][:40] + "..." if len(doc_dict['title']) > 40 else doc_dict['title']
-                    pbar.set_description(f"✂️  [{doc_dict['content_type'].upper()}] {short_title}")
-                    
-                    result = chunk_document(doc_dict, chunker, categorizer)
-                    
-                    if result is not None:
-                        collection_name = result['collection_name']
-                        
-                        if collection_name not in completed_collections:
-                            stats['chunks'] += len(result['chunks'])
-                            stats['chunk_lengths'].extend([len(chunk) for chunk in result['chunks']])
-                            docs_by_collection[collection_name].append(result)
-                    
-                    pbar.set_postfix({
-                        'Docs': sum(len(docs) for docs in docs_by_collection.values()),
-                        'Chunks': f"{stats['chunks']:,}"
-                    })
-                    pbar.update(1)
+            # # AUSKOMMENTIERT: Chunking für späteren Run
+            # with tqdm(total=len(unique_docs), desc="✂️  Phase 1c: Chunking", unit="doc") as pbar:
+            #     for doc_dict in unique_docs:
+            #         short_title = doc_dict['title'][:40] + "..." if len(doc_dict['title']) > 40 else doc_dict['title']
+            #         pbar.set_description(f"✂️  [{doc_dict['content_type'].upper()}] {short_title}")
+            #         
+            #         result = chunk_document(doc_dict, chunker, categorizer)
+            #         
+            #         if result is not None:
+            #             collection_name = result['collection_name']
+            #             
+            #             if collection_name not in completed_collections:
+            #                 stats['chunks'] += len(result['chunks'])
+            #                 stats['chunk_lengths'].extend([len(chunk) for chunk in result['chunks']])
+            #                 docs_by_collection[collection_name].append(result)
+            #         
+            #         pbar.set_postfix({
+            #             'Docs': sum(len(docs) for docs in docs_by_collection.values()),
+            #             'Chunks': f"{stats['chunks']:,}"
+            #         })
+            #         pbar.update(1)
+            # 
+            # print(f"\n✅ Phase 1c abgeschlossen: {stats['chunks']:,} Chunks erstellt")
             
-            print(f"\n✅ Phase 1c abgeschlossen: {stats['chunks']:,} Chunks erstellt")
+            print(f"\n✅ Deduplication-Run abgeschlossen!")
+            print(f"   📊 Exact-Dedup: {dedup_stats['total']} → {dedup_stats['unique']} Dokumente")
+            print(f"   📊 Near-Dedup (MinHash+LSH): {near_dedup_stats['total']} → {near_dedup_stats['unique']} Dokumente")
+            print(f"   📊 Gesamt-Reduktion: {dedup_stats['total']} → {near_dedup_stats['unique']} ({(1 - near_dedup_stats['unique']/dedup_stats['total'])*100:.1f}%)")
             
         else:
             # ================================================================
@@ -853,47 +909,57 @@ def run_production_scraper():
         checkpoint_mgr.save_phase1_checkpoint(docs_by_collection)
     
     # Phase 2: Batch-Embedding und Speicherung
-    print("\n" + "=" * 80)
-    print("SCHRITT 5: Embeddings erstellen (BATCH)")
-    print("=" * 80)
-    print("🚀 Phase 2: Batch-Embedding → Store (inkrementell nach jeder Collection!)")
-    print()
+    # ÜBERSPRINGE wenn keine Chunks vorhanden (Deduplication-only Run)
+    total_chunks_available = sum(len(docs) for docs in docs_by_collection.values() if docs and docs[0].get('chunks'))
     
-    # Batch-Größe für Embeddings
-    BATCH_SIZE = 512
-    
-    for collection_name, docs in docs_by_collection.items():
-        # Überspringe fertige Collections
-        if collection_name in completed_collections:
-            continue
+    if total_chunks_available == 0 or stats['chunks'] == 0:
+        print("\n" + "=" * 80)
+        print("SCHRITT 5: Embeddings erstellen (ÜBERSPRUNGEN)")
+        print("=" * 80)
+        print("⏭️  Keine Chunks vorhanden - Deduplication-only Run")
+        print("   Um Embeddings zu erstellen, aktiviere Phase 1c (Chunking)")
+    else:
+        print("\n" + "=" * 80)
+        print("SCHRITT 5: Embeddings erstellen (BATCH)")
+        print("=" * 80)
+        print("🚀 Phase 2: Batch-Embedding → Store (inkrementell nach jeder Collection!)")
+        print()
         
-        if not docs:
-            print(f"\n⏭️  Collection '{collection_name}': Keine neuen Dokumente")
-            continue
+        # Batch-Größe für Embeddings
+        BATCH_SIZE = 512
         
-        print(f"\n📦 Collection '{collection_name}': {len(docs)} Dokumente")
-        collection = collections_dict[collection_name]
-        
-        # Sammle alle Chunks für Batch-Encoding
-        all_chunks = []
-        chunk_doc_info = []  # Temporär: nur doc_info, token_count wird später hinzugefügt
-        
-        print(f"   📋 Sammle Chunks aus {len(docs)} Dokumenten...")
-        for doc in tqdm(docs, desc=f"   📄 Chunks sammeln", leave=False):
-            for i, chunk in enumerate(doc['chunks']):
-                all_chunks.append(chunk)
-                chunk_doc_info.append({
-                    'doc_id': doc['doc_id'],
-                    'url': doc['url'],
-                    'title': doc['title'],
-                    'content_type': doc['content_type'],
-                    'chunk_index': i,
-                    'total_chunks': len(doc['chunks']),
-                    'char_count': len(chunk),
-                    'chunk_id': f"{doc['content_type']}_{doc['doc_id']}_chunk_{i}"
-                })
-        
-        print(f"   ✅ {len(all_chunks):,} Chunks gesammelt")
+        for collection_name, docs in docs_by_collection.items():
+            # Überspringe fertige Collections
+            if collection_name in completed_collections:
+                continue
+            
+            if not docs:
+                print(f"\n⏭️  Collection '{collection_name}': Keine neuen Dokumente")
+                continue
+            
+            print(f"\n📦 Collection '{collection_name}': {len(docs)} Dokumente")
+            collection = collections_dict[collection_name]
+            
+            # Sammle alle Chunks für Batch-Encoding
+            all_chunks = []
+            chunk_doc_info = []  # Temporär: nur doc_info, token_count wird später hinzugefügt
+            
+            print(f"   📋 Sammle Chunks aus {len(docs)} Dokumenten...")
+            for doc in tqdm(docs, desc=f"   📄 Chunks sammeln", leave=False):
+                for i, chunk in enumerate(doc['chunks']):
+                    all_chunks.append(chunk)
+                    chunk_doc_info.append({
+                        'doc_id': doc['doc_id'],
+                        'url': doc['url'],
+                        'title': doc['title'],
+                        'content_type': doc['content_type'],
+                        'chunk_index': i,
+                        'total_chunks': len(doc['chunks']),
+                        'char_count': len(chunk),
+                        'chunk_id': f"{doc['content_type']}_{doc['doc_id']}_chunk_{i}"
+                    })
+            
+            print(f"   ✅ {len(all_chunks):,} Chunks gesammelt")
         
         # Token-Zählung mit BGE-M3 Tokenizer (exakt für das verwendete Embedding-Modell)
         print(f"   🔢 Zähle Tokens mit BGE-M3 Tokenizer...")
