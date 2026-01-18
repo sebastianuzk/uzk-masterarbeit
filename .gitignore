@@ -79,12 +79,20 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
 
 # Evaluation Checkpoints
 checkpoints/
+**/checkpoints/
 src/evaluation/checkpoints/
 *_checkpoint.pkl
+*_checkpoint.json
+*_checkpoint.csv
+*.checkpoint
 eval/ragas/data/responses_checkpoint.pkl
+eval/ragas_eval/data/*_checkpoint.*
+data/checkpoints/
 
 # IPython
 profile_default/
