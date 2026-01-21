@@ -406,6 +406,152 @@ class BM25SparseIndex:
             'total_tokens': total_tokens,
             'unique_terms': unique_terms
         }
+    
+    def export_summary(self, output_path: Optional[str] = None) -> str:
+        """
+        Exportiere einen Überblick über den Sparse-Index als Excel-Datei.
+        
+        Erstellt eine Excel-Datei mit mehreren Sheets:
+        - Übersicht: Allgemeine Statistiken
+        - Top Terme: Top-500 häufigste Terme mit Frequenzen
+        - Beispiel-Dokumente: Erste 20 Dokumente mit Tokens
+        - Längen-Verteilung: Dokument-Längen-Statistiken
+        
+        Args:
+            output_path: Optionaler Pfad für die Ausgabedatei.
+                        Default: {index_dir}/{collection_name}/sparse_index_summary.xlsx
+        
+        Returns:
+            Pfad zur erstellten Excel-Datei
+        """
+        from collections import Counter
+        from datetime import datetime
+        import pandas as pd
+        
+        if output_path:
+            summary_file = Path(output_path)
+        else:
+            summary_file = self._index_path / "sparse_index_summary.xlsx"
+        
+        summary_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Statistiken berechnen
+        stats = self.get_statistics()
+        
+        # Term-Frequenzen berechnen
+        term_counter = Counter()
+        for doc in self.tokenized_corpus:
+            term_counter.update(doc)
+        
+        # Dokument-Längen-Verteilung
+        doc_lengths = [len(doc) for doc in self.tokenized_corpus]
+        if doc_lengths:
+            min_len = min(doc_lengths)
+            max_len = max(doc_lengths)
+            median_len = sorted(doc_lengths)[len(doc_lengths) // 2]
+            q1_len = sorted(doc_lengths)[len(doc_lengths) // 4]
+            q3_len = sorted(doc_lengths)[3 * len(doc_lengths) // 4]
+        else:
+            min_len = max_len = median_len = q1_len = q3_len = 0
+        
+        # Excel Writer
+        with pd.ExcelWriter(summary_file, engine='openpyxl') as writer:
+            # Sheet 1: Übersicht
+            overview_data = {
+                'Metrik': [
+                    'Collection',
+                    'Index-Verzeichnis',
+                    'Erstellt am',
+                    '',
+                    'Anzahl Dokumente',
+                    'Einzigartige Terme',
+                    'Gesamt Tokens',
+                    'Durchschn. Tokens/Dokument',
+                    '',
+                    'Min. Dokumentlänge',
+                    'Max. Dokumentlänge',
+                    'Median Dokumentlänge',
+                    '25% Quantil',
+                    '75% Quantil',
+                    '',
+                    'Tokenisierung',
+                    'Lowercase',
+                    'Stemming',
+                    'Stoppwörter entfernt',
+                    'Umlaute (äöüß)',
+                ],
+                'Wert': [
+                    self.collection_name,
+                    str(self.index_dir),
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    '',
+                    f"{stats['total_documents']:,}",
+                    f"{stats['unique_terms']:,}",
+                    f"{stats['total_tokens']:,}",
+                    f"{stats['avg_tokens_per_doc']:.2f}",
+                    '',
+                    f"{min_len:,}",
+                    f"{max_len:,}",
+                    f"{median_len:,}",
+                    f"{q1_len:,}",
+                    f"{q3_len:,}",
+                    '',
+                    'Einfache wortbasierte Tokenisierung',
+                    'Ja',
+                    'Nein',
+                    'Nein',
+                    'Beibehalten',
+                ]
+            }
+            df_overview = pd.DataFrame(overview_data)
+            df_overview.to_excel(writer, sheet_name='Übersicht', index=False)
+            
+            # Sheet 2: Top Terme
+            top_terms_data = {
+                'Rang': list(range(1, min(501, len(term_counter) + 1))),
+                'Term': [term for term, _ in term_counter.most_common(500)],
+                'Frequenz': [freq for _, freq in term_counter.most_common(500)],
+            }
+            df_terms = pd.DataFrame(top_terms_data)
+            df_terms.to_excel(writer, sheet_name='Top 500 Terme', index=False)
+            
+            # Sheet 3: Beispiel-Dokumente
+            example_docs = []
+            for i, (chunk_id, tokens) in enumerate(zip(self.chunk_ids[:20], self.tokenized_corpus[:20])):
+                preview = ' '.join(tokens[:50])
+                if len(tokens) > 50:
+                    preview += "..."
+                example_docs.append({
+                    'Nr': i + 1,
+                    'Chunk ID': chunk_id,
+                    'Anzahl Tokens': len(tokens),
+                    'Token-Preview (erste 50)': preview
+                })
+            df_examples = pd.DataFrame(example_docs)
+            df_examples.to_excel(writer, sheet_name='Beispiel-Dokumente', index=False)
+            
+            # Sheet 4: Längen-Verteilung (Histogramm-Daten)
+            # Gruppiere Dokumente nach Längen-Buckets
+            buckets = [0, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1000, float('inf')]
+            bucket_labels = ['0-50', '51-100', '101-150', '151-200', '201-250', 
+                           '251-300', '301-400', '401-500', '501-750', '751-1000', '>1000']
+            bucket_counts = [0] * (len(buckets) - 1)
+            
+            for length in doc_lengths:
+                for i in range(len(buckets) - 1):
+                    if buckets[i] < length <= buckets[i + 1]:
+                        bucket_counts[i] += 1
+                        break
+            
+            df_lengths = pd.DataFrame({
+                'Tokens-Bereich': bucket_labels,
+                'Anzahl Dokumente': bucket_counts,
+                'Prozent': [f"{100 * c / len(doc_lengths):.1f}%" if doc_lengths else "0%" for c in bucket_counts]
+            })
+            df_lengths.to_excel(writer, sheet_name='Längen-Verteilung', index=False)
+        
+        logger.info(f"📊 Sparse-Index-Summary exportiert: {summary_file}")
+        return str(summary_file)
 
 
 # ============================================================================

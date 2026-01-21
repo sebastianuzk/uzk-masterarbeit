@@ -1078,6 +1078,10 @@ def run_production_scraper():
             )
             sparse_stats = sparse_index.get_statistics()
             print(f"   ✅ BM25-Index: {sparse_stats['total_documents']:,} Dokumente, {sparse_stats['unique_terms']:,} Terms")
+            
+            # Exportiere Summary
+            summary_path = sparse_index.export_summary()
+            print(f"   📊 Summary exportiert: {summary_path}")
     
     # Lösche Phase 1 Checkpoint (alle Collections erfolgreich)
     checkpoint_mgr.delete_phase1_checkpoint()
