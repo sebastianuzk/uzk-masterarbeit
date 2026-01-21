@@ -61,7 +61,7 @@ class ReactAgent:
             seed=42,  # Reproduzierbarkeit
             num_ctx=ctx_size,  # Adaptiver Context für schnellere Antworten
             timeout=90,  # Max 90 Sekunden pro LLM-Request
-            #num_predict=2048,  # Max 2048 Output-Tokens (verhindert Endlos-Generierung)
+            num_predict=2048,  # Max 2048 Output-Tokens (verhindert Endlos-Generierung)
         )
         
         # Initialisiere Tools (einschließlich E-Mail-Tool)

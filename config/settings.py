@@ -29,6 +29,14 @@ class Settings:
     # (nutzt gleiche LLM-Parameter: TEMPERATURE, CONTEXT_WINDOW, RANDOM_SEED)
     RAGAS_EVAL_MODEL = os.getenv("RAGAS_EVAL_MODEL", "phi4-mini:3.8b")
     
+    # OpenAI Konfiguration (für RAGAS-Evaluation mit Cloud-LLM als Judge)
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_EVAL_MODEL = os.getenv("OPENAI_EVAL_MODEL", "gpt-4o-mini")  # Günstiges GPT-4 Modell für Evaluation
+    
+    # RAGAS Evaluation Mode: True = lokales Ollama-LLM, False = OpenAI-LLM als Judge
+    # Hinweis: Embeddings werden IMMER lokal mit Ollama (embeddinggemma) berechnet
+    RUN_EVALUATION_LOCAL = os.getenv("RUN_EVALUATION_LOCAL", "false").lower() == "true"
+    
     # Reproduzierbarkeit
     RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
     
@@ -113,3 +121,8 @@ DEFAULT_RECIPIENT = settings.DEFAULT_RECIPIENT
 RAGAS_EVAL_MODEL = settings.RAGAS_EVAL_MODEL
 CONTEXT_WINDOW = settings.CONTEXT_WINDOW
 RANDOM_SEED = settings.RANDOM_SEED
+
+# OpenAI Konfiguration Exports
+OPENAI_API_KEY = settings.OPENAI_API_KEY
+OPENAI_EVAL_MODEL = settings.OPENAI_EVAL_MODEL
+RUN_EVALUATION_LOCAL = settings.RUN_EVALUATION_LOCAL

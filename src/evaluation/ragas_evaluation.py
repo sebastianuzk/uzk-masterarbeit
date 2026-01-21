@@ -75,10 +75,23 @@ from src.agent.react_agent import create_react_agent
 random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 
-# Globaler Timestamp für alle Dateien dieser Evaluation
+# Timestamps für Batch-Evaluation (Array wird in main() iteriert)
 from datetime import datetime
-#EVAL_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-EVAL_TIMESTAMP = "20260115_115815"
+#EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
+
+
+EVAL_TIMESTAMPS = [
+    "20260120_174049",
+    "20260120_213609",
+    "20260120_224350",
+
+    # Weitere Timestamps hier hinzufügen...
+]
+
+
+
+# Aktueller Timestamp (wird in main() pro Iteration gesetzt)
+EVAL_TIMESTAMP = None
 
 
 def calculate_RR_at5(context_hint: str, retrieved_urls: list) -> float:
@@ -431,16 +444,8 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         # Zeit messen für Antwortgenerierung
         response_start = time.time()
         
-        # Agent.chat() mit Timeout
-        try:
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                future = executor.submit(agent.chat, question, session_id)
-                answer = future.result(timeout=TIMEOUT_SECONDS)
-        except FuturesTimeoutError:
-            print(f"   ⏰ TIMEOUT nach {TIMEOUT_SECONDS}s - Agent wird neu gestartet...")
-            agent = create_react_agent()
-            print(f"   🔄 Agent neu gestartet - überspringe diese Frage")
-            continue
+        # Direkte Anfrage an den Chatbot (ohne ThreadPoolExecutor)
+        answer = agent.chat(question, session_id)
         
         response_time = time.time() - response_start
         response_times.append(response_time)
@@ -536,7 +541,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
 # KONFIGURATION
 # ============================================================================
 # Limit für Testfragen (None = alle, z.B. 5 für Test)
-TEST_LIMIT = 2 # None = alle Fragen evaluieren
+TEST_LIMIT = None # None = alle Fragen evaluieren
 
 
 def run_ragas_evaluation(dataset: EvaluationDataset, run_local: bool = None) -> tuple:
@@ -608,7 +613,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset, run_local: bool = None) -> 
         print(f"   (Chatbot verwendet: {OLLAMA_MODEL})")
         
         # RunConfig für OpenAI-Evaluation
-        # max_workers=300: Hohe Parallelität, Retries fangen Rate-Limits ab
+        # max_workers=150: Hohe Parallelität
         # timeout=1800: Ausreichend Zeit für komplexe Metriken
         run_config = RunConfig(
             max_workers=150,
@@ -1256,9 +1261,10 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
 
 def main():
     """Hauptfunktion"""
+    global EVAL_TIMESTAMP
     
     print("\n" + "=" * 80)
-    print("🎯 RAGAS-EVALUATION - WiSo-Chatbot")
+    print(f"🎯 RAGAS-EVALUATION - WiSo-Chatbot ({len(EVAL_TIMESTAMPS)} Timestamps)")
     print("=" * 80 + "\n")
     
     # Zeige Evaluationsmodus
@@ -1266,109 +1272,117 @@ def main():
         print(f"⚙️ Evaluationsmodus: LOKAL (Ollama: {RAGAS_EVAL_MODEL})")
     else:
         print(f"⚙️ Evaluationsmodus: CLOUD (OpenAI: {OPENAI_EVAL_MODEL})")
-    print(f"📁 Timestamp: {EVAL_TIMESTAMP}")
+    print(f"📁 Timestamps: {EVAL_TIMESTAMPS}")
     print()
     
-    # Checkpoint-Pfad mit Timestamp (gleicher wie in generate_chatbot_responses)
-    checkpoint_path = Path(__file__).parent / "data" / f"responses_checkpoint_{EVAL_TIMESTAMP}.pkl"
-    
-    # Variablen für Timing, URLs, Content-Types und Token-Usage initialisieren
-    response_times = None
-    urls_list = None
-    content_types_list = None
-    token_usage_list = None
-    dataset = None
-    checkpoint_complete = False
-    
-    try:
-        # 1. LangSmith Client (immer initialisieren)
-        print("🔗 Initialisiere LangSmith...")
-        langsmith_client = Client(api_key=LANGSMITH_API_KEY)
-        print(f"   ✅ Projekt: {LANGSMITH_PROJECT}\n")
+    # Iteriere über alle Timestamps
+    for ts_idx, timestamp in enumerate(EVAL_TIMESTAMPS, 1):
+        EVAL_TIMESTAMP = timestamp
         
-        # 2. Testset laden (mit optionalem Limit)
-        print("📂 Lade Testset...")
-        test_df = load_testset(limit=TEST_LIMIT)
-        print()
+        print("\n" + "#" * 80)
+        print(f"📋 [{ts_idx}/{len(EVAL_TIMESTAMPS)}] Timestamp: {EVAL_TIMESTAMP}")
+        print("#" * 80)
         
-        # 3. Prüfe ob Checkpoint existiert und vollständig ist
-        if checkpoint_path.exists():
-            print("📂 Prüfe Checkpoint...")
-            import pickle
-            with open(checkpoint_path, 'rb') as f:
-                checkpoint_data = pickle.load(f)
+        # Checkpoint-Pfad mit Timestamp (gleicher wie in generate_chatbot_responses)
+        checkpoint_path = Path(__file__).parent / "data" / f"responses_checkpoint_{EVAL_TIMESTAMP}.pkl"
+        
+        # Variablen für Timing, URLs, Content-Types und Token-Usage initialisieren
+        response_times = None
+        urls_list = None
+        content_types_list = None
+        token_usage_list = None
+        dataset = None
+        checkpoint_complete = False
+        
+        try:
+            # 1. LangSmith Client (immer initialisieren)
+            print("🔗 Initialisiere LangSmith...")
+            langsmith_client = Client(api_key=LANGSMITH_API_KEY)
+            print(f"   ✅ Projekt: {LANGSMITH_PROJECT}\n")
             
-            # Checkpoint kann EvaluationDataset oder dict sein
-            if isinstance(checkpoint_data, dict):
-                saved_dataset = checkpoint_data.get('dataset')
-                saved_df = checkpoint_data.get('test_df')
-                response_times = checkpoint_data.get('response_times', None)
-                urls_list = checkpoint_data.get('urls_list', None)
-                content_types_list = checkpoint_data.get('content_types_list', None)
-                token_usage_list = checkpoint_data.get('token_usage_list', None)
+            # 2. Testset laden (mit optionalem Limit)
+            print("📂 Lade Testset...")
+            test_df = load_testset(limit=TEST_LIMIT)
+            print()
+            
+            # 3. Prüfe ob Checkpoint existiert und vollständig ist
+            if checkpoint_path.exists():
+                print("📂 Prüfe Checkpoint...")
+                import pickle
+                with open(checkpoint_path, 'rb') as f:
+                    checkpoint_data = pickle.load(f)
                 
-                # Prüfe ob Checkpoint vollständig ist
-                if saved_dataset and hasattr(saved_dataset, 'samples'):
-                    num_saved = len(saved_dataset.samples)
-                    num_expected = len(test_df)
+                # Checkpoint kann EvaluationDataset oder dict sein
+                if isinstance(checkpoint_data, dict):
+                    saved_dataset = checkpoint_data.get('dataset')
+                    saved_df = checkpoint_data.get('test_df')
+                    response_times = checkpoint_data.get('response_times', None)
+                    urls_list = checkpoint_data.get('urls_list', None)
+                    content_types_list = checkpoint_data.get('content_types_list', None)
+                    token_usage_list = checkpoint_data.get('token_usage_list', None)
                     
-                    if num_saved >= num_expected:
-                        # Vollständig → direkt zur Evaluation
-                        print(f"   ✅ Checkpoint vollständig: {num_saved}/{num_expected} Antworten")
-                        dataset = saved_dataset
+                    # Prüfe ob Checkpoint vollständig ist
+                    if saved_dataset and hasattr(saved_dataset, 'samples'):
+                        num_saved = len(saved_dataset.samples)
+                        num_expected = len(test_df)
+                        
+                        if num_saved >= num_expected:
+                            # Vollständig → direkt zur Evaluation
+                            print(f"   ✅ Checkpoint vollständig: {num_saved}/{num_expected} Antworten")
+                            dataset = saved_dataset
+                            checkpoint_complete = True
+                        else:
+                            # Unvollständig → Fortsetzung nötig
+                            print(f"   ⏳ Checkpoint unvollständig: {num_saved}/{num_expected} Antworten")
+                            print(f"   → generate_chatbot_responses() wird fortsetzen\n")
+                else:
+                    # Alter Checkpoint-Format (nur Dataset)
+                    dataset = checkpoint_data
+                    if hasattr(dataset, 'samples') and len(dataset.samples) >= len(test_df):
                         checkpoint_complete = True
-                    else:
-                        # Unvollständig → Fortsetzung nötig
-                        print(f"   ⏳ Checkpoint unvollständig: {num_saved}/{num_expected} Antworten")
-                        print(f"   → generate_chatbot_responses() wird fortsetzen\n")
-            else:
-                # Alter Checkpoint-Format (nur Dataset)
-                dataset = checkpoint_data
-                if hasattr(dataset, 'samples') and len(dataset.samples) >= len(test_df):
-                    checkpoint_complete = True
-                    print(f"   ✅ Alter Checkpoint vollständig: {len(dataset.samples)} Antworten")
-        
-        # 4. Falls Checkpoint unvollständig oder nicht vorhanden → Antworten generieren
-        if not checkpoint_complete:
-            # Chatbot initialisieren
-            print("🤖 Initialisiere Chatbot...")
-            agent = create_react_agent()
-            print()
+                        print(f"   ✅ Alter Checkpoint vollständig: {len(dataset.samples)} Antworten")
             
-            # Antworten generieren (setzt bei Checkpoint fort)
-            dataset, response_times, urls_list, content_types_list, token_usage_list = generate_chatbot_responses(test_df, agent, langsmith_client)
+            # 4. Falls Checkpoint unvollständig oder nicht vorhanden → Antworten generieren
+            if not checkpoint_complete:
+                # Chatbot initialisieren
+                print("🤖 Initialisiere Chatbot...")
+                agent = create_react_agent()
+                print()
+                
+                # Antworten generieren (setzt bei Checkpoint fort)
+                dataset, response_times, urls_list, content_types_list, token_usage_list = generate_chatbot_responses(test_df, agent, langsmith_client)
+                
+                # ====================================================================
+                # CHATBOT-MODELL ENTLADEN (GPU-Speicher freigeben vor RAGAS)
+                # ====================================================================
+                print("\n🧹 Räume GPU-Speicher auf (Chatbot + Embedding-Modell entladen)...")
+                del agent  # Python-Referenz löschen
+                gc.collect()  # Garbage Collection
+                stop_ollama_model(OLLAMA_MODEL)  # LLM via CLI stoppen
+                stop_embedding_model()  # Embedding-Modell (BGE-M3) freigeben
+                
+                # Bei lokaler Evaluation: Warte kurz damit GPU-Speicher freigegeben wird
+                if RUN_EVALUATION_LOCAL:
+                    print("   ⏳ Warte 2s für GPU-Speicherfreigabe...")
+                    time.sleep(2)
+                print()
             
-            # ====================================================================
-            # CHATBOT-MODELL ENTLADEN (GPU-Speicher freigeben vor RAGAS)
-            # ====================================================================
-            print("\n🧹 Räume GPU-Speicher auf (Chatbot + Embedding-Modell entladen)...")
-            del agent  # Python-Referenz löschen
-            gc.collect()  # Garbage Collection
-            stop_ollama_model(OLLAMA_MODEL)  # LLM via CLI stoppen
-            stop_embedding_model()  # Embedding-Modell (BGE-M3) freigeben
+            # 5. RAGAS-Evaluation (immer ausführen, Modus aus Config)
+            results_df, evaluation_time = run_ragas_evaluation(dataset)
             
-            # Bei lokaler Evaluation: Warte kurz damit GPU-Speicher freigegeben wird
-            if RUN_EVALUATION_LOCAL:
-                print("   ⏳ Warte 2s für GPU-Speicherfreigabe...")
-                time.sleep(2)
-            print()
-        
-        # 5. RAGAS-Evaluation (immer ausführen, Modus aus Config)
-        results_df, evaluation_time = run_ragas_evaluation(dataset)
-        
-        # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten inkl. Token-Usage)
-        display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time, token_usage_list)
-        
-        print("✅ Evaluation erfolgreich abgeschlossen!")
-        
-    except KeyboardInterrupt:
-        print("\n\n⚠️ Evaluation abgebrochen!\n")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n❌ Fehler: {e}\n")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+            # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten inkl. Token-Usage)
+            display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time, token_usage_list)
+            
+            #print(f"✅ Evaluation für {EVAL_TIMESTAMP} erfolgreich abgeschlossen!")
+            
+        except KeyboardInterrupt:
+            print("\n\n⚠️ Evaluation abgebrochen!\n")
+            sys.exit(1)
+        except Exception as e:
+            print(f"\n❌ Fehler bei {EVAL_TIMESTAMP}: {e}\n")
+            import traceback
+            traceback.print_exc()
+            continue  # Fahre mit nächstem Timestamp fort
 
 
 if __name__ == "__main__":
