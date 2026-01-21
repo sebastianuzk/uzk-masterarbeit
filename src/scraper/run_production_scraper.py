@@ -42,6 +42,8 @@ try:
     USE_CONTENT_CLEANING = rag_config.use_content_cleaning
     USE_DEDUPLICATION = rag_config.use_deduplication  # Aktiviert Exact + Near Deduplication
     USE_MULTI_COLLECTION = rag_config.use_multi_collection_search
+    USE_HYBRID_RETRIEVAL = rag_config.use_hybrid_retrieval  # BM25 Sparse Index + RRF
+    SPARSE_INDEX_DIR = rag_config.hybrid_retrieval_sparse_index_dir
 except Exception as e:
     print(f"⚠️  Fehler beim Laden der RAG-Config: {e}")
     print("   Verwende Naive RAG als Fallback")
@@ -50,6 +52,8 @@ except Exception as e:
     USE_CONTENT_CLEANING = False
     USE_DEDUPLICATION = False
     USE_MULTI_COLLECTION = False
+    USE_HYBRID_RETRIEVAL = False
+    SPARSE_INDEX_DIR = "data/sparse_index"
 
 # Conditional Imports für Advanced-Techniken (nur wenn benötigt)
 if USE_SEMANTIC_CHUNKING:
@@ -69,6 +73,11 @@ if USE_DEDUPLICATION:
     )
 if USE_MULTI_COLLECTION:
     from src.advanced_rag.pre_retrieval.collection_categorizer import CollectionCategorizer
+if USE_HYBRID_RETRIEVAL:
+    from src.advanced_rag.retrieval.hybrid_retrieval_rrf import (
+        BM25SparseIndex,
+        build_sparse_index_from_chunks
+    )
 
 # Datenbank-Pfade
 CONTENT_DB = Path("data/content_database.db")
@@ -823,38 +832,36 @@ def run_production_scraper():
             unique_docs = near_unique_docs
             
             # ================================================================
-            # PHASE 1c: Chunking (DEAKTIVIERT - nur Deduplication-Run)
+            # PHASE 1c: Chunking (nur unique Dokumente nach Deduplication)
             # ================================================================
             print("\n" + "-" * 80)
-            print(f"⏭️  Phase 1c: Chunking ÜBERSPRUNGEN (nur Deduplication-Run)")
-            print(f"   {len(unique_docs):,} unique Dokumente bereit für Chunking")
+            print(f"✂️  Phase 1c: Chunking ({len(unique_docs):,} unique Dokumente)")
             print("-" * 80)
             
-            # # AUSKOMMENTIERT: Chunking für späteren Run
-            # with tqdm(total=len(unique_docs), desc="✂️  Phase 1c: Chunking", unit="doc") as pbar:
-            #     for doc_dict in unique_docs:
-            #         short_title = doc_dict['title'][:40] + "..." if len(doc_dict['title']) > 40 else doc_dict['title']
-            #         pbar.set_description(f"✂️  [{doc_dict['content_type'].upper()}] {short_title}")
-            #         
-            #         result = chunk_document(doc_dict, chunker, categorizer)
-            #         
-            #         if result is not None:
-            #             collection_name = result['collection_name']
-            #             
-            #             if collection_name not in completed_collections:
-            #                 stats['chunks'] += len(result['chunks'])
-            #                 stats['chunk_lengths'].extend([len(chunk) for chunk in result['chunks']])
-            #                 docs_by_collection[collection_name].append(result)
-            #         
-            #         pbar.set_postfix({
-            #             'Docs': sum(len(docs) for docs in docs_by_collection.values()),
-            #             'Chunks': f"{stats['chunks']:,}"
-            #         })
-            #         pbar.update(1)
-            # 
-            # print(f"\n✅ Phase 1c abgeschlossen: {stats['chunks']:,} Chunks erstellt")
+            with tqdm(total=len(unique_docs), desc="✂️  Phase 1c: Chunking", unit="doc") as pbar:
+                for doc_dict in unique_docs:
+                    short_title = doc_dict['title'][:40] + "..." if len(doc_dict['title']) > 40 else doc_dict['title']
+                    pbar.set_description(f"✂️  [{doc_dict['content_type'].upper()}] {short_title}")
+                    
+                    result = chunk_document(doc_dict, chunker, categorizer)
+                    
+                    if result is not None:
+                        collection_name = result['collection_name']
+                        
+                        if collection_name not in completed_collections:
+                            stats['chunks'] += len(result['chunks'])
+                            stats['chunk_lengths'].extend([len(chunk) for chunk in result['chunks']])
+                            docs_by_collection[collection_name].append(result)
+                    
+                    pbar.set_postfix({
+                        'Docs': sum(len(docs) for docs in docs_by_collection.values()),
+                        'Chunks': f"{stats['chunks']:,}"
+                    })
+                    pbar.update(1)
             
-            print(f"\n✅ Deduplication-Run abgeschlossen!")
+            print(f"\n✅ Phase 1c abgeschlossen: {stats['chunks']:,} Chunks erstellt")
+            
+            print(f"\n✅ Deduplication + Chunking abgeschlossen!")
             print(f"   📊 Exact-Dedup: {dedup_stats['total']} → {dedup_stats['unique']} Dokumente")
             print(f"   📊 Near-Dedup (MinHash+LSH): {near_dedup_stats['total']} → {near_dedup_stats['unique']} Dokumente")
             print(f"   📊 Gesamt-Reduktion: {dedup_stats['total']} → {near_dedup_stats['unique']} ({(1 - near_dedup_stats['unique']/dedup_stats['total'])*100:.1f}%)")
@@ -1035,6 +1042,43 @@ def run_production_scraper():
         print(f"   ✅ {len(all_chunks):,} Chunks gespeichert")
         print(f"   🎉 Collection '{collection_name}' abgeschlossen! (Total: {actual_count:,} Chunks)")
     
+    # =========================================================================
+    # BM25 Sparse Index erstellen (separat von Dense-Embeddings)
+    # =========================================================================
+    if USE_HYBRID_RETRIEVAL:
+        print("\n" + "=" * 80)
+        print("SCHRITT 6: BM25 Sparse Index erstellen")
+        print("=" * 80)
+        
+        for collection_name, collection in collections_dict.items():
+            # Prüfe ob Sparse Index bereits existiert
+            if BM25SparseIndex.exists(SPARSE_INDEX_DIR, collection_name):
+                print(f"\n⏭️  Collection '{collection_name}': Sparse Index existiert bereits")
+                continue
+            
+            # Prüfe ob Collection Chunks enthält
+            chunk_count = collection.count()
+            if chunk_count == 0:
+                print(f"\n⏭️  Collection '{collection_name}': Keine Chunks vorhanden")
+                continue
+            
+            print(f"\n🔤 Erstelle BM25 Sparse Index für '{collection_name}' ({chunk_count:,} Chunks)...")
+            
+            # Hole alle Chunks aus ChromaDB
+            chroma_results = collection.get(include=['documents'])
+            chroma_chunk_ids = chroma_results['ids']
+            chroma_texts = chroma_results['documents']
+            
+            sparse_index = build_sparse_index_from_chunks(
+                chunk_ids=chroma_chunk_ids,
+                texts=chroma_texts,
+                collection_name=collection_name,
+                index_dir=SPARSE_INDEX_DIR,
+                show_progress=True
+            )
+            sparse_stats = sparse_index.get_statistics()
+            print(f"   ✅ BM25-Index: {sparse_stats['total_documents']:,} Dokumente, {sparse_stats['unique_terms']:,} Terms")
+    
     # Lösche Phase 1 Checkpoint (alle Collections erfolgreich)
     checkpoint_mgr.delete_phase1_checkpoint()
     
@@ -1080,6 +1124,14 @@ def run_production_scraper():
     print(f"   • Pfad: {VECTOR_DB}")
     print(f"   • Collections: {len([c for c, count in stats['collections'].items() if count > 0])}")
     print(f"   • Embedding-Modell: {SENTENCE_TRANSFORMER_MODEL}")
+    
+    # Hybrid Retrieval Info
+    if USE_HYBRID_RETRIEVAL:
+        print(f"\n🔤 Hybrid Retrieval (BM25):")
+        print(f"   • Sparse Index: {SPARSE_INDEX_DIR}")
+        print(f"   • Status: Aktiviert")
+    else:
+        print(f"\n🔤 Hybrid Retrieval: Deaktiviert")
     
     # Verifikation: Zeige Beispiele aus beiden Content-Types
     print("\n" + "=" * 80)
