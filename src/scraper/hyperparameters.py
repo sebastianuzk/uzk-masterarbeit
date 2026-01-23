@@ -53,12 +53,6 @@ VECTOR_SIMILARITY_THRESHOLD = 0.1     # Genutzt in: vector_store.py
 VECTOR_MAX_RESULTS = 10               # Genutzt in: vector_store.py
 
 # ==============================================================================
-# RAG TOOL PARAMETER
-# ==============================================================================
-
-RAG_SEARCH_RESULTS = 5               # Genutzt in: rag_tool.py
-
-# ==============================================================================
 # PARAMETER ERLÄUTERUNGEN & OPTIMIERUNGSTIPPS
 # ==============================================================================
 
@@ -191,7 +185,7 @@ VECTOR_EMBEDDING_MODEL Optionen:
 ❌ Zu wenige Suchergebnisse:
    → SIMILARITY_THRESHOLD senken (0.05-0.1)
    → CHUNK_SIZE verkleinern (800-1200)
-   → RAG_SEARCH_RESULTS erhöhen (8-15)
+   → TOP_K in config/settings.py erhöhen (8-15)
    
 ❌ Irrelevante Suchergebnisse:
    → SIMILARITY_THRESHOLD erhöhen (0.3-0.5)

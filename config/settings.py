@@ -44,6 +44,10 @@ class Settings:
     MAX_ITERATIONS = 10
     MEMORY_SIZE = 100
     
+    # RAG Konfiguration
+    # Anzahl der finalen Dokumente, die an den Agent übergeben werden (gilt für alle Retrieval-Ansätze)
+    TOP_K = int(os.getenv("TOP_K", "5"))
+    
     # Tool Konfiguration
     ENABLE_WEB_SCRAPER = True
     ENABLE_DUCKDUCKGO = True

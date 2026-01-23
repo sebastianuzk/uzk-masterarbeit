@@ -4,7 +4,8 @@ Hybrid Retrieval mit BM25 Sparse Index und RRF Fusion
 
 Dieses Modul implementiert:
 1. BM25SparseIndex: Sparse Index für lexikalische Suche (Pre-Retrieval)
-2. RRF Fusion: Reciprocal Rank Fusion für Hybrid Retrieval (später)
+2. RRF Fusion: Reciprocal Rank Fusion für Hybrid Retrieval
+3. HybridRetriever: Kombiniert Dense (ChromaDB) + Sparse (BM25) Retrieval
 
 Verwendet einfache wortbasierte Tokenisierung (keine Subwords) für BM25,
 da BM25 auf exakten Wortübereinstimmungen basiert.
@@ -19,6 +20,16 @@ Verwendung im Scraper:
     
     # Index laden
     sparse_index = BM25SparseIndex.load(checkpoint_dir, collection_name="wiso_documents")
+
+Verwendung im RAG-Tool:
+    from src.advanced_rag.retrieval.hybrid_retrieval_rrf import HybridRetriever
+    
+    retriever = HybridRetriever(
+        collection_name="wiso_documents",
+        sparse_index_dir="data/sparse_index",
+        vector_db_path="data/vector_db"
+    )
+    results = retriever.retrieve(query, k_retrieve=80, k_final=10)
 """
 
 import os
@@ -28,6 +39,8 @@ import re
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Any
 from dataclasses import dataclass, field
+
+import numpy as np
 
 # BM25 Implementierung
 from rank_bm25 import BM25Okapi
@@ -598,3 +611,337 @@ def build_sparse_index_from_chunks(
     sparse_index.save()
     
     return sparse_index
+
+
+# ============================================================================
+# RRF Fusion (Reciprocal Rank Fusion)
+# ============================================================================
+def reciprocal_rank_fusion(
+    ranked_lists: List[List[Tuple[str, float]]],
+    k: int = 60
+) -> List[Tuple[str, float]]:
+    """
+    Reciprocal Rank Fusion (RRF) für mehrere Ranking-Listen.
+    
+    Kombiniert mehrere Rankings zu einem fusionierten Ranking.
+    Formel: RRF_score(d) = Σ 1 / (k + rank(d))
+    
+    Args:
+        ranked_lists: Liste von Rankings, jedes Ranking ist eine Liste von
+                     (doc_id, score) Tupeln, sortiert nach Score (absteigend)
+        k: RRF-K Parameter (default: 60)
+           - Höhere Werte geben mehr Gewicht auf niedrigere Ränge
+           - Standard-Wert 60 nach dem Original-Paper
+    
+    Returns:
+        Fusioniertes Ranking als Liste von (doc_id, rrf_score) Tupeln,
+        sortiert nach RRF-Score (absteigend)
+    
+    Reference:
+        Cormack, G. V., Clarke, C. L., & Buettcher, S. (2009).
+        Reciprocal rank fusion outperforms condorcet and individual rank learning methods.
+    """
+    # Sammle RRF-Scores für alle Dokumente
+    rrf_scores: Dict[str, float] = {}
+    
+    for ranked_list in ranked_lists:
+        for rank, (doc_id, _) in enumerate(ranked_list, start=1):
+            # RRF-Formel: 1 / (k + rank)
+            rrf_score = 1.0 / (k + rank)
+            
+            if doc_id in rrf_scores:
+                rrf_scores[doc_id] += rrf_score
+            else:
+                rrf_scores[doc_id] = rrf_score
+    
+    # Sortiere nach RRF-Score (absteigend)
+    fused_ranking = sorted(
+        rrf_scores.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+    
+    return fused_ranking
+
+
+# ============================================================================
+# Hybrid Retriever Klasse
+# ============================================================================
+@dataclass
+class HybridRetriever:
+    """
+    Hybrid Retriever kombiniert Dense (ChromaDB) und Sparse (BM25) Retrieval.
+    
+    Workflow:
+    1. Parallel Retrieval: Dense + BM25 holen jeweils k_retrieve Kandidaten
+    2. RRF Fusion: Kombiniere beide Rankings mit Reciprocal Rank Fusion
+    3. Top-K Selection: Behalte k_final Dokumente aus fusioniertem Ranking
+    4. Metadata Enrichment: Hole vollständige Metadaten aus ChromaDB
+    
+    Attributes:
+        collection_name: Name der ChromaDB-Collection
+        sparse_index_dir: Verzeichnis mit BM25-Index
+        vector_db_path: Pfad zur ChromaDB
+        rrf_k: RRF-K Parameter (default: 60)
+    """
+    collection_name: str = "wiso_documents"
+    sparse_index_dir: str = "data/sparse_index"
+    vector_db_path: str = "data/vector_db"
+    rrf_k: int = 60
+    
+    # Lazy-loaded components
+    _sparse_index: Optional[BM25SparseIndex] = field(default=None, repr=False)
+    _chroma_collection: Optional[Any] = field(default=None, repr=False)
+    _embedding_model: Optional[Any] = field(default=None, repr=False)
+    
+    def __post_init__(self):
+        """Initialisierung - Komponenten werden lazy geladen."""
+        pass
+    
+    def _get_sparse_index(self) -> BM25SparseIndex:
+        """Lazy-load des BM25 Sparse Index."""
+        if self._sparse_index is None:
+            if not BM25SparseIndex.exists(self.sparse_index_dir, self.collection_name):
+                raise FileNotFoundError(
+                    f"BM25 Sparse Index nicht gefunden: "
+                    f"{self.sparse_index_dir}/{self.collection_name}/bm25_index.pkl"
+                )
+            self._sparse_index = BM25SparseIndex.load(
+                self.sparse_index_dir, 
+                self.collection_name
+            )
+            logger.info(f"BM25 Sparse Index geladen: {self._sparse_index.get_index_size()} Dokumente")
+        return self._sparse_index
+    
+    def _get_chroma_collection(self):
+        """Lazy-load der ChromaDB Collection."""
+        if self._chroma_collection is None:
+            import chromadb
+            client = chromadb.PersistentClient(path=self.vector_db_path)
+            self._chroma_collection = client.get_collection(self.collection_name)
+            logger.info(f"ChromaDB Collection geladen: {self._chroma_collection.count()} Dokumente")
+        return self._chroma_collection
+    
+    def _get_embedding_model(self):
+        """Lazy-load des Embedding-Modells."""
+        if self._embedding_model is None:
+            from sentence_transformers import SentenceTransformer
+            from config.settings import SENTENCE_TRANSFORMER_MODEL, EMBEDDING_MAX_SEQ_LENGTH
+            self._embedding_model = SentenceTransformer(
+                SENTENCE_TRANSFORMER_MODEL, 
+                trust_remote_code=True
+            )
+            self._embedding_model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
+            logger.info(f"Embedding-Modell geladen: {SENTENCE_TRANSFORMER_MODEL}")
+        return self._embedding_model
+    
+    def _dense_retrieve(self, query: str, k: int) -> List[Tuple[str, float]]:
+        """
+        Dense Retrieval via ChromaDB.
+        
+        Args:
+            query: Suchanfrage
+            k: Anzahl der Ergebnisse
+            
+        Returns:
+            Liste von (chunk_id, distance) Tupeln, sortiert nach Distance (aufsteigend)
+        """
+        collection = self._get_chroma_collection()
+        embedding_model = self._get_embedding_model()
+        
+        # Query-Embedding erstellen und normalisieren
+        raw_embedding = embedding_model.encode([query])
+        normalized_embedding = raw_embedding / np.linalg.norm(raw_embedding, axis=1, keepdims=True)
+        query_embedding = normalized_embedding.tolist()
+        
+        # ChromaDB Query
+        results = collection.query(
+            query_embeddings=query_embedding,
+            n_results=k,
+            include=['distances']
+        )
+        
+        # Konvertiere zu (chunk_id, score) Format
+        # WICHTIG: ChromaDB gibt Distances zurück (niedriger = besser)
+        # Für RRF brauchen wir aber ein Ranking nach Score (höher = besser)
+        # Wir konvertieren Distance zu Similarity: similarity = 1 - distance (für cosine)
+        dense_results = []
+        if results and results['ids'] and results['ids'][0]:
+            for i, chunk_id in enumerate(results['ids'][0]):
+                distance = results['distances'][0][i] if results.get('distances') else 0
+                # Cosine Distance → Similarity (1 - distance für normalisierte Vektoren)
+                similarity = 1.0 - distance
+                dense_results.append((chunk_id, similarity))
+        
+        # Sortiere nach Similarity (absteigend) - sollte bereits sortiert sein
+        dense_results.sort(key=lambda x: x[1], reverse=True)
+        
+        return dense_results
+    
+    def _sparse_retrieve(self, query: str, k: int) -> List[Tuple[str, float]]:
+        """
+        Sparse Retrieval via BM25.
+        
+        Args:
+            query: Suchanfrage
+            k: Anzahl der Ergebnisse
+            
+        Returns:
+            Liste von (chunk_id, bm25_score) Tupeln, sortiert nach Score (absteigend)
+        """
+        sparse_index = self._get_sparse_index()
+        return sparse_index.search(query, top_k=k)
+    
+    def retrieve(
+        self, 
+        query: str, 
+        k_retrieve: int = 80, 
+        k_final: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Hybrid Retrieval mit RRF Fusion.
+        
+        Workflow:
+        1. Dense Retrieval: k_retrieve Kandidaten aus ChromaDB
+        2. Sparse Retrieval: k_retrieve Kandidaten aus BM25
+        3. RRF Fusion: Kombiniere beide Rankings
+        4. Top-K Selection: Behalte k_final Dokumente
+        5. Metadata Enrichment: Hole vollständige Daten aus ChromaDB
+        
+        Args:
+            query: Suchanfrage
+            k_retrieve: Anzahl Kandidaten pro Retrieval-Methode (default: 80)
+            k_final: Anzahl finaler Ergebnisse nach Fusion (default: 10)
+            
+        Returns:
+            Liste von Dokumenten mit Metadaten im Format:
+            {
+                'chunk_id': str,
+                'page_content': str,
+                'metadata': dict,
+                'rrf_score': float,
+                'dense_rank': int | None,
+                'sparse_rank': int | None
+            }
+        """
+        logger.info(f"Hybrid Retrieval: query='{query[:50]}...', k_retrieve={k_retrieve}, k_final={k_final}")
+        
+        # 1. Parallel Retrieval (Dense + Sparse)
+        dense_results = self._dense_retrieve(query, k_retrieve)
+        sparse_results = self._sparse_retrieve(query, k_retrieve)
+        
+        logger.debug(f"Dense: {len(dense_results)} Ergebnisse, Sparse: {len(sparse_results)} Ergebnisse")
+        
+        # 2. RRF Fusion
+        fused_ranking = reciprocal_rank_fusion(
+            [dense_results, sparse_results],
+            k=self.rrf_k
+        )
+        
+        # 3. Top-K Selection
+        top_k_ids = [doc_id for doc_id, _ in fused_ranking[:k_final]]
+        top_k_scores = {doc_id: score for doc_id, score in fused_ranking[:k_final]}
+        
+        # Erstelle Rank-Mappings für Debug-Info
+        dense_ranks = {doc_id: rank for rank, (doc_id, _) in enumerate(dense_results, 1)}
+        sparse_ranks = {doc_id: rank for rank, (doc_id, _) in enumerate(sparse_results, 1)}
+        
+        # 4. Metadata Enrichment: Hole vollständige Daten aus ChromaDB
+        collection = self._get_chroma_collection()
+        chroma_data = collection.get(
+            ids=top_k_ids,
+            include=['documents', 'metadatas']
+        )
+        
+        # Baue Lookup-Dict für ChromaDB-Daten
+        chroma_lookup = {}
+        for i, chunk_id in enumerate(chroma_data['ids']):
+            chroma_lookup[chunk_id] = {
+                'document': chroma_data['documents'][i] if chroma_data.get('documents') else '',
+                'metadata': chroma_data['metadatas'][i] if chroma_data.get('metadatas') else {}
+            }
+        
+        # 5. Formatiere Ergebnisse
+        results = []
+        for chunk_id in top_k_ids:
+            chunk_data = chroma_lookup.get(chunk_id, {})
+            
+            result = {
+                'chunk_id': chunk_id,
+                'page_content': chunk_data.get('document', ''),
+                'metadata': chunk_data.get('metadata', {}),
+                'rrf_score': top_k_scores.get(chunk_id, 0.0),
+                'dense_rank': dense_ranks.get(chunk_id),
+                'sparse_rank': sparse_ranks.get(chunk_id)
+            }
+            results.append(result)
+        
+        logger.info(f"Hybrid Retrieval abgeschlossen: {len(results)} Ergebnisse")
+        return results
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Statistiken über die Retrieval-Komponenten."""
+        stats = {
+            'collection_name': self.collection_name,
+            'rrf_k': self.rrf_k,
+        }
+        
+        # Sparse Index Stats
+        try:
+            sparse_index = self._get_sparse_index()
+            stats['sparse_index'] = sparse_index.get_statistics()
+        except FileNotFoundError:
+            stats['sparse_index'] = {'error': 'Index nicht gefunden'}
+        
+        # Dense Index Stats
+        try:
+            collection = self._get_chroma_collection()
+            stats['dense_index'] = {
+                'total_documents': collection.count()
+            }
+        except Exception as e:
+            stats['dense_index'] = {'error': str(e)}
+        
+        return stats
+
+
+# ============================================================================
+# Convenience-Funktion für RAG-Tool
+# ============================================================================
+def hybrid_retrieve(
+    query: str,
+    k_retrieve: int = 80,
+    k_final: int = 10,
+    collection_name: str = "wiso_documents",
+    sparse_index_dir: str = "data/sparse_index",
+    vector_db_path: str = "data/vector_db",
+    rrf_k: int = 60
+) -> List[Dict[str, Any]]:
+    """
+    Convenience-Funktion für Hybrid Retrieval.
+    
+    Verwendung im RAG-Tool:
+        from src.advanced_rag.retrieval.hybrid_retrieval_rrf import hybrid_retrieve
+        
+        results = hybrid_retrieve(query, k_retrieve=80, k_final=10)
+    
+    Args:
+        query: Suchanfrage
+        k_retrieve: Kandidaten pro Methode (default: 80)
+        k_final: Finale Ergebnisse nach RRF (default: 10)
+        collection_name: ChromaDB Collection Name
+        sparse_index_dir: Verzeichnis mit BM25-Index
+        vector_db_path: Pfad zur ChromaDB
+        rrf_k: RRF-K Parameter
+        
+    Returns:
+        Liste von Dokumenten mit Metadaten
+    """
+    retriever = HybridRetriever(
+        collection_name=collection_name,
+        sparse_index_dir=sparse_index_dir,
+        vector_db_path=vector_db_path,
+        rrf_k=rrf_k
+    )
+    
+    return retriever.retrieve(query, k_retrieve=k_retrieve, k_final=k_final)

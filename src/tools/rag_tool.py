@@ -6,6 +6,11 @@ Greift auf die vom Web-Scraper erstellte ChromaDB-Vectordatenbank zu.
 
 Modular erweiterbar mit Advanced RAG Techniken aus src.advanced_rag.
 Die Techniken werden optional geladen, basierend auf RAGConfig.
+
+Unterstützt:
+- Naive RAG: Single Collection Dense Retrieval
+- Advanced RAG: Multi-Collection Search mit Reranking
+- Hybrid RAG: Dense + BM25 Sparse mit RRF Fusion
 """
 
 import logging
@@ -29,9 +34,10 @@ except ImportError:
 
 # Import hyperparameters
 try:
-    from src.scraper.hyperparameters import RAG_SEARCH_RESULTS
+    from config.settings import Settings
+    TOP_K = Settings.TOP_K
 except ImportError:
-    RAG_SEARCH_RESULTS = 5  # fallback
+    TOP_K = 5  # fallback
 
 
 class UniversityRAGTool(BaseTool):
@@ -57,6 +63,8 @@ class UniversityRAGTool(BaseTool):
     
     # Advanced technique flags
     _use_advanced: bool = False
+    _use_hybrid: bool = False
+    _use_sparse: bool = False
     _advanced_available: bool = False
     
     # Embedding model (lazy loaded)
@@ -69,17 +77,22 @@ class UniversityRAGTool(BaseTool):
         # Wenn config übergeben wurde, nutze es
         if self.config is not None:
             self._use_advanced = self._should_use_advanced()
-            logger.info(f"RAG-Tool initialisiert mit übergebener Config (Advanced: {self._use_advanced})")
+            self._use_hybrid = self._should_use_hybrid()
+            self._use_sparse = self._should_use_sparse()
+            logger.info(f"RAG-Tool initialisiert mit übergebener Config (Advanced: {self._use_advanced}, Hybrid: {self._use_hybrid}, Sparse: {self._use_sparse})")
         # Sonst: Load configuration from env
         elif CONFIG_AVAILABLE and RAGConfig is not None:
             try:
                 self.config = RAGConfig.load_from_env()
                 self._use_advanced = self._should_use_advanced()
-                logger.info(f"RAG-Tool initialisiert (Advanced: {self._use_advanced})")
+                self._use_hybrid = self._should_use_hybrid()
+                self._use_sparse = self._should_use_sparse()
+                logger.info(f"RAG-Tool initialisiert (Advanced: {self._use_advanced}, Hybrid: {self._use_hybrid}, Sparse: {self._use_sparse})")
             except Exception as e:
                 logger.warning(f"Fehler beim Laden der RAG-Config: {e}")
                 self.config = None
                 self._use_advanced = False
+                self._use_hybrid = False
         else:
             logger.info("RAG-Tool initialisiert (Naive RAG)")
     
@@ -121,6 +134,26 @@ class UniversityRAGTool(BaseTool):
         ]
         
         return any(retrieval_features) or any(post_retrieval_features)
+    
+    def _should_use_hybrid(self) -> bool:
+        """
+        Prüfe ob Hybrid Retrieval (Dense + BM25 mit RRF) aktiviert ist.
+        """
+        if not self.config:
+            return False
+        
+        # Hybrid Retrieval ist explizit aktiviert
+        return self.config.enable_hybrid_retrieval
+    
+    def _should_use_sparse(self) -> bool:
+        """
+        Prüfe ob Sparse Retrieval (nur BM25 ohne Dense) aktiviert ist.
+        """
+        if not self.config:
+            return False
+        
+        # Sparse Retrieval ist explizit aktiviert
+        return self.config.enable_sparse_retrieval
     
     def _get_chromadb_client(self):
         """Hole ChromaDB Client (Shared Helper)."""
@@ -199,9 +232,9 @@ class UniversityRAGTool(BaseTool):
         return documents
     
     @traceable(run_type="retriever")
-    def _advanced_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+    def _multi_collection_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """
-        Advanced RAG: Importiert komplette Logik aus multi_collection_search.
+        Multi-Collection RAG: Importiert komplette Logik aus multi_collection_search.
         
         Args:
             query: Die Suchanfrage
@@ -217,7 +250,183 @@ class UniversityRAGTool(BaseTool):
         
         # Alle Advanced-Logik ist in multi_collection_search.py
         return advanced_retrieve(query, k_per_collection=k_per_collection)
+    
+    def _get_collection_names(self) -> List[str]:
+        """
+        Hole alle Collection-Namen aus der Vektordatenbank.
+        
+        Returns:
+            Liste der Collection-Namen
+        """
+        try:
+            client = self._get_chromadb_client()
+            collections = client.list_collections()
+            return [col.name for col in collections]
+        except Exception as e:
+            logger.warning(f"Fehler beim Laden der Collections: {e}")
+            return ["wiso_documents"]  # Fallback
+    
+    @traceable(run_type="retriever")
+    def _advanced_retrieve(self, query: str, k: int = None) -> List[Dict[str, Any]]:
+        """
+        Advanced RAG: Dense + BM25 Sparse mit RRF Fusion.
+        
+        Kombiniert Hybrid Retrieval über alle verfügbaren Collections.
+        Später erweiterbar mit weiteren Advanced-Techniken.
+        
+        Args:
+            query: Die Suchanfrage
+            k: Anzahl der finalen Ergebnisse nach RRF Fusion (optional, nutzt Config)
+            
+        Returns:
+            Liste von Dokumenten mit Metadaten (gleiches Format wie _naive_retrieve)
+        """
+        from src.advanced_rag.retrieval.hybrid_retrieval_rrf import hybrid_retrieve
+        
+        # Hole Konfiguration aus rag.env und settings.py
+        k_retrieve = self.config.hybrid_retrieval_k_retrieve if self.config else 80
+        k_final = k if k is not None else TOP_K
+        rrf_k = self.config.hybrid_retrieval_rrf_k if self.config else 60
+        sparse_index_dir = "data/sparse_index"  # Fester Pfad
+        vector_db_path = self.config.vector_db_path if self.config else "data/vector_db"
+        
+        # Hole alle Collections aus der Vektordatenbank
+        collection_names = self._get_collection_names()
+        
+        all_results = []
+        for collection_name in collection_names:
+            try:
+                # Hybrid Retrieval pro Collection
+                results = hybrid_retrieve(
+                    query=query,
+                    k_retrieve=k_retrieve,
+                    k_final=k_final,
+                    collection_name=collection_name,
+                    sparse_index_dir=sparse_index_dir,
+                    vector_db_path=vector_db_path,
+                    rrf_k=rrf_k
+                )
+                all_results.extend(results)
+            except FileNotFoundError as e:
+                logger.warning(f"Sparse Index für '{collection_name}' nicht gefunden: {e}")
+                continue
+            except Exception as e:
+                logger.warning(f"Fehler bei Hybrid Retrieval für '{collection_name}': {e}")
+                continue
+        
+        # Sortiere nach RRF-Score und limitiere auf k_final
+        all_results.sort(key=lambda x: x.get('rrf_score', 0), reverse=True)
+        final_results = all_results[:k_final]
+        
+        # Konvertiere zu gleichem Format wie _naive_retrieve für LangSmith-Tracing
+        documents = []
+        for result in final_results:
+            doc_dict = {
+                'page_content': result.get('page_content', ''),
+                'type': 'Document',
+                'metadata': result.get('metadata', {})
+            }
+            # Füge RRF-spezifische Metadaten hinzu
+            doc_dict['metadata']['rrf_score'] = result.get('rrf_score', 0.0)
+            doc_dict['metadata']['dense_rank'] = result.get('dense_rank')
+            doc_dict['metadata']['sparse_rank'] = result.get('sparse_rank')
+            doc_dict['metadata']['chunk_id'] = result.get('chunk_id', '')
+            
+            documents.append(doc_dict)
+        
+        logger.info(f"Advanced Retrieval: {len(documents)} Ergebnisse aus {len(collection_names)} Collections")
+        
+        return documents
 
+    @traceable(run_type="retriever")
+    def _sparse_retrieve(self, query: str, k: int = None) -> List[Dict[str, Any]]:
+        """
+        Sparse RAG: Nur BM25 Sparse Index ohne Dense Retrieval.
+        
+        Nutzt den vorhandenen Sparse Index für rein lexikalische Suche.
+        Holt den Content aus ChromaDB basierend auf chunk_ids.
+        
+        Args:
+            query: Die Suchanfrage
+            k: Anzahl der finalen Ergebnisse (optional, nutzt Config TOP_K)
+            
+        Returns:
+            Liste von Dokumenten mit Metadaten (gleiches Format wie _naive_retrieve)
+        """
+        from src.advanced_rag.retrieval.hybrid_retrieval_rrf import BM25SparseIndex
+        
+        # Hole Konfiguration
+        k_final = k if k is not None else TOP_K
+        sparse_index_dir = "data/sparse_index"  # Fester Pfad
+        
+        # Hole alle Collections aus der Vektordatenbank
+        collection_names = self._get_collection_names()
+        
+        all_results = []
+        for collection_name in collection_names:
+            try:
+                # Lade Sparse Index für Collection
+                sparse_index = BM25SparseIndex.load(sparse_index_dir, collection_name)
+                
+                # BM25 Suche - gibt (chunk_id, score) zurück
+                sparse_results = sparse_index.search(query, top_k=k_final)
+                
+                if not sparse_results:
+                    continue
+                
+                # Hole Content aus ChromaDB basierend auf chunk_ids
+                client = self._get_chromadb_client()
+                collection = client.get_collection(collection_name)
+                
+                # Extrahiere chunk_ids für Batch-Abfrage
+                chunk_ids = [chunk_id for chunk_id, _ in sparse_results]
+                
+                # Hole Dokumente aus ChromaDB
+                chroma_results = collection.get(
+                    ids=chunk_ids,
+                    include=['documents', 'metadatas']
+                )
+                
+                # Erstelle Mapping: chunk_id -> (document, metadata)
+                id_to_doc = {}
+                if chroma_results and chroma_results['ids']:
+                    for i, cid in enumerate(chroma_results['ids']):
+                        doc = chroma_results['documents'][i] if chroma_results['documents'] else ''
+                        meta = chroma_results['metadatas'][i] if chroma_results['metadatas'] else {}
+                        id_to_doc[cid] = (doc, meta)
+                
+                # Konvertiere zu Document-Format mit BM25-Ranking
+                for rank, (chunk_id, score) in enumerate(sparse_results, 1):
+                    doc_content, doc_metadata = id_to_doc.get(chunk_id, ('', {}))
+                    
+                    doc_dict = {
+                        'page_content': doc_content,
+                        'type': 'Document',
+                        'metadata': {
+                            **doc_metadata,
+                            'chunk_id': chunk_id,
+                            'bm25_score': score,
+                            'sparse_rank': rank,
+                            'collection': collection_name,
+                            'retrieval_type': 'sparse'
+                        }
+                    }
+                    all_results.append(doc_dict)
+                    
+            except FileNotFoundError as e:
+                logger.warning(f"Sparse Index für '{collection_name}' nicht gefunden: {e}")
+                continue
+            except Exception as e:
+                logger.warning(f"Fehler bei Sparse Retrieval für '{collection_name}': {e}")
+                continue
+        
+        # Sortiere nach BM25-Score und limitiere auf k_final
+        all_results.sort(key=lambda x: x.get('metadata', {}).get('bm25_score', 0), reverse=True)
+        final_results = all_results[:k_final]
+        
+        logger.info(f"Sparse Retrieval: {len(final_results)} Ergebnisse aus {len(collection_names)} Collections")
+        
+        return final_results
     
     def _run(self, query: str) -> str:
         """
@@ -230,13 +439,30 @@ class UniversityRAGTool(BaseTool):
             Relevante Informationen aus der Wissensdatenbank
         """
         try:
-            # Bestimme k basierend auf Config oder Default
-            k = self.config.top_k if self.config else RAG_SEARCH_RESULTS
+            # Bestimme k basierend auf globaler Settings
+            k = TOP_K
             
             # Retrieval basierend auf Modus
-            if self._use_advanced and self.config:
-                # Advanced: Multi-Collection Search
-                documents = self._advanced_retrieve(query, k=k)
+            if self._use_hybrid and self.config:
+                # Advanced: Hybrid Retrieval (Dense + BM25 mit RRF Fusion)
+                # k wird aus Config geladen (hybrid_retrieval_k_final)
+                documents = self._advanced_retrieve(query)
+                # Hybrid verwendet eigene Formatierung (naive Format)
+                return self._format_naive_results(documents)
+            elif self._use_sparse and self.config:
+                # Sparse: Nur BM25 ohne Dense Retrieval
+                documents = self._sparse_retrieve(query)
+                # Sparse verwendet eigene Formatierung (naive Format)
+                return self._format_naive_results(documents)
+            elif self._use_advanced and self.config:
+                # Multi-Collection Search (Legacy) mit Post-Processing
+                documents = self._multi_collection_retrieve(query, k=k)
+                if not documents:
+                    return (
+                        "ℹ️ Keine relevanten Informationen in der Universitäts-Wissensdatenbank gefunden. "
+                        "Möglicherweise ist die Datenbank leer oder Ihre Anfrage konnte nicht zugeordnet werden."
+                    )
+                return self._advanced_process(query, documents)
             else:
                 # Naive: Single Collection Search
                 documents = self._naive_retrieve(query, k=k)
@@ -246,10 +472,6 @@ class UniversityRAGTool(BaseTool):
                     "ℹ️ Keine relevanten Informationen in der Universitäts-Wissensdatenbank gefunden. "
                     "Möglicherweise ist die Datenbank leer oder Ihre Anfrage konnte nicht zugeordnet werden."
                 )
-            
-            # Post-Retrieval Processing
-            if self._use_advanced and self.config:
-                return self._advanced_process(query, documents)
             
             # Naive Ausgabe: Einfache Formatierung
             return self._format_naive_results(documents)

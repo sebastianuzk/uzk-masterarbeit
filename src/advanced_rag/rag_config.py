@@ -40,6 +40,8 @@ class RAGConfig:
     enable_content_cleaning: bool = False
     enable_deduplication: bool = False  # Aktiviert Exact + Near Deduplication
     enable_multi_collection: bool = False
+    enable_hybrid_retrieval: bool = False  # BM25 Sparse Index + RRF Fusion
+    enable_sparse_retrieval: bool = False  # Nur BM25 Sparse Index (ohne Dense)
     enable_result_aggregation: bool = False
     enable_distance_conversion: bool = False
     enable_global_reranking: bool = False
@@ -54,15 +56,15 @@ class RAGConfig:
     # Single Source of Truth: src/advanced_rag/rag.env
     # ============================================================================
     # Semantic Chunking (Defaults aus rag.env)
-    semantic_chunking_max_size: int = 1750
+    semantic_chunking_max_size: int = 1500
     semantic_chunking_min_size: int = 400
     semantic_chunking_overlap: int = 300
     semantic_chunking_similarity_threshold: float = 0.4  # Schwellwert für Themenwechsel (static_threshold)
-    semantic_chunking_use_percentile: bool = False  # Wenn True: Percentile-Methode statt static_threshold
-    semantic_chunking_percentile: int = 20  # X-tes Perzentil für Breakpoints (nur wenn use_percentile=True)
+    semantic_chunking_use_percentile: bool = True  # Wenn True: Percentile-Methode statt static_threshold
+    semantic_chunking_percentile: int = 10  # X-tes Perzentil für Breakpoints (nur wenn use_percentile=True)
     
     # Naive Chunking (fallback wenn Semantic Chunking deaktiviert)
-    naive_chunking_max_size: int = 1750
+    naive_chunking_max_size: int = 1500
     naive_chunking_overlap: int = 300
     
     # Content Cleaning
@@ -78,6 +80,7 @@ class RAGConfig:
     near_deduplication_shingle_k: int = 5
     near_deduplication_similarity_threshold: float = 0.90
     near_deduplication_min_words: int = 120
+    near_deduplication_num_perm: int = 128
     
     # ============================================================================
     # RETRIEVAL HYPERPARAMETER
@@ -85,8 +88,9 @@ class RAGConfig:
     # Multi-Collection Search
     multi_collection_k_per_collection: int = 3
     
-    # Result Aggregation
-    result_aggregation_top_k: int = 5
+    # Hybrid Retrieval (BM25 + Dense)
+    hybrid_retrieval_rrf_k: int = 60  # RRF-K Parameter (höher = mehr Gewicht auf niedrigere Ränge)
+    hybrid_retrieval_k_retrieve: int = 80  # Kandidaten pro Retrieval-Type (Dense + Sparse)
     
     # Distance Conversion
     distance_conversion_min: float = 0.0
@@ -118,8 +122,8 @@ class RAGConfig:
     # ============================================================================
     # EMBEDDING & DATABASE
     # ============================================================================
-    embedding_model_name: str = "all-MiniLM-L6-v2"
-    embedding_model_dimension: int = 384
+    embedding_model_name: str = "BAAI/bge-m3"
+    embedding_model_dimension: int = 1024
     vector_db_path: str = "data/vector_db"
     vector_db_distance_metric: str = "cosine"
     
@@ -165,6 +169,16 @@ class RAGConfig:
     def use_multi_collection_search(self) -> bool:
         """Retrieval: Multi-Collection Search aktiv?"""
         return (not self.naive_setup) and self.enable_multi_collection
+    
+    @property
+    def use_hybrid_retrieval(self) -> bool:
+        """Retrieval: Hybrid Retrieval (BM25 + Dense + RRF) aktiv?"""
+        return (not self.naive_setup) and self.enable_hybrid_retrieval
+    
+    @property
+    def use_sparse_retrieval(self) -> bool:
+        """Retrieval: Nur Sparse Retrieval (BM25 ohne Dense) aktiv?"""
+        return (not self.naive_setup) and self.enable_sparse_retrieval
     
     @property
     def use_result_aggregation(self) -> bool:
@@ -215,10 +229,6 @@ class RAGConfig:
     def k_per_collection(self) -> int:
         return self.multi_collection_k_per_collection
     
-    @property
-    def top_k(self) -> int:
-        return self.result_aggregation_top_k
-    
     @classmethod
     def load_from_env(cls, env_file: Optional[str] = None) -> 'RAGConfig':
         """
@@ -264,6 +274,8 @@ class RAGConfig:
             enable_content_cleaning=_get_bool_env("ENABLE_CONTENT_CLEANING", False),
             enable_deduplication=_get_bool_env("ENABLE_DEDUPLICATION", False),  # Aktiviert Exact + Near
             enable_multi_collection=_get_bool_env("ENABLE_MULTI_COLLECTION", False),
+            enable_hybrid_retrieval=_get_bool_env("ENABLE_HYBRID_RETRIEVAL", False),
+            enable_sparse_retrieval=_get_bool_env("ENABLE_SPARSE_RETRIEVAL", False),
             enable_result_aggregation=_get_bool_env("ENABLE_RESULT_AGGREGATION", False),
             enable_distance_conversion=_get_bool_env("ENABLE_DISTANCE_CONVERSION", False),
             enable_global_reranking=_get_bool_env("ENABLE_GLOBAL_RERANKING", False),
@@ -296,10 +308,12 @@ class RAGConfig:
             near_deduplication_shingle_k=_get_int_env("NEAR_DEDUPLICATION_SHINGLE_K", 5),
             near_deduplication_similarity_threshold=_get_float_env("NEAR_DEDUPLICATION_SIMILARITY_THRESHOLD", 0.90),
             near_deduplication_min_words=_get_int_env("NEAR_DEDUPLICATION_MIN_WORDS", 120),
+            near_deduplication_num_perm=_get_int_env("NEAR_DEDUPLICATION_NUM_PERM", 128),
             
             # === RETRIEVAL HYPERPARAMETER ===
             multi_collection_k_per_collection=_get_int_env("MULTI_COLLECTION_K_PER_COLLECTION", 3),
-            result_aggregation_top_k=_get_int_env("RESULT_AGGREGATION_TOP_K", 5),
+            hybrid_retrieval_rrf_k=_get_int_env("RRF_K", 60),
+            hybrid_retrieval_k_retrieve=_get_int_env("HYBRID_RETRIEVAL_K_RETRIEVE", 80),
             distance_conversion_min=_get_float_env("DISTANCE_CONVERSION_MIN_DISTANCE", 0.0),
             distance_conversion_max=_get_float_env("DISTANCE_CONVERSION_MAX_DISTANCE", 2.0),
             global_reranking_max_per_source=_get_int_env("GLOBAL_RERANKING_MAX_PER_SOURCE", 2),
@@ -316,8 +330,8 @@ class RAGConfig:
             empty_result_suggest_alternatives=_get_bool_env("EMPTY_RESULT_SUGGEST_ALTERNATIVES", True),
             
             # === EMBEDDING & DATABASE ===
-            embedding_model_name=os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2"),
-            embedding_model_dimension=_get_int_env("EMBEDDING_MODEL_DIMENSION", 384),
+            embedding_model_name=os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3"),
+            embedding_model_dimension=_get_int_env("EMBEDDING_MODEL_DIMENSION", 1024),
             vector_db_path=os.getenv("VECTOR_DB_PATH", "data/vector_db"),
             vector_db_distance_metric=os.getenv("VECTOR_DB_DISTANCE_METRIC", "cosine"),
             
@@ -337,6 +351,8 @@ class RAGConfig:
             "deduplication": self.use_deduplication,
             # Retrieval
             "multi_collection_search": self.use_multi_collection_search,
+            "hybrid_retrieval": self.use_hybrid_retrieval,
+            "sparse_retrieval": self.use_sparse_retrieval,
             "result_aggregation": self.use_result_aggregation,
             "distance_conversion": self.use_distance_conversion,
             "global_reranking": self.use_global_reranking,
