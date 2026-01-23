@@ -63,7 +63,6 @@ class UniversityRAGTool(BaseTool):
     
     # Advanced technique flags
     _use_advanced: bool = False
-    _use_hybrid: bool = False
     _use_sparse: bool = False
     _advanced_available: bool = False
     
@@ -77,22 +76,19 @@ class UniversityRAGTool(BaseTool):
         # Wenn config übergeben wurde, nutze es
         if self.config is not None:
             self._use_advanced = self._should_use_advanced()
-            self._use_hybrid = self._should_use_hybrid()
             self._use_sparse = self._should_use_sparse()
-            logger.info(f"RAG-Tool initialisiert mit übergebener Config (Advanced: {self._use_advanced}, Hybrid: {self._use_hybrid}, Sparse: {self._use_sparse})")
+            logger.info(f"RAG-Tool initialisiert mit übergebener Config (Advanced: {self._use_advanced}, Sparse: {self._use_sparse})")
         # Sonst: Load configuration from env
         elif CONFIG_AVAILABLE and RAGConfig is not None:
             try:
                 self.config = RAGConfig.load_from_env()
                 self._use_advanced = self._should_use_advanced()
-                self._use_hybrid = self._should_use_hybrid()
                 self._use_sparse = self._should_use_sparse()
-                logger.info(f"RAG-Tool initialisiert (Advanced: {self._use_advanced}, Hybrid: {self._use_hybrid}, Sparse: {self._use_sparse})")
+                logger.info(f"RAG-Tool initialisiert (Advanced: {self._use_advanced}, Sparse: {self._use_sparse})")
             except Exception as e:
                 logger.warning(f"Fehler beim Laden der RAG-Config: {e}")
                 self.config = None
                 self._use_advanced = False
-                self._use_hybrid = False
         else:
             logger.info("RAG-Tool initialisiert (Naive RAG)")
     
@@ -109,41 +105,19 @@ class UniversityRAGTool(BaseTool):
     
     def _should_use_advanced(self) -> bool:
         """
-        Prüfe ob Advanced-RETRIEVAL-Techniken aktiviert sind.
+        Prüfe ob Advanced Retrieval (Hybrid und/oder ReRanking) aktiviert ist.
         
-        Nur Retrieval- und Post-Retrieval-Techniken zählen hier.
-        Pre-Retrieval-Techniken (Semantic Chunking) betreffen nur das Scraping,
-        nicht die Runtime-Suche.
+        Gibt True zurück wenn:
+        - Hybrid Retrieval (Dense + BM25 mit RRF) aktiviert ist, ODER
+        - ReRanking aktiviert ist (auch ohne Hybrid)
+        
+        In beiden Fällen wird _advanced_retrieve() verwendet.
         """
         if not self.config:
             return False
         
-        # Nur Advanced wenn Retrieval-Techniken aktiv sind
-        # (Multi-Collection, Reranking, Relevance-Filtering, etc.)
-        retrieval_features = [
-            self.config.enable_multi_collection,
-            self.config.enable_result_aggregation,
-            self.config.enable_global_reranking,
-        ]
-        
-        post_retrieval_features = [
-            self.config.enable_relevance_filtering,
-            self.config.enable_result_formatting,
-            self.config.enable_context_hints,
-            self.config.enable_empty_result_handling,
-        ]
-        
-        return any(retrieval_features) or any(post_retrieval_features)
-    
-    def _should_use_hybrid(self) -> bool:
-        """
-        Prüfe ob Hybrid Retrieval (Dense + BM25 mit RRF) aktiviert ist.
-        """
-        if not self.config:
-            return False
-        
-        # Hybrid Retrieval ist explizit aktiviert
-        return self.config.enable_hybrid_retrieval
+        # Advanced Retrieval wenn Hybrid ODER ReRanking aktiv
+        return self.config.enable_hybrid_retrieval or self.config.use_reranking
     
     def _should_use_sparse(self) -> bool:
         """
@@ -267,76 +241,107 @@ class UniversityRAGTool(BaseTool):
             return ["wiso_documents"]  # Fallback
     
     @traceable(run_type="retriever")
-    def _advanced_retrieve(self, query: str, k: int = None) -> List[Dict[str, Any]]:
+    def _advanced_retrieve(self, query: str) -> List[Dict[str, Any]]:
         """
-        Advanced RAG: Dense + BM25 Sparse mit RRF Fusion.
+        Advanced RAG: Unterstützt verschiedene Retrieval-Modi mit optionalem ReRanking.
         
-        Kombiniert Hybrid Retrieval über alle verfügbaren Collections.
-        Später erweiterbar mit weiteren Advanced-Techniken.
+        Modi:
+        1. Hybrid + ReRanking: Dense + BM25 + RRF Fusion + Voyage ReRanking
+        2. Hybrid ohne ReRanking: Dense + BM25 + RRF Fusion
+        3. Dense + ReRanking: Nur Dense Retrieval + Voyage ReRanking
         
         Args:
             query: Die Suchanfrage
-            k: Anzahl der finalen Ergebnisse nach RRF Fusion (optional, nutzt Config)
             
         Returns:
             Liste von Dokumenten mit Metadaten (gleiches Format wie _naive_retrieve)
         """
-        from src.advanced_rag.retrieval.hybrid_retrieval_rrf import hybrid_retrieve
+        k_final = TOP_K if TOP_K else 5
+        reranking_candidates = self.config.reranking_candidates if self.config else 40
         
-        # Hole Konfiguration aus rag.env und settings.py
-        k_retrieve = self.config.hybrid_retrieval_k_retrieve if self.config else 80
-        k_final = k if k is not None else TOP_K
-        rrf_k = self.config.hybrid_retrieval_rrf_k if self.config else 60
-        sparse_index_dir = "data/sparse_index"  # Fester Pfad
-        vector_db_path = self.config.vector_db_path if self.config else "data/vector_db"
-        
-        # Hole alle Collections aus der Vektordatenbank
-        collection_names = self._get_collection_names()
-        
-        all_results = []
-        for collection_name in collection_names:
-            try:
-                # Hybrid Retrieval pro Collection
-                results = hybrid_retrieve(
-                    query=query,
-                    k_retrieve=k_retrieve,
-                    k_final=k_final,
-                    collection_name=collection_name,
-                    sparse_index_dir=sparse_index_dir,
-                    vector_db_path=vector_db_path,
-                    rrf_k=rrf_k
-                )
-                all_results.extend(results)
-            except FileNotFoundError as e:
-                logger.warning(f"Sparse Index für '{collection_name}' nicht gefunden: {e}")
-                continue
-            except Exception as e:
-                logger.warning(f"Fehler bei Hybrid Retrieval für '{collection_name}': {e}")
-                continue
-        
-        # Sortiere nach RRF-Score und limitiere auf k_final
-        all_results.sort(key=lambda x: x.get('rrf_score', 0), reverse=True)
-        final_results = all_results[:k_final]
-        
-        # Konvertiere zu gleichem Format wie _naive_retrieve für LangSmith-Tracing
-        documents = []
-        for result in final_results:
-            doc_dict = {
-                'page_content': result.get('page_content', ''),
-                'type': 'Document',
-                'metadata': result.get('metadata', {})
-            }
-            # Füge RRF-spezifische Metadaten hinzu
-            doc_dict['metadata']['rrf_score'] = result.get('rrf_score', 0.0)
-            doc_dict['metadata']['dense_rank'] = result.get('dense_rank')
-            doc_dict['metadata']['sparse_rank'] = result.get('sparse_rank')
-            doc_dict['metadata']['chunk_id'] = result.get('chunk_id', '')
+        # Entscheide: Hybrid Retrieval oder nur Dense Retrieval?
+        if self.config and self.config.enable_hybrid_retrieval:
+            # === HYBRID RETRIEVAL (Dense + BM25 + RRF) ===
+            from src.advanced_rag.retrieval.hybrid_retrieval_rrf import hybrid_retrieve
             
-            documents.append(doc_dict)
+            k_retrieve = self.config.hybrid_retrieval_k_retrieve if self.config else 80
+            rrf_k = self.config.hybrid_retrieval_rrf_k if self.config else 60
+            sparse_index_dir = "data/sparse_index"
+            vector_db_path = self.config.vector_db_path if self.config else "data/vector_db"
+            
+            # Hole alle Collections aus der Vektordatenbank
+            collection_names = self._get_collection_names()
+            
+            all_results = []
+            for collection_name in collection_names:
+                try:
+                    # Hybrid Retrieval pro Collection - gibt ALLE fusionierten Dokumente zurück
+                    results = hybrid_retrieve(
+                        query=query,
+                        k_retrieve=k_retrieve,
+                        collection_name=collection_name,
+                        sparse_index_dir=sparse_index_dir,
+                        vector_db_path=vector_db_path,
+                        rrf_k=rrf_k
+                    )
+                    all_results.extend(results)
+                except FileNotFoundError as e:
+                    logger.warning(f"Sparse Index für '{collection_name}' nicht gefunden: {e}")
+                    continue
+                except Exception as e:
+                    logger.warning(f"Fehler bei Hybrid Retrieval für '{collection_name}': {e}")
+                    continue
+            
+            # Konvertiere zu Document-Format
+            documents = []
+            for result in all_results:
+                doc_dict = {
+                    'page_content': result.get('page_content', ''),
+                    'type': 'Document',
+                    'metadata': result.get('metadata', {})
+                }
+                # Füge RRF-spezifische Metadaten hinzu
+                doc_dict['metadata']['rrf_score'] = result.get('rrf_score', 0.0)
+                doc_dict['metadata']['dense_rank'] = result.get('dense_rank')
+                doc_dict['metadata']['sparse_rank'] = result.get('sparse_rank')
+                doc_dict['metadata']['chunk_id'] = result.get('chunk_id', '')
+                
+                documents.append(doc_dict)
+            
+            logger.info(f"Hybrid Retrieval: {len(documents)} Dokumente aus RRF Fusion")
         
-        logger.info(f"Advanced Retrieval: {len(documents)} Ergebnisse aus {len(collection_names)} Collections")
+        else:
+            # === DENSE-ONLY RETRIEVAL (für ReRanking ohne Hybrid) ===
+            # Hole reranking_candidates Dokumente für späteres ReRanking
+            documents = self._naive_retrieve(query, k=reranking_candidates)
+            
+            # Konvertiere zu einheitlichem Format mit chunk_id in metadata
+            for i, doc in enumerate(documents):
+                if 'chunk_id' not in doc.get('metadata', {}):
+                    # Generiere chunk_id aus Index falls nicht vorhanden
+                    doc['metadata']['chunk_id'] = f"dense_{i}"
+            
+            logger.info(f"Dense Retrieval: {len(documents)} Dokumente für ReRanking")
         
-        return documents
+        # === RERANKING (optional) ===
+        if self.config and self.config.use_reranking:
+            from src.advanced_rag.post_retrieval.reranking import VoyageReranker
+            
+            # Limitiere auf reranking_candidates VOR dem ReRanking (kosteneffizienter)
+            documents_for_reranking = documents[:reranking_candidates]
+            
+            logger.info(f"ReRanking: {len(documents_for_reranking)} Dokumente werden reranked...")
+            
+            reranker = VoyageReranker(model=self.config.reranking_model)
+            documents = reranker.rerank(query, documents_for_reranking)
+            
+            logger.info(f"ReRanking angewendet mit Modell: {self.config.reranking_model}")
+        
+        # Limitiere auf k_final (NACH ReRanking!)
+        final_documents = documents[:k_final]
+        logger.info(f"Finale Auswahl: Top-{k_final} von {len(documents)} Dokumenten")
+        
+        return final_documents
 
     @traceable(run_type="retriever")
     def _sparse_retrieve(self, query: str, k: int = None) -> List[Dict[str, Any]]:
@@ -440,14 +445,12 @@ class UniversityRAGTool(BaseTool):
         """
         try:
             # Bestimme k basierend auf globaler Settings
-            k = TOP_K
+            k_final = TOP_K if TOP_K else 5
             
             # Retrieval basierend auf Modus
-            if self._use_hybrid and self.config:
-                # Advanced: Hybrid Retrieval (Dense + BM25 mit RRF Fusion)
-                # k wird aus Config geladen (hybrid_retrieval_k_final)
+            if self._use_advanced and self.config:
+                # Advanced: Hybrid Retrieval und/oder ReRanking
                 documents = self._advanced_retrieve(query)
-                # Hybrid verwendet eigene Formatierung (naive Format)
                 return self._format_naive_results(documents)
             elif self._use_sparse and self.config:
                 # Sparse: Nur BM25 ohne Dense Retrieval
@@ -456,7 +459,7 @@ class UniversityRAGTool(BaseTool):
                 return self._format_naive_results(documents)
             elif self._use_advanced and self.config:
                 # Multi-Collection Search (Legacy) mit Post-Processing
-                documents = self._multi_collection_retrieve(query, k=k)
+                documents = self._multi_collection_retrieve(query, k=k_final)
                 if not documents:
                     return (
                         "ℹ️ Keine relevanten Informationen in der Universitäts-Wissensdatenbank gefunden. "
@@ -464,8 +467,8 @@ class UniversityRAGTool(BaseTool):
                     )
                 return self._advanced_process(query, documents)
             else:
-                # Naive: Single Collection Search
-                documents = self._naive_retrieve(query, k=k)
+                # Naive: Single Collection Search (ohne ReRanking)
+                documents = self._naive_retrieve(query, k=k_final)
             
             if not documents:
                 return (

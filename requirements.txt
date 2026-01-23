@@ -42,6 +42,12 @@ lxml>=4.9.0                 # Schneller XML/HTML-Parser (BeautifulSoup Backend)
 chromadb>=0.4.0             # Vector-Datenbank für RAG-System
 sentence-transformers>=2.2.0 # Lokale Embeddings (all-MiniLM-L6-v2, 384 dim)
 
+# Hybrid Retrieval (BM25 Sparse Index)
+rank_bm25>=0.2.2            # BM25 Implementierung für Sparse Retrieval
+
+# ReRanking (Voyage AI)
+voyageai>=0.3.0             # Voyage AI ReRanking (rerank-2.5)
+
 # PDF Processing (für PDF-Dokumente auf Websites)
 pypdf>=3.0.0                # PDF-Lesen und -Extraktion
 PyPDF2>=3.0.0               # Alternative PDF-Bibliothek

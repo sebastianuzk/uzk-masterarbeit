@@ -36,7 +36,7 @@ class RAGConfig:
     # Wenn naive_setup=True, sind alle deaktiviert.
     # Wenn naive_setup=False, können einzelne Features hier deaktiviert werden.
     # ============================================================================
-    enable_semantic_chunking: bool = True
+    enable_semantic_chunking: bool = False
     enable_content_cleaning: bool = False
     enable_deduplication: bool = False  # Aktiviert Exact + Near Deduplication
     enable_multi_collection: bool = False
@@ -49,6 +49,7 @@ class RAGConfig:
     enable_result_formatting: bool = False
     enable_context_hints: bool = False
     enable_empty_result_handling: bool = False
+    enable_reranking: bool = True
     
     # ============================================================================
     # PRE-RETRIEVAL HYPERPARAMETER
@@ -118,6 +119,10 @@ class RAGConfig:
     # Empty Result Handling
     empty_result_fallback_message: str = "Keine relevanten Informationen gefunden."
     empty_result_suggest_alternatives: bool = True
+    
+    # ReRanking (Voyage AI)
+    reranking_model: str = "rerank-2.5"
+    reranking_candidates: int = 40  # Anzahl Dokumente die dem ReRanker übergeben werden
     
     # ============================================================================
     # EMBEDDING & DATABASE
@@ -216,6 +221,11 @@ class RAGConfig:
         return (not self.naive_setup) and self.enable_empty_result_handling
     
     @property
+    def use_reranking(self) -> bool:
+        """Post-Retrieval: ReRanking aktiv? (UNABHÄNGIG von Retrieval-Methode!)"""
+        return (not self.naive_setup) and self.enable_reranking
+    
+    @property
     def baseline_enabled(self) -> bool:
         """Baseline RAG (= Naive Setup)?"""
         return self.naive_setup
@@ -283,6 +293,7 @@ class RAGConfig:
             enable_result_formatting=_get_bool_env("ENABLE_RESULT_FORMATTING", False),
             enable_context_hints=_get_bool_env("ENABLE_CONTEXT_HINTS", False),
             enable_empty_result_handling=_get_bool_env("ENABLE_EMPTY_RESULT_HANDLING", False),
+            enable_reranking=_get_bool_env("ENABLE_RERANKING", False),
             
             # === PRE-RETRIEVAL HYPERPARAMETER ===
             # Fallback-Werte synchron mit rag.env (Single Source of Truth)
@@ -329,6 +340,10 @@ class RAGConfig:
             empty_result_fallback_message=os.getenv("EMPTY_RESULT_FALLBACK_MESSAGE", "Keine relevanten Informationen gefunden."),
             empty_result_suggest_alternatives=_get_bool_env("EMPTY_RESULT_SUGGEST_ALTERNATIVES", True),
             
+            # === RERANKING ===
+            reranking_model=os.getenv("RERANKING_MODEL", "rerank-2.5"),
+            reranking_candidates=_get_int_env("RERANKING_CANDIDATES", 40),
+            
             # === EMBEDDING & DATABASE ===
             embedding_model_name=os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3"),
             embedding_model_dimension=_get_int_env("EMBEDDING_MODEL_DIMENSION", 1024),
@@ -360,7 +375,8 @@ class RAGConfig:
             "relevance_filtering": self.use_relevance_filtering,
             "result_formatting": self.use_result_formatting,
             "context_hints": self.use_context_hints,
-            "empty_result_handling": self.use_empty_result_handling
+            "empty_result_handling": self.use_empty_result_handling,
+            "reranking": self.use_reranking
         }
     
     def log_config(self) -> None:

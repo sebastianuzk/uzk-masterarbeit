@@ -77,9 +77,9 @@ np.random.seed(RANDOM_SEED)
 
 # Timestamps für Batch-Evaluation (Array wird in main() iteriert)
 from datetime import datetime
-#EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
+EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
 
-
+'''
 EVAL_TIMESTAMPS = [
     "20260120_174049",
     "20260120_213609",
@@ -87,6 +87,7 @@ EVAL_TIMESTAMPS = [
 
     # Weitere Timestamps hier hinzufügen...
 ]
+'''
 
 
 
@@ -156,6 +157,9 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
     Die Documents befinden sich im Retriever-Output unter dem Key 'output' (nicht 'documents'!).
     Jedes Document hat 'page_content' und 'metadata' (mit 'url' und 'content_type').
     
+    WICHTIG: Bei mehreren Retriever-Runs (z.B. _naive_retrieve + _advanced_retrieve)
+    wird nur der Run mit den WENIGSTEN Dokumenten genommen, da das die finale Auswahl ist.
+    
     Args:
         client: LangSmith Client
         trace_id: Die Trace-ID der Session
@@ -171,23 +175,40 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
             is_root=False
         ))
         
-        # Suche nach Retriever-Run
-        contexts = []
-        urls = []
-        content_types = []
+        # Sammle alle Retriever-Runs mit ihren Dokumenten
+        retriever_runs = []
         for child in child_runs:
             if child.run_type == "retriever":
                 if child.outputs and isinstance(child.outputs, dict):
                     # Documents sind unter 'output' Key (nicht 'documents')!
                     documents = child.outputs.get('output', [])
-                    for doc in documents:
-                        if isinstance(doc, dict) and 'page_content' in doc:
-                            contexts.append(doc['page_content'])
-                            # Metadata extrahieren (ohne Fallbacks)
-                            metadata = doc.get('metadata', {})
-                            # URL und Content-Type direkt aus metadata
-                            urls.append(metadata.get('url'))
-                            content_types.append(metadata.get('content_type'))
+                    if documents:
+                        retriever_runs.append({
+                            'name': child.name,
+                            'documents': documents,
+                            'doc_count': len(documents)
+                        })
+        
+        if not retriever_runs:
+            return [], [], []
+        
+        # Bei mehreren Retriever-Runs: Nimm den mit den WENIGSTEN Dokumenten
+        # Das ist der finale Run (z.B. _advanced_retrieve mit Top-K nach ReRanking)
+        # Bei gleichem Count: Nimm den letzten (zeitlich neuesten)
+        final_run = min(retriever_runs, key=lambda x: x['doc_count'])
+        
+        contexts = []
+        urls = []
+        content_types = []
+        
+        for doc in final_run['documents']:
+            if isinstance(doc, dict) and 'page_content' in doc:
+                contexts.append(doc['page_content'])
+                # Metadata extrahieren (ohne Fallbacks)
+                metadata = doc.get('metadata', {})
+                # URL und Content-Type direkt aus metadata
+                urls.append(metadata.get('url'))
+                content_types.append(metadata.get('content_type'))
         
         if contexts:
             return contexts, urls, content_types  # Tuple von 3 Listen zurückgeben
@@ -204,13 +225,19 @@ def get_token_usage_from_langsmith(client: Client, trace_id: str) -> dict:
     Holt Token-Usage aus LangSmith für eine spezifische Trace-ID.
     
     Summiert alle Tokens aus LLM-Runs (ChatOllama/ChatOpenAI) innerhalb der Trace.
+    Erfasst ReRanking-Tokens (Voyage) separat.
     
     Args:
         client: LangSmith Client
         trace_id: Die Trace-ID der Session
         
     Returns:
-        dict: {'prompt_tokens': int, 'completion_tokens': int, 'total_tokens': int}
+        dict: {
+            'prompt_tokens': int, 
+            'completion_tokens': int, 
+            'total_tokens': int,
+            'reranking_tokens': int  # NEU: Voyage ReRanking Tokens
+        }
     """
     try:
         # Hole alle Child-Runs für diese Trace
@@ -223,53 +250,90 @@ def get_token_usage_from_langsmith(client: Client, trace_id: str) -> dict:
         total_prompt = 0
         total_completion = 0
         total_tokens = 0
+        reranking_tokens = 0  # NEU: Separat für ReRanking
         
         for child in child_runs:
             # LLM-Runs haben run_type="llm"
             if child.run_type == "llm":
+                # Prüfe ob es ein VoyageReranker Run ist (anhand des Namens)
+                is_reranking = child.name == "VoyageReranker"
+                
                 # Token-Usage kann in verschiedenen Stellen sein:
                 # 1. Direkt als Attribute: total_tokens, prompt_tokens, completion_tokens
                 # 2. In extra['usage'] oder outputs['usage']
                 
-                # Methode 1: Direkte Attribute
-                if hasattr(child, 'total_tokens') and child.total_tokens:
-                    total_tokens += child.total_tokens
-                if hasattr(child, 'prompt_tokens') and child.prompt_tokens:
-                    total_prompt += child.prompt_tokens
-                if hasattr(child, 'completion_tokens') and child.completion_tokens:
-                    total_completion += child.completion_tokens
+                run_tokens = 0
+                run_prompt = 0
+                run_completion = 0
                 
-                # Methode 2: In outputs
-                if child.outputs and isinstance(child.outputs, dict):
+                # Token-Extraktion mit Priorität (nur EINE Quelle verwenden, nicht addieren!)
+                # Priorität: usage_metadata > outputs.usage > outputs.token_usage > direkte Attribute
+                
+                token_found = False
+                
+                # Methode 1: usage_metadata (Voyage ReRanking Format)
+                if not token_found and child.outputs and isinstance(child.outputs, dict):
+                    usage_metadata = child.outputs.get('usage_metadata', {})
+                    if usage_metadata and usage_metadata.get('total_tokens'):
+                        run_tokens = usage_metadata.get('total_tokens', 0) or 0
+                        run_prompt = usage_metadata.get('input_tokens', 0) or 0
+                        token_found = True
+                
+                # Methode 2: outputs.usage (OpenAI Format)
+                if not token_found and child.outputs and isinstance(child.outputs, dict):
                     usage = child.outputs.get('usage', {})
-                    if usage:
-                        total_prompt += usage.get('prompt_tokens', 0) or 0
-                        total_completion += usage.get('completion_tokens', 0) or 0
-                        total_tokens += usage.get('total_tokens', 0) or 0
-                    
-                    # Alternative: token_usage in outputs (LangChain Format)
+                    if usage and (usage.get('total_tokens') or usage.get('prompt_tokens')):
+                        run_prompt = usage.get('prompt_tokens', 0) or 0
+                        run_completion = usage.get('completion_tokens', 0) or 0
+                        run_tokens = usage.get('total_tokens', 0) or 0
+                        token_found = True
+                
+                # Methode 3: outputs.token_usage (LangChain Format)
+                if not token_found and child.outputs and isinstance(child.outputs, dict):
                     token_usage = child.outputs.get('token_usage', {})
-                    if token_usage:
-                        total_prompt += token_usage.get('prompt_tokens', 0) or 0
-                        total_completion += token_usage.get('completion_tokens', 0) or 0
-                        total_tokens += token_usage.get('total_tokens', 0) or 0
-                    
-                    # Alternative: llm_output -> token_usage (älteres Format)
+                    if token_usage and (token_usage.get('total_tokens') or token_usage.get('prompt_tokens')):
+                        run_prompt = token_usage.get('prompt_tokens', 0) or 0
+                        run_completion = token_usage.get('completion_tokens', 0) or 0
+                        run_tokens = token_usage.get('total_tokens', 0) or 0
+                        token_found = True
+                
+                # Methode 4: outputs.llm_output.token_usage (älteres Format)
+                if not token_found and child.outputs and isinstance(child.outputs, dict):
                     llm_output = child.outputs.get('llm_output', {})
                     if llm_output and isinstance(llm_output, dict):
                         tu = llm_output.get('token_usage', {})
-                        if tu:
-                            total_prompt += tu.get('prompt_tokens', 0) or 0
-                            total_completion += tu.get('completion_tokens', 0) or 0
-                            total_tokens += tu.get('total_tokens', 0) or 0
+                        if tu and (tu.get('total_tokens') or tu.get('prompt_tokens')):
+                            run_prompt = tu.get('prompt_tokens', 0) or 0
+                            run_completion = tu.get('completion_tokens', 0) or 0
+                            run_tokens = tu.get('total_tokens', 0) or 0
+                            token_found = True
                 
-                # Methode 3: In extra
-                if hasattr(child, 'extra') and child.extra and isinstance(child.extra, dict):
+                # Methode 5: Direkte Attribute
+                if not token_found:
+                    if hasattr(child, 'total_tokens') and child.total_tokens:
+                        run_tokens = child.total_tokens
+                    if hasattr(child, 'prompt_tokens') and child.prompt_tokens:
+                        run_prompt = child.prompt_tokens
+                    if hasattr(child, 'completion_tokens') and child.completion_tokens:
+                        run_completion = child.completion_tokens
+                    if run_tokens or run_prompt or run_completion:
+                        token_found = True
+                
+                # Methode 6: extra.usage (Fallback)
+                if not token_found and hasattr(child, 'extra') and child.extra and isinstance(child.extra, dict):
                     usage = child.extra.get('usage', {})
-                    if usage:
-                        total_prompt += usage.get('prompt_tokens', 0) or 0
-                        total_completion += usage.get('completion_tokens', 0) or 0
-                        total_tokens += usage.get('total_tokens', 0) or 0
+                    if usage and (usage.get('total_tokens') or usage.get('prompt_tokens')):
+                        run_prompt = usage.get('prompt_tokens', 0) or 0
+                        run_completion = usage.get('completion_tokens', 0) or 0
+                        run_tokens = usage.get('total_tokens', 0) or 0
+                
+                # Zuordnung: ReRanking oder LLM
+                if is_reranking:
+                    reranking_tokens += run_tokens
+                else:
+                    total_prompt += run_prompt
+                    total_completion += run_completion
+                    total_tokens += run_tokens
         
         # Falls total_tokens nicht direkt verfügbar, berechne aus prompt + completion
         if total_tokens == 0 and (total_prompt > 0 or total_completion > 0):
@@ -278,12 +342,13 @@ def get_token_usage_from_langsmith(client: Client, trace_id: str) -> dict:
         return {
             'prompt_tokens': total_prompt,
             'completion_tokens': total_completion,
-            'total_tokens': total_tokens
+            'total_tokens': total_tokens,
+            'reranking_tokens': reranking_tokens  # NEU
         }
     
     except Exception as e:
         print(f"      ⚠️ Token-Usage Fehler: {str(e)[:100]}")
-        return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+        return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'reranking_tokens': 0}
 
 
 def stop_ollama_model(model_name: str):
@@ -482,7 +547,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
             print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
         else:
             print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
-            token_usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+            token_usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'reranking_tokens': 0}
         
         urls_list.append(urls)
         content_types_list.append(content_types)
@@ -492,8 +557,14 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
         print(f"   🔗 URLs: {len(urls)} Quellen")
         print(f"   📁 Content-Types: {set(content_types)}")
-        if token_usage['total_tokens'] > 0:
-            print(f"   📊 Tokens: {token_usage['total_tokens']} (Prompt: {token_usage['prompt_tokens']}, Completion: {token_usage['completion_tokens']})")
+        if token_usage['total_tokens'] > 0 or token_usage.get('reranking_tokens', 0) > 0:
+            llm_tokens = token_usage['total_tokens']
+            rerank_tokens = token_usage.get('reranking_tokens', 0)
+            if rerank_tokens > 0:
+                print(f"   📊 LLM-Tokens: {llm_tokens} (Prompt: {token_usage['prompt_tokens']}, Completion: {token_usage['completion_tokens']})")
+                print(f"   🔄 ReRanking-Tokens: {rerank_tokens}")
+            else:
+                print(f"   📊 Tokens: {llm_tokens} (Prompt: {token_usage['prompt_tokens']}, Completion: {token_usage['completion_tokens']})")
         
         # RAGAS-Sample erstellen
         sample = SingleTurnSample(
@@ -530,8 +601,13 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         print(f"   ⏱️ Durchschn. Antwortzeit: {sum(response_times)/len(response_times):.2f}s")
         print(f"   ⏱️ Gesamt Antwortzeit: {sum(response_times):.2f}s\n")
     if token_usage_list:
-        total_tokens_all = sum(t.get('total_tokens', 0) for t in token_usage_list)
-        print(f"   📊 Gesamt Tokens: {total_tokens_all}\n")
+        total_llm_tokens = sum(t.get('total_tokens', 0) for t in token_usage_list)
+        total_rerank_tokens = sum(t.get('reranking_tokens', 0) for t in token_usage_list)
+        if total_rerank_tokens > 0:
+            print(f"   📊 Gesamt LLM-Tokens: {total_llm_tokens}")
+            print(f"   🔄 Gesamt ReRanking-Tokens: {total_rerank_tokens}\n")
+        else:
+            print(f"   📊 Gesamt Tokens: {total_llm_tokens}\n")
     
     dataset = EvaluationDataset(samples=samples)
     return dataset, response_times, urls_list, content_types_list, token_usage_list
@@ -541,7 +617,7 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
 # KONFIGURATION
 # ============================================================================
 # Limit für Testfragen (None = alle, z.B. 5 für Test)
-TEST_LIMIT = None # None = alle Fragen evaluieren
+TEST_LIMIT = 2 # None = alle Fragen evaluieren
 
 
 def run_ragas_evaluation(dataset: EvaluationDataset, run_local: bool = None) -> tuple:
@@ -802,10 +878,12 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         results_df['prompt_tokens'] = [t.get('prompt_tokens', 0) for t in token_usage_list[:len(results_df)]]
         results_df['completion_tokens'] = [t.get('completion_tokens', 0) for t in token_usage_list[:len(results_df)]]
         results_df['total_tokens'] = [t.get('total_tokens', 0) for t in token_usage_list[:len(results_df)]]
+        results_df['reranking_tokens'] = [t.get('reranking_tokens', 0) for t in token_usage_list[:len(results_df)]]
     else:
         results_df['prompt_tokens'] = None
         results_df['completion_tokens'] = None
         results_df['total_tokens'] = None
+        results_df['reranking_tokens'] = None
     
     # ============================================================================
     # SOFORT SPEICHERN - Rohdaten CSV mit Timestamp (bevor irgendwas schiefgehen kann)
@@ -921,7 +999,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
                    'faithfulness', 'context_recall', 'context_precision', 'semantic_similarity',
                    'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall',
                    'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens',
-                   'context_count', 'response_time_seconds']
+                   'reranking_tokens', 'context_count', 'response_time_seconds']
     
     # Nur vorhandene Spalten verwenden
     csv_columns = [col for col in csv_columns if col in results_df.columns]
@@ -951,7 +1029,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
     # ============================================================================
     metric_cols = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 
                    'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall',
-                   'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens']
+                   'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'reranking_tokens']
     
     # Gesamtdurchschnitt
     avg_row = {col: '' for col in csv_columns}
@@ -1102,7 +1180,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         # Excel-Metriken inkl. BERT-Score und Tokens
         excel_metrics = ['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 
                          'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall', 
-                         'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens']
+                         'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'reranking_tokens']
         
         for metric in excel_metrics:
             if metric in results_df.columns and results_df[metric].notna().any():
@@ -1111,7 +1189,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
                 display_names = {'RR_at5': 'MRR@5', 'hit_at5': 'Hit@5', 'bert_f1': 'BERT-F1', 
                                  'bert_precision': 'BERT-Precision', 'bert_recall': 'BERT-Recall',
                                  'prompt_tokens': 'Prompt Tokens (avg)', 'completion_tokens': 'Completion Tokens (avg)',
-                                 'total_tokens': 'Total Tokens (avg)'}
+                                 'total_tokens': 'Total Tokens (avg)', 'reranking_tokens': 'ReRanking Tokens (avg)'}
                 display_name = display_names.get(metric, metric)
                 ws_summary[f'A{row}'] = display_name
                 ws_summary[f'B{row}'] = avg
@@ -1123,7 +1201,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
                     ws_summary[f'B{row}'].number_format = '0.000'
                 
                 # Farbe basierend auf Score (nicht für latency und tokens)
-                if metric not in ['latency', 'prompt_tokens', 'completion_tokens', 'total_tokens']:
+                if metric not in ['latency', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'reranking_tokens']:
                     if avg >= 0.8:
                         ws_summary[f'B{row}'].fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
                     elif avg >= 0.6:
@@ -1156,7 +1234,8 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'N{row}'] = "(Input) Tokens"
         ws_summary[f'O{row}'] = "(Output) Tokens"
         ws_summary[f'P{row}'] = "Gesamt Tokens"
-        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']:
+        ws_summary[f'Q{row}'] = "ReRanking Tokens"
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q']:
             ws_summary[f'{col}{row}'].font = Font(bold=True)
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
@@ -1167,12 +1246,12 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             cat_df = results_df[results_df['category'] == category]
             ws_summary[f'A{row}'] = category
             
-            for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall', 'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens'], 1):
+            for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall', 'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'reranking_tokens'], 1):
                 if metric in cat_df.columns:
                     avg = cat_df[metric].mean()
-                    col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J, K, L, M, N, O, P
+                    col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q
                     ws_summary[f'{col_letter}{row}'] = avg
-                    if metric in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
+                    if metric in ['prompt_tokens', 'completion_tokens', 'total_tokens', 'reranking_tokens']:
                         ws_summary[f'{col_letter}{row}'].number_format = '#,##0'
                     else:
                         ws_summary[f'{col_letter}{row}'].number_format = '0.000'
@@ -1202,7 +1281,8 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary[f'N{row}'] = "(Input) Tokens"
         ws_summary[f'O{row}'] = "(Output) Tokens"
         ws_summary[f'P{row}'] = "Gesamt Tokens"
-        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']:
+        ws_summary[f'Q{row}'] = "ReRanking Tokens"
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q']:
             ws_summary[f'{col}{row}'].font = Font(bold=True)
             ws_summary[f'{col}{row}'].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         row += 1
@@ -1212,12 +1292,12 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
             if len(diff_df) > 0:
                 ws_summary[f'A{row}'] = difficulty.upper()
                 
-                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall', 'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens'], 1):
+                for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision', 'semantic_similarity', 'context_entity_recall', 'answer_relevancy', 'bert_f1', 'bert_precision', 'bert_recall', 'RR_at5', 'hit_at5', 'latency', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'reranking_tokens'], 1):
                     if metric in diff_df.columns:
                         avg = diff_df[metric].mean()
-                        col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J, K, L, M, N, O, P
+                        col_letter = chr(65 + idx)  # B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q
                         ws_summary[f'{col_letter}{row}'] = avg
-                        if metric in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
+                        if metric in ['prompt_tokens', 'completion_tokens', 'total_tokens', 'reranking_tokens']:
                             ws_summary[f'{col_letter}{row}'].number_format = '#,##0'
                         else:
                             ws_summary[f'{col_letter}{row}'].number_format = '0.000'
@@ -1241,6 +1321,7 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame,
         ws_summary.column_dimensions['N'].width = 16  # (Input) Tokens
         ws_summary.column_dimensions['O'].width = 17  # (Output) Tokens
         ws_summary.column_dimensions['P'].width = 14  # Gesamt Tokens
+        ws_summary.column_dimensions['Q'].width = 18  # ReRanking Tokens
         
         # Speichern
         wb.save(output_path_excel)
@@ -1373,7 +1454,7 @@ def main():
             # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten inkl. Token-Usage)
             display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time, token_usage_list)
             
-            #print(f"✅ Evaluation für {EVAL_TIMESTAMP} erfolgreich abgeschlossen!")
+            print(f"✅ Evaluation für {EVAL_TIMESTAMP} erfolgreich abgeschlossen!")
             
         except KeyboardInterrupt:
             print("\n\n⚠️ Evaluation abgebrochen!\n")

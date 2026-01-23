@@ -8,10 +8,12 @@ from .relevance_filtering import RelevanceFilter
 from .result_formatting import ResultFormatter
 from .context_hints import ContextHintProvider
 from .empty_result_handler import EmptyResultHandler
+from .reranking import VoyageReranker
 
 __all__ = [
     'RelevanceFilter',
     'ResultFormatter',
     'ContextHintProvider',
-    'EmptyResultHandler'
+    'EmptyResultHandler',
+    'VoyageReranker'
 ]

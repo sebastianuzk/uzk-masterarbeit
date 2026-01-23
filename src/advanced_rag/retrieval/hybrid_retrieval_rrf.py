@@ -795,8 +795,7 @@ class HybridRetriever:
     def retrieve(
         self, 
         query: str, 
-        k_retrieve: int = 80, 
-        k_final: int = 10
+        k_retrieve: int = 80
     ) -> List[Dict[str, Any]]:
         """
         Hybrid Retrieval mit RRF Fusion.
@@ -805,13 +804,13 @@ class HybridRetriever:
         1. Dense Retrieval: k_retrieve Kandidaten aus ChromaDB
         2. Sparse Retrieval: k_retrieve Kandidaten aus BM25
         3. RRF Fusion: Kombiniere beide Rankings
-        4. Top-K Selection: Behalte k_final Dokumente
-        5. Metadata Enrichment: Hole vollständige Daten aus ChromaDB
+        4. Metadata Enrichment: Hole vollständige Daten aus ChromaDB
+        
+        Die finale Limitierung (k_final) erfolgt im rag_tool nach optionalem ReRanking.
         
         Args:
             query: Suchanfrage
             k_retrieve: Anzahl Kandidaten pro Retrieval-Methode (default: 80)
-            k_final: Anzahl finaler Ergebnisse nach Fusion (default: 10)
             
         Returns:
             Liste von Dokumenten mit Metadaten im Format:
@@ -824,7 +823,7 @@ class HybridRetriever:
                 'sparse_rank': int | None
             }
         """
-        logger.info(f"Hybrid Retrieval: query='{query[:50]}...', k_retrieve={k_retrieve}, k_final={k_final}")
+        logger.info(f"Hybrid Retrieval: query='{query[:50]}...', k_retrieve={k_retrieve}")
         
         # 1. Parallel Retrieval (Dense + Sparse)
         dense_results = self._dense_retrieve(query, k_retrieve)
@@ -838,9 +837,9 @@ class HybridRetriever:
             k=self.rrf_k
         )
         
-        # 3. Top-K Selection
-        top_k_ids = [doc_id for doc_id, _ in fused_ranking[:k_final]]
-        top_k_scores = {doc_id: score for doc_id, score in fused_ranking[:k_final]}
+        # 3. Alle fusionierten IDs und Scores (keine Limitierung hier)
+        all_ids = [doc_id for doc_id, _ in fused_ranking]
+        all_scores = {doc_id: score for doc_id, score in fused_ranking}
         
         # Erstelle Rank-Mappings für Debug-Info
         dense_ranks = {doc_id: rank for rank, (doc_id, _) in enumerate(dense_results, 1)}
@@ -849,7 +848,7 @@ class HybridRetriever:
         # 4. Metadata Enrichment: Hole vollständige Daten aus ChromaDB
         collection = self._get_chroma_collection()
         chroma_data = collection.get(
-            ids=top_k_ids,
+            ids=all_ids,
             include=['documents', 'metadatas']
         )
         
@@ -861,16 +860,16 @@ class HybridRetriever:
                 'metadata': chroma_data['metadatas'][i] if chroma_data.get('metadatas') else {}
             }
         
-        # 5. Formatiere Ergebnisse
+        # 5. Formatiere Ergebnisse (alle fusionierten Dokumente)
         results = []
-        for chunk_id in top_k_ids:
+        for chunk_id in all_ids:
             chunk_data = chroma_lookup.get(chunk_id, {})
             
             result = {
                 'chunk_id': chunk_id,
                 'page_content': chunk_data.get('document', ''),
                 'metadata': chunk_data.get('metadata', {}),
-                'rrf_score': top_k_scores.get(chunk_id, 0.0),
+                'rrf_score': all_scores.get(chunk_id, 0.0),
                 'dense_rank': dense_ranks.get(chunk_id),
                 'sparse_rank': sparse_ranks.get(chunk_id)
             }
@@ -911,7 +910,6 @@ class HybridRetriever:
 def hybrid_retrieve(
     query: str,
     k_retrieve: int = 80,
-    k_final: int = 10,
     collection_name: str = "wiso_documents",
     sparse_index_dir: str = "data/sparse_index",
     vector_db_path: str = "data/vector_db",
@@ -920,22 +918,24 @@ def hybrid_retrieve(
     """
     Convenience-Funktion für Hybrid Retrieval.
     
+    Gibt ALLE fusionierten Dokumente zurück (sortiert nach RRF-Score).
+    Die finale Limitierung (k_final) erfolgt im rag_tool nach optionalem ReRanking.
+    
     Verwendung im RAG-Tool:
         from src.advanced_rag.retrieval.hybrid_retrieval_rrf import hybrid_retrieve
         
-        results = hybrid_retrieve(query, k_retrieve=80, k_final=10)
+        results = hybrid_retrieve(query, k_retrieve=80)
     
     Args:
         query: Suchanfrage
         k_retrieve: Kandidaten pro Methode (default: 80)
-        k_final: Finale Ergebnisse nach RRF (default: 10)
         collection_name: ChromaDB Collection Name
         sparse_index_dir: Verzeichnis mit BM25-Index
         vector_db_path: Pfad zur ChromaDB
         rrf_k: RRF-K Parameter
         
     Returns:
-        Liste von Dokumenten mit Metadaten
+        Liste von Dokumenten mit Metadaten (alle fusionierten Ergebnisse)
     """
     retriever = HybridRetriever(
         collection_name=collection_name,
@@ -944,4 +944,4 @@ def hybrid_retrieve(
         rrf_k=rrf_k
     )
     
-    return retriever.retrieve(query, k_retrieve=k_retrieve, k_final=k_final)
+    return retriever.retrieve(query, k_retrieve=k_retrieve)
