@@ -29,7 +29,7 @@ class RAGConfig:
     # ============================================================================
     # MASTER SWITCH (steuert ALLE Advanced-Techniken)
     # ============================================================================
-    naive_setup: bool = False  # False = Advanced RAG, True = Naive Baseline
+    naive_setup: bool = True  # False = Advanced RAG, True = Naive Baseline
     
     # ============================================================================
     # INDIVIDUAL FEATURE FLAGS (ermöglichen granulare Kontrolle)

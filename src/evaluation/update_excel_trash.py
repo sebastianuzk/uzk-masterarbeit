@@ -37,7 +37,7 @@ random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 
 # Timestamp für Output-Dateien
-EVAL_TIMESTAMP = "run1"
+EVAL_TIMESTAMP = "validation"
 
 
 def load_checkpoint(pkl_path: Path):
@@ -139,7 +139,7 @@ def run_bert_evaluation(dataset, test_df, token_usage_list=None) -> pd.DataFrame
                     model_type="xlm-roberta-large",  # Multilingual (100+ Sprachen, inkl. DE + EN)
                     lang="de",  # Sprache für Baseline-Rescaling (DE funktioniert auch für gemischte Texte)
                     verbose=False,
-                    rescale_with_baseline=True  # Bessere Interpretierbarkeit
+                    rescale_with_baseline=False  # Bessere Interpretierbarkeit
                 )
             
             # Zu results_df hinzufügen
