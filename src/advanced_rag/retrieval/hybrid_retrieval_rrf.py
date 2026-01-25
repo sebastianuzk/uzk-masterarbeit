@@ -683,11 +683,13 @@ class HybridRetriever:
         sparse_index_dir: Verzeichnis mit BM25-Index
         vector_db_path: Pfad zur ChromaDB
         rrf_k: RRF-K Parameter (default: 60)
+        embedding_model: Optionales vorgeladenes Embedding-Modell (Performance-Optimierung)
     """
     collection_name: str = "wiso_documents"
     sparse_index_dir: str = "data/sparse_index"
     vector_db_path: str = "data/vector_db"
     rrf_k: int = 60
+    embedding_model: Optional[Any] = None  # Vorgeladenes Embedding-Modell zur Wiederverwendung
     
     # Lazy-loaded components
     _sparse_index: Optional[BM25SparseIndex] = field(default=None, repr=False)
@@ -695,8 +697,10 @@ class HybridRetriever:
     _embedding_model: Optional[Any] = field(default=None, repr=False)
     
     def __post_init__(self):
-        """Initialisierung - Komponenten werden lazy geladen."""
-        pass
+        """Initialisierung - übernimm vorgeladenes Embedding-Modell falls vorhanden."""
+        if self.embedding_model is not None:
+            self._embedding_model = self.embedding_model
+            logger.debug("Vorgeladenes Embedding-Modell übernommen (kein Neuladen erforderlich)")
     
     def _get_sparse_index(self) -> BM25SparseIndex:
         """Lazy-load des BM25 Sparse Index."""
@@ -913,7 +917,8 @@ def hybrid_retrieve(
     collection_name: str = "wiso_documents",
     sparse_index_dir: str = "data/sparse_index",
     vector_db_path: str = "data/vector_db",
-    rrf_k: int = 60
+    rrf_k: int = 60,
+    embedding_model: Optional[Any] = None
 ) -> List[Dict[str, Any]]:
     """
     Convenience-Funktion für Hybrid Retrieval.
@@ -924,7 +929,7 @@ def hybrid_retrieve(
     Verwendung im RAG-Tool:
         from src.advanced_rag.retrieval.hybrid_retrieval_rrf import hybrid_retrieve
         
-        results = hybrid_retrieve(query, k_retrieve=80)
+        results = hybrid_retrieve(query, k_retrieve=80, embedding_model=self._embedding_model)
     
     Args:
         query: Suchanfrage
@@ -933,6 +938,7 @@ def hybrid_retrieve(
         sparse_index_dir: Verzeichnis mit BM25-Index
         vector_db_path: Pfad zur ChromaDB
         rrf_k: RRF-K Parameter
+        embedding_model: Optionales vorgeladenes Embedding-Modell (Performance-Optimierung)
         
     Returns:
         Liste von Dokumenten mit Metadaten (alle fusionierten Ergebnisse)
@@ -941,7 +947,8 @@ def hybrid_retrieve(
         collection_name=collection_name,
         sparse_index_dir=sparse_index_dir,
         vector_db_path=vector_db_path,
-        rrf_k=rrf_k
+        rrf_k=rrf_k,
+        embedding_model=embedding_model
     )
     
     return retriever.retrieve(query, k_retrieve=k_retrieve)

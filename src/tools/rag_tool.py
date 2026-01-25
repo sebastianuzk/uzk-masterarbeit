@@ -269,6 +269,9 @@ class UniversityRAGTool(BaseTool):
             sparse_index_dir = "data/sparse_index"
             vector_db_path = self.config.vector_db_path if self.config else "data/vector_db"
             
+            # Lade Embedding-Modell einmalig und übergebe es dem HybridRetriever
+            embedding_model = self._get_embedding_model()
+            
             # Hole alle Collections aus der Vektordatenbank
             collection_names = self._get_collection_names()
             
@@ -282,7 +285,8 @@ class UniversityRAGTool(BaseTool):
                         collection_name=collection_name,
                         sparse_index_dir=sparse_index_dir,
                         vector_db_path=vector_db_path,
-                        rrf_k=rrf_k
+                        rrf_k=rrf_k,
+                        embedding_model=embedding_model  # Vorgeladenes Modell übergeben
                     )
                     all_results.extend(results)
                 except FileNotFoundError as e:

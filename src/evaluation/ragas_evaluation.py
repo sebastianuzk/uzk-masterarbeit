@@ -79,15 +79,18 @@ np.random.seed(RANDOM_SEED)
 from datetime import datetime
 EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
 
-'''
+
 EVAL_TIMESTAMPS = [
-    "20260120_174049",
-    "20260120_213609",
-    "20260120_224350",
+    "20260125_091148",  # Sparse 1
+    "20260125_095333",  # Sparse 2
+    "20260125_103622",  # Sparse 3
+    "20260125_115605",  # Hybrid 1
+    "20260125_124105",  # Hybrid 2
+    "20260125_132335"   # Hybrid 3
 
     # Weitere Timestamps hier hinzufügen...
 ]
-'''
+
 
 
 
@@ -520,47 +523,39 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         # Warten damit LangSmith Trace vollständig ist
         time.sleep(2)  # Erhöht auf 2s für zuverlässigere Synchronisation
         
-        # RAG-Kontext aus LangSmith holen - nach Session-ID filtern
+        # RAG-Kontext aus LangSmith holen - nach Session-ID suchen
         print(f"   🔍 Hole RAG-Kontext aus LangSmith...")
         
-        # Suche den Run mit unserer Session-ID (zuverlässiger als "letzter Run")
+        # Hole die letzten Runs und suche manuell nach unserer Session-ID
         matching_run = None
         max_retries = 3
         
         for retry in range(max_retries):
-            # Hole die letzten Runs und suche nach unserer Session-ID in Metadata
             recent_runs = list(langsmith_client.list_runs(
                 project_name=LANGSMITH_PROJECT,
                 is_root=True,
-                limit=10,  # Mehr Runs holen für Sicherheit
-                filter=f'eq(metadata_key, "session_id") and eq(metadata_value, "{session_id}")'
+                limit=10  # Mehr Runs holen für Sicherheit
             ))
             
-            if recent_runs:
-                matching_run = recent_runs[0]
+            # Suche nach der Session-ID in Metadata
+            for run in recent_runs:
+                if run.extra and isinstance(run.extra, dict):
+                    metadata = run.extra.get('metadata', {})
+                    if metadata.get('session_id') == session_id:
+                        matching_run = run
+                        break
+            
+            if matching_run:
                 break
             
-            # Fallback: Suche in den letzten Runs manuell nach session_id
-            if retry == max_retries - 1:
-                recent_runs = list(langsmith_client.list_runs(
-                    project_name=LANGSMITH_PROJECT,
-                    is_root=True,
-                    limit=10
-                ))
-                # Suche manuell nach der Session-ID in Metadata
-                for run in recent_runs:
-                    if run.extra and isinstance(run.extra, dict):
-                        metadata = run.extra.get('metadata', {})
-                        if metadata.get('session_id') == session_id:
-                            matching_run = run
-                            break
-                
-                # Letzter Fallback: Nehme den neuesten Run
-                if not matching_run and recent_runs:
-                    matching_run = recent_runs[0]
-                    print(f"   ⚠️ Session-ID {session_id[:8]}... nicht gefunden, verwende neuesten Run")
-            else:
-                time.sleep(1)  # Warte und versuche erneut
+            # Warte und versuche erneut
+            if retry < max_retries - 1:
+                time.sleep(1)
+        
+        # Fallback: Nehme den neuesten Run wenn Session-ID nicht gefunden
+        if not matching_run and recent_runs:
+            matching_run = recent_runs[0]
+            print(f"   ⚠️ Session-ID {session_id[:8]}... nicht in Metadata gefunden, verwende neuesten Run")
         
         contexts = []  # Leere Liste als Default
         urls = []  # Leere Liste als Default
