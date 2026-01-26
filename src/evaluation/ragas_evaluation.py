@@ -79,18 +79,18 @@ np.random.seed(RANDOM_SEED)
 from datetime import datetime
 EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
 
-
+'''
 EVAL_TIMESTAMPS = [
-    "20260125_091148",  # Sparse 1
-    "20260125_095333",  # Sparse 2
-    "20260125_103622",  # Sparse 3
+    "20260126_104954",  # Cohere 1
+    "20260126_113244",  # Cohere 2
+    "20260126_121548",  # Cohere 3
     "20260125_115605",  # Hybrid 1
     "20260125_124105",  # Hybrid 2
     "20260125_132335"   # Hybrid 3
 
     # Weitere Timestamps hier hinzufügen...
 ]
-
+'''
 
 
 
@@ -258,8 +258,8 @@ def get_token_usage_from_langsmith(client: Client, trace_id: str) -> dict:
         for child in child_runs:
             # LLM-Runs haben run_type="llm"
             if child.run_type == "llm":
-                # Prüfe ob es ein VoyageReranker Run ist (anhand des Namens)
-                is_reranking = child.name == "VoyageReranker"
+                # Prüfe ob es ein Reranker Run ist (Voyage oder Cohere)
+                is_reranking = child.name in ("VoyageReranker", "CohereReranker")
                 
                 # Token-Usage kann in verschiedenen Stellen sein:
                 # 1. Direkt als Attribute: total_tokens, prompt_tokens, completion_tokens
@@ -1471,10 +1471,10 @@ def main():
                 print()
             
             # 5. RAGAS-Evaluation (immer ausführen, Modus aus Config)
-            results_df, evaluation_time = run_ragas_evaluation(dataset)
+            #results_df, evaluation_time = run_ragas_evaluation(dataset)
             
             # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten inkl. Token-Usage)
-            display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time, token_usage_list)
+            #display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time, token_usage_list)
             
             print(f"✅ Evaluation für {EVAL_TIMESTAMP} erfolgreich abgeschlossen!")
             

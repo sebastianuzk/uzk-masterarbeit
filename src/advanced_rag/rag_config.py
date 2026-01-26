@@ -29,7 +29,7 @@ class RAGConfig:
     # ============================================================================
     # MASTER SWITCH (steuert ALLE Advanced-Techniken)
     # ============================================================================
-    naive_setup: bool = True  # False = Advanced RAG, True = Naive Baseline
+    naive_setup: bool = False  # False = Advanced RAG, True = Naive Baseline
     
     # ============================================================================
     # INDIVIDUAL FEATURE FLAGS (ermöglichen granulare Kontrolle)
@@ -41,7 +41,7 @@ class RAGConfig:
     enable_deduplication: bool = False  # Aktiviert Exact + Near Deduplication
     enable_multi_collection: bool = False
     enable_hybrid_retrieval: bool = False  # BM25 Sparse Index + RRF Fusion
-    enable_sparse_retrieval: bool = False  # Nur BM25 Sparse Index (ohne Dense)
+    enable_sparse_retrieval: bool = True  # Nur BM25 Sparse Index (ohne Dense)
     enable_result_aggregation: bool = False
     enable_distance_conversion: bool = False
     enable_global_reranking: bool = False
@@ -49,7 +49,8 @@ class RAGConfig:
     enable_result_formatting: bool = False
     enable_context_hints: bool = False
     enable_empty_result_handling: bool = False
-    enable_reranking: bool = True
+    enable_reranking: bool = False
+    enable_mmr: bool = True  # Maximum Marginal Relevance für Diversität
     
     # ============================================================================
     # PRE-RETRIEVAL HYPERPARAMETER
@@ -120,9 +121,14 @@ class RAGConfig:
     empty_result_fallback_message: str = "Keine relevanten Informationen gefunden."
     empty_result_suggest_alternatives: bool = True
     
-    # ReRanking (Voyage AI)
-    reranking_model: str = "rerank-2.5"
+    # ReRanking
+    reranking_provider: str = "voyage"  # "voyage" oder "cohere"
+    reranking_model: str = "rerank-2.5"  # Modellname (provider-abhängig)
     reranking_candidates: int = 40  # Anzahl Dokumente die dem ReRanker übergeben werden
+    
+    # Maximum Marginal Relevance (MMR)
+    mmr_lambda: float = 0.5  # Trade-off: 0.0 = Diversität, 1.0 = Relevanz
+    mmr_similarity_metric: str = "cosine"  # "cosine" oder "dot"
     
     # ============================================================================
     # EMBEDDING & DATABASE
@@ -226,6 +232,11 @@ class RAGConfig:
         return (not self.naive_setup) and self.enable_reranking
     
     @property
+    def use_mmr(self) -> bool:
+        """Post-Retrieval: Maximum Marginal Relevance (MMR) aktiv?"""
+        return (not self.naive_setup) and self.enable_mmr
+    
+    @property
     def baseline_enabled(self) -> bool:
         """Baseline RAG (= Naive Setup)?"""
         return self.naive_setup
@@ -294,6 +305,7 @@ class RAGConfig:
             enable_context_hints=_get_bool_env("ENABLE_CONTEXT_HINTS", False),
             enable_empty_result_handling=_get_bool_env("ENABLE_EMPTY_RESULT_HANDLING", False),
             enable_reranking=_get_bool_env("ENABLE_RERANKING", False),
+            enable_mmr=_get_bool_env("ENABLE_MMR", False),
             
             # === PRE-RETRIEVAL HYPERPARAMETER ===
             # Fallback-Werte synchron mit rag.env (Single Source of Truth)
@@ -341,8 +353,13 @@ class RAGConfig:
             empty_result_suggest_alternatives=_get_bool_env("EMPTY_RESULT_SUGGEST_ALTERNATIVES", True),
             
             # === RERANKING ===
+            reranking_provider=os.getenv("RERANKING_PROVIDER", "voyage"),
             reranking_model=os.getenv("RERANKING_MODEL", "rerank-2.5"),
             reranking_candidates=_get_int_env("RERANKING_CANDIDATES", 40),
+            
+            # === MMR (Maximum Marginal Relevance) ===
+            mmr_lambda=_get_float_env("MMR_LAMBDA", 0.5),
+            mmr_similarity_metric=os.getenv("MMR_SIMILARITY_METRIC", "cosine"),
             
             # === EMBEDDING & DATABASE ===
             embedding_model_name=os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3"),
@@ -376,7 +393,8 @@ class RAGConfig:
             "result_formatting": self.use_result_formatting,
             "context_hints": self.use_context_hints,
             "empty_result_handling": self.use_empty_result_handling,
-            "reranking": self.use_reranking
+            "reranking": self.use_reranking,
+            "mmr": self.use_mmr
         }
     
     def log_config(self) -> None:
