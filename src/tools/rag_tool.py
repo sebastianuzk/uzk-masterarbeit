@@ -105,19 +105,20 @@ class UniversityRAGTool(BaseTool):
     
     def _should_use_advanced(self) -> bool:
         """
-        Prüfe ob Advanced Retrieval (Hybrid und/oder ReRanking) aktiviert ist.
+        Prüfe ob Advanced Retrieval (Hybrid und/oder ReRanking und/oder MMR) aktiviert ist.
         
         Gibt True zurück wenn:
         - Hybrid Retrieval (Dense + BM25 mit RRF) aktiviert ist, ODER
-        - ReRanking aktiviert ist (auch ohne Hybrid)
+        - ReRanking aktiviert ist (auch ohne Hybrid), ODER
+        - MMR aktiviert ist (für Diversität)
         
-        In beiden Fällen wird _advanced_retrieve() verwendet.
+        In allen Fällen wird _advanced_retrieve() verwendet.
         """
         if not self.config:
             return False
         
-        # Advanced Retrieval wenn Hybrid ODER ReRanking aktiv
-        return self.config.enable_hybrid_retrieval or self.config.use_reranking
+        # Advanced Retrieval wenn Hybrid ODER ReRanking ODER MMR aktiv
+        return self.config.enable_hybrid_retrieval or self.config.use_reranking or self.config.use_mmr
     
     def _should_use_sparse(self) -> bool:
         """
@@ -218,7 +219,7 @@ class UniversityRAGTool(BaseTool):
                     doc_dict['metadata']['distance'] = distance
                 
                 # Füge Embedding hinzu (falls angefordert)
-                if include_embeddings and results.get('embeddings') and results['embeddings'][0]:
+                if include_embeddings and results.get('embeddings') and len(results['embeddings']) > 0:
                     doc_dict['metadata']['embedding'] = results['embeddings'][0][i]
                 
                 # Füge IDs hinzu
@@ -341,7 +342,9 @@ class UniversityRAGTool(BaseTool):
         else:
             # === DENSE-ONLY RETRIEVAL (für ReRanking ohne Hybrid) ===
             # Hole reranking_candidates Dokumente für späteres ReRanking
-            documents = self._naive_retrieve(query, k=reranking_candidates)
+            # include_embeddings=True für MMR (falls aktiviert) - EIN Request!
+            include_emb = self.config.use_mmr if self.config else False
+            documents = self._naive_retrieve(query, k=reranking_candidates, include_embeddings=include_emb)
             
             # Konvertiere zu einheitlichem Format mit chunk_id in metadata
             for i, doc in enumerate(documents):
@@ -382,6 +385,7 @@ class UniversityRAGTool(BaseTool):
         # === MMR (Maximum Marginal Relevance) für Diversität (optional) ===
         if self.config and self.config.use_mmr and len(documents) > k_final:
             from src.advanced_rag.post_retrieval.maximum_marginal_relevance import create_mmr
+            import numpy as np
             
             logger.info(f"MMR: Anwenden auf {len(documents)} Dokumente für Diversität...")
             
@@ -391,8 +395,18 @@ class UniversityRAGTool(BaseTool):
                 similarity_metric=self.config.mmr_similarity_metric
             )
             
-            # Hole Embeddings für MMR (aus ChromaDB oder berechne neu)
-            document_embeddings = self._fetch_embeddings_for_documents(documents)
+            # Extrahiere Embeddings aus metadata (bereits bei _naive_retrieve geholt!)
+            embeddings_list = []
+            for doc in documents:
+                emb = doc.get('metadata', {}).get('embedding')
+                if emb is not None:
+                    embeddings_list.append(emb)
+                else:
+                    # Sollte nicht passieren wenn include_embeddings=True
+                    logger.warning(f"Kein Embedding für Dokument gefunden!")
+                    embeddings_list.append(np.zeros(1024))  # Fallback
+            
+            document_embeddings = np.array(embeddings_list)
             
             # Extrahiere Relevanz-Scores (ReRank > Similarity > RRF)
             relevance_scores = []

@@ -314,22 +314,26 @@ class MaximumMarginalRelevance:
                 
                 # Tracke Swap wenn ein Dokument außerhalb der ursprünglichen Top-k gewählt wurde
                 if best_idx >= k_final and position < k_final:
-                    # Ein Dokument von außerhalb wurde eingetauscht
-                    # Finde das ursprüngliche Dokument an dieser Position
-                    original_idx = original_top_k[position] if position < len(original_top_k) else position
+                    # Ein Dokument von außerhalb der Top-k wurde eingetauscht
+                    # Finde das nächste nicht-ausgewählte Dokument aus den ursprünglichen Top-k
+                    # das an dieser Position hätte sein sollen
+                    skipped_originals = [
+                        idx for idx in original_top_k 
+                        if idx not in selected_indices[:-1]  # Ohne das gerade ausgewählte
+                    ]
                     
-                    # Nur tracken wenn tatsächlich ein anderes Dokument gewählt wurde
-                    if original_idx != best_idx:
+                    if skipped_originals:
+                        original_idx = skipped_originals[0]  # Das erste übersprungene Original
                         original_doc = documents[original_idx]
                         new_doc = documents[best_idx]
                         
-                        # Berechne Ähnlichkeit zu bereits ausgewählten für Begründung
+                        # Berechne Ähnlichkeit des Originals zu bereits ausgewählten (ohne das neue)
                         if len(selected_indices) > 1:
                             max_sim = max(
                                 doc_similarity_matrix[original_idx, sel_idx]
                                 for sel_idx in selected_indices[:-1]  # Ohne das gerade ausgewählte
                             )
-                            reason = f"Original hatte hohe Ähnlichkeit ({max_sim:.3f}) zu bereits ausgewählten Dokumenten"
+                            reason = f"Original (Dok {original_idx+1}) hatte hohe Ähnlichkeit ({max_sim:.3f}) zu bereits ausgewählten Dokumenten"
                         else:
                             reason = "Diversitätsoptimierung"
                         

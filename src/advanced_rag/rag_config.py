@@ -127,7 +127,7 @@ class RAGConfig:
     reranking_candidates: int = 40  # Anzahl Dokumente die dem ReRanker übergeben werden
     
     # Maximum Marginal Relevance (MMR)
-    mmr_lambda: float = 0.5  # Trade-off: 0.0 = Diversität, 1.0 = Relevanz
+    mmr_lambda: float = 0.8  # Trade-off: 0.0 = Diversität, 1.0 = Relevanz
     mmr_similarity_metric: str = "cosine"  # "cosine" oder "dot"
     
     # ============================================================================

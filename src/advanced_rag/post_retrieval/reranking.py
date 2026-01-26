@@ -21,6 +21,19 @@ from langsmith import traceable
 logger = logging.getLogger(__name__)
 
 
+class RerankerProtocol(Protocol):
+    """Protocol für Reranker - definiert die gemeinsame Schnittstelle."""
+    
+    def rerank(
+        self, 
+        query: str, 
+        documents: List[Dict[str, Any]], 
+        embedding_model: Optional[Any] = None
+    ) -> List[Dict[str, Any]]:
+        """Rerankt Dokumente nach Relevanz zur Query."""
+        ...
+
+
 class VoyageReranker:
     """
     ReRanking mittels Voyage AI rerank-2.5 Modell.
