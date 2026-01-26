@@ -147,16 +147,18 @@ class UniversityRAGTool(BaseTool):
         raise FileNotFoundError("Vector DB nicht gefunden")
     
     @traceable(run_type="retriever")
-    def _naive_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
+    def _naive_retrieve(self, query: str, k: int = 5, include_embeddings: bool = False) -> List[Dict[str, Any]]:
         """
         Naives RAG: Einfache Vektorsuche in Single Collection.
         
         Args:
             query: Die Suchanfrage
             k: Anzahl der Ergebnisse
+            include_embeddings: Wenn True, werden auch Embeddings in metadata zurückgegeben
             
         Returns:
             Liste von Dokumenten mit Metadaten (simples Format)
+            Bei include_embeddings=True enthält metadata['embedding'] den Embedding-Vektor
         """
         try:
             client = self._get_chromadb_client()
@@ -179,9 +181,15 @@ class UniversityRAGTool(BaseTool):
             normalized_embedding = raw_embedding / np.linalg.norm(raw_embedding, axis=1, keepdims=True)
             query_embedding = normalized_embedding.tolist()
             
+            # Bestimme include-Liste basierend auf include_embeddings
+            include_list = ['distances', 'metadatas', 'documents']
+            if include_embeddings:
+                include_list.append('embeddings')
+            
             results = collection.query(
                 query_embeddings=query_embedding,
-                n_results=k
+                n_results=k,
+                include=include_list
             )
         except Exception as e:
             logger.error(f"Fehler bei Vektorsuche: {e}")
@@ -200,6 +208,22 @@ class UniversityRAGTool(BaseTool):
                 # Füge Metadaten hinzu
                 if results.get('metadatas') and results['metadatas'][0]:
                     doc_dict['metadata'] = results['metadatas'][0][i] or {}
+                
+                # Füge Distanz/Similarity hinzu
+                if results.get('distances') and results['distances'][0]:
+                    distance = results['distances'][0][i]
+                    # Cosine Distance → Similarity (1 - distance für normalisierte Vektoren)
+                    similarity = 1.0 - distance
+                    doc_dict['metadata']['similarity_score'] = similarity
+                    doc_dict['metadata']['distance'] = distance
+                
+                # Füge Embedding hinzu (falls angefordert)
+                if include_embeddings and results.get('embeddings') and results['embeddings'][0]:
+                    doc_dict['metadata']['embedding'] = results['embeddings'][0][i]
+                
+                # Füge IDs hinzu
+                if results.get('ids') and results['ids'][0]:
+                    doc_dict['metadata']['chunk_id'] = results['ids'][0][i]
                 
                 documents.append(doc_dict)
         
@@ -329,21 +353,71 @@ class UniversityRAGTool(BaseTool):
         
         # === RERANKING (optional) ===
         if self.config and self.config.use_reranking:
-            from src.advanced_rag.post_retrieval.reranking import VoyageReranker
+            from src.advanced_rag.post_retrieval.reranking import create_reranker
             
             # Limitiere auf reranking_candidates VOR dem ReRanking (kosteneffizienter)
             documents_for_reranking = documents[:reranking_candidates]
             
             logger.info(f"ReRanking: {len(documents_for_reranking)} Dokumente werden reranked...")
             
-            reranker = VoyageReranker(model=self.config.reranking_model)
-            documents = reranker.rerank(query, documents_for_reranking)
+            # Erstelle Reranker basierend auf Provider-Konfiguration
+            reranker = create_reranker(
+                provider=self.config.reranking_provider,
+                model=self.config.reranking_model
+            )
             
-            logger.info(f"ReRanking angewendet mit Modell: {self.config.reranking_model}")
+            # Übergebe Embedding-Modell für Token-Berechnung (nur bei Cohere/local nötig)
+            if self.config.reranking_provider in ('cohere', 'local'):
+                documents = reranker.rerank(
+                    query, 
+                    documents_for_reranking,
+                    embedding_model=self._get_embedding_model()
+                )
+            else:
+                # Voyage gibt Tokens selbst zurück
+                documents = reranker.rerank(query, documents_for_reranking)
+            
+            logger.info(f"ReRanking angewendet mit Provider: {self.config.reranking_provider}, Modell: {self.config.reranking_model}")
         
-        # Limitiere auf k_final (NACH ReRanking!)
-        final_documents = documents[:k_final]
-        logger.info(f"Finale Auswahl: Top-{k_final} von {len(documents)} Dokumenten")
+        # === MMR (Maximum Marginal Relevance) für Diversität (optional) ===
+        if self.config and self.config.use_mmr and len(documents) > k_final:
+            from src.advanced_rag.post_retrieval.maximum_marginal_relevance import create_mmr
+            
+            logger.info(f"MMR: Anwenden auf {len(documents)} Dokumente für Diversität...")
+            
+            # Erstelle MMR mit konfigurierten Parametern
+            mmr = create_mmr(
+                lambda_param=self.config.mmr_lambda,
+                similarity_metric=self.config.mmr_similarity_metric
+            )
+            
+            # Hole Embeddings für MMR (aus ChromaDB oder berechne neu)
+            document_embeddings = self._fetch_embeddings_for_documents(documents)
+            
+            # Extrahiere Relevanz-Scores (ReRank > Similarity > RRF)
+            relevance_scores = []
+            for doc in documents:
+                meta = doc.get('metadata', {})
+                score = meta.get('rerank_score', 
+                        meta.get('similarity_score', 
+                        meta.get('rrf_score', 0.0)))
+                relevance_scores.append(score)
+            
+            # MMR-Auswahl
+            mmr_result = mmr.select(
+                documents=documents,
+                document_embeddings=document_embeddings,
+                relevance_scores=relevance_scores,
+                k_final=k_final,
+                query=query
+            )
+            
+            final_documents = mmr_result.documents
+            logger.info(f"MMR: {len(final_documents)} Dokumente ausgewählt, {len(mmr_result.swaps)} Swaps durchgeführt")
+        else:
+            # Ohne MMR: Einfach Top-k_final nehmen
+            final_documents = documents[:k_final]
+            logger.info(f"Finale Auswahl: Top-{k_final} von {len(documents)} Dokumenten")
         
         return final_documents
 
