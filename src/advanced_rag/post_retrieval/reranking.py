@@ -467,8 +467,8 @@ class LocalReranker:
     Inkludiert LangSmith-Tracing für Token-Usage-Tracking (geschätzt).
     """
     
-    # Default Modell
-    DEFAULT_MODEL = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+    # Default Modell - Mehrsprachig (Englisch + Deutsch)
+    DEFAULT_MODEL = "cross-encoder/msmarco-MiniLM-L12-en-de-v1"
     
     def __init__(self, model: str = None):
         """
