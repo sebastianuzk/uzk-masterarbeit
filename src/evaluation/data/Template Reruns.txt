@@ -1,0 +1,1 @@
+MITTELWERT(INDEX('Detaillierte Ergebnisse'!$J$2:$Y$117; 0; ZEILE(A1)))
