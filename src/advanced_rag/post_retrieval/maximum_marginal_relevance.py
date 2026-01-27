@@ -102,17 +102,15 @@ class MaximumMarginalRelevance:
         
         Args:
             embeddings: Matrix mit Embeddings (n_docs x embedding_dim)
+                       HINWEIS: Embeddings sollten bereits normalisiert sein (aus ChromaDB)
             
         Returns:
             Ähnlichkeitsmatrix (n_docs x n_docs)
         """
         if self.similarity_metric == "cosine":
-            # Normalisiere Embeddings
-            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-            norms[norms == 0] = 1  # Vermeide Division durch 0
-            normalized = embeddings / norms
-            # Cosine Similarity Matrix via Dot Product
-            return np.dot(normalized, normalized.T)
+            # Embeddings sind bereits normalisiert (aus ChromaDB)
+            # Cosine Similarity = Dot Product für normalisierte Vektoren
+            return np.dot(embeddings, embeddings.T)
         elif self.similarity_metric == "dot":
             return np.dot(embeddings, embeddings.T)
         else:
@@ -357,10 +355,19 @@ class MaximumMarginalRelevance:
             doc = documents[idx].copy()
             if 'metadata' not in doc:
                 doc['metadata'] = {}
+            else:
+                # Deep copy der metadata um Original nicht zu verändern
+                doc['metadata'] = doc['metadata'].copy()
             doc['metadata']['mmr_score'] = score
             doc['metadata']['mmr_rank'] = rank + 1
             doc['metadata']['original_rank'] = idx + 1
             doc['metadata']['original_relevance'] = float(relevance_array[idx])
+            
+            # Entferne Embedding aus Metadaten - wird nicht mehr benötigt
+            # und würde LangSmith Tracing/LLM Response verlangsamen
+            if 'embedding' in doc['metadata']:
+                del doc['metadata']['embedding']
+            
             selected_documents.append(doc)
         
         # Logging

@@ -84,14 +84,13 @@ EVAL_TIMESTAMPS = [
     "20260126_104954",  # Cohere 1
     "20260126_113244",  # Cohere 2
     "20260126_121548",  # Cohere 3
-    "20260125_115605",  # Hybrid 1
-    "20260125_124105",  # Hybrid 2
-    "20260125_132335"   # Hybrid 3
+    "20260126_210033",  # MMR 0.7 1
+    "20260126_215004",  # MMR 0.7 2
+    "20260126_223612"   # MMR 0.7 3
 
     # Weitere Timestamps hier hinzufügen...
 ]
 '''
-
 
 
 # Aktueller Timestamp (wird in main() pro Iteration gesetzt)
@@ -258,8 +257,8 @@ def get_token_usage_from_langsmith(client: Client, trace_id: str) -> dict:
         for child in child_runs:
             # LLM-Runs haben run_type="llm"
             if child.run_type == "llm":
-                # Prüfe ob es ein Reranker Run ist (Voyage oder Cohere)
-                is_reranking = child.name in ("VoyageReranker", "CohereReranker")
+                # Prüfe ob es ein Reranker Run ist (Voyage, Cohere oder Local)
+                is_reranking = child.name in ("VoyageReranker", "CohereReranker", "LocalReranker")
                 
                 # Token-Usage kann in verschiedenen Stellen sein:
                 # 1. Direkt als Attribute: total_tokens, prompt_tokens, completion_tokens

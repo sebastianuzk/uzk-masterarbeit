@@ -69,6 +69,9 @@ class UniversityRAGTool(BaseTool):
     # Embedding model (lazy loaded)
     _embedding_model: Optional[Any] = None
     
+    # Reranker (lazy loaded - nur bei lokalem Reranking wichtig für Performance)
+    _reranker: Optional[Any] = None
+    
     def __init__(self, **data):
         """Initialize RAG tool with optional advanced techniques."""
         super().__init__(**data)
@@ -102,6 +105,36 @@ class UniversityRAGTool(BaseTool):
             self._embedding_model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
             logger.info(f"Embedding-Modell geladen: {SENTENCE_TRANSFORMER_MODEL} (max_seq_length={EMBEDDING_MAX_SEQ_LENGTH})")
         return self._embedding_model
+    
+    def _get_reranker(self):
+        """
+        Lazy-load des Rerankers - wird einmal initialisiert und wiederverwendet.
+        
+        WICHTIG für Performance: Bei lokalem Reranking (CrossEncoder) würde eine
+        Neuinitialisierung bei jedem Request das Modell jedes Mal neu laden!
+        Dies führt zu Performance-Einbußen und erhöhter VRAM-Fragmentierung.
+        
+        Returns:
+            Reranker-Instanz (VoyageReranker, CohereReranker oder LocalReranker)
+        """
+        if self._reranker is None and self.config and self.config.use_reranking:
+            from src.advanced_rag.post_retrieval.reranking import create_reranker
+            
+            self._reranker = create_reranker(
+                provider=self.config.reranking_provider,
+                model=self.config.reranking_model
+            )
+            
+            # Bei lokalem Reranking: Modell sofort laden (nicht erst beim ersten rerank())
+            # So wird VRAM bereits beim Tool-Init allokiert
+            if self.config.reranking_provider == 'local':
+                # Trigger lazy-load des CrossEncoder-Modells
+                _ = self._reranker.model
+                logger.info(f"Reranker vorgeladen: {self.config.reranking_provider}")
+            else:
+                logger.info(f"Reranker initialisiert: {self.config.reranking_provider} ({self.config.reranking_model})")
+        
+        return self._reranker
     
     def _should_use_advanced(self) -> bool:
         """
@@ -300,10 +333,14 @@ class UniversityRAGTool(BaseTool):
             # Hole alle Collections aus der Vektordatenbank
             collection_names = self._get_collection_names()
             
+            # Prüfe ob MMR aktiviert ist - dann müssen Embeddings mit geladen werden
+            include_emb_for_mmr = self.config.use_mmr if self.config else False
+            
             all_results = []
             for collection_name in collection_names:
                 try:
                     # Hybrid Retrieval pro Collection - gibt ALLE fusionierten Dokumente zurück
+                    # include_embeddings=True falls MMR aktiviert (EIN Request, keine separate Abfrage!)
                     results = hybrid_retrieve(
                         query=query,
                         k_retrieve=k_retrieve,
@@ -311,7 +348,8 @@ class UniversityRAGTool(BaseTool):
                         sparse_index_dir=sparse_index_dir,
                         vector_db_path=vector_db_path,
                         rrf_k=rrf_k,
-                        embedding_model=embedding_model  # Vorgeladenes Modell übergeben
+                        embedding_model=embedding_model,  # Vorgeladenes Modell übergeben
+                        include_embeddings=include_emb_for_mmr  # Embeddings für MMR in einem Request
                     )
                     all_results.extend(results)
                 except FileNotFoundError as e:
@@ -335,9 +373,14 @@ class UniversityRAGTool(BaseTool):
                 doc_dict['metadata']['sparse_rank'] = result.get('sparse_rank')
                 doc_dict['metadata']['chunk_id'] = result.get('chunk_id', '')
                 
+                # Füge Embedding hinzu falls vorhanden (für MMR)
+                if include_emb_for_mmr and result.get('embedding') is not None:
+                    doc_dict['metadata']['embedding'] = result.get('embedding')
+                
                 documents.append(doc_dict)
             
-            logger.info(f"Hybrid Retrieval: {len(documents)} Dokumente aus RRF Fusion")
+            logger.info(f"Hybrid Retrieval: {len(documents)} Dokumente aus RRF Fusion" +
+                       (f" (mit Embeddings für MMR)" if include_emb_for_mmr else ""))
         
         else:
             # === DENSE-ONLY RETRIEVAL (für ReRanking ohne Hybrid) ===
@@ -356,18 +399,14 @@ class UniversityRAGTool(BaseTool):
         
         # === RERANKING (optional) ===
         if self.config and self.config.use_reranking:
-            from src.advanced_rag.post_retrieval.reranking import create_reranker
-            
             # Limitiere auf reranking_candidates VOR dem ReRanking (kosteneffizienter)
             documents_for_reranking = documents[:reranking_candidates]
             
             logger.info(f"ReRanking: {len(documents_for_reranking)} Dokumente werden reranked...")
             
-            # Erstelle Reranker basierend auf Provider-Konfiguration
-            reranker = create_reranker(
-                provider=self.config.reranking_provider,
-                model=self.config.reranking_model
-            )
+            # Hole vorgeladenen Reranker (NICHT jedes Mal neu erstellen!)
+            # Bei lokalem Reranking vermeidet dies das wiederholte Laden des CrossEncoder-Modells
+            reranker = self._get_reranker()
             
             # Übergebe Embedding-Modell für Token-Berechnung (nur bei Cohere/local nötig)
             if self.config.reranking_provider in ('cohere', 'local'):
@@ -432,6 +471,13 @@ class UniversityRAGTool(BaseTool):
             # Ohne MMR: Einfach Top-k_final nehmen
             final_documents = documents[:k_final]
             logger.info(f"Finale Auswahl: Top-{k_final} von {len(documents)} Dokumenten")
+        
+        # === CLEANUP: Entferne Embeddings aus Metadaten ===
+        # Embeddings werden nur für MMR gebraucht, nicht für LLM-Response!
+        # (1024 Floats pro Dokument würden das LLM überlasten)
+        for doc in final_documents:
+            if 'metadata' in doc and 'embedding' in doc['metadata']:
+                del doc['metadata']['embedding']
         
         return final_documents
 

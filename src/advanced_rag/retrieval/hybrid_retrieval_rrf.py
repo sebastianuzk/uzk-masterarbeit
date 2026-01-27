@@ -799,7 +799,8 @@ class HybridRetriever:
     def retrieve(
         self, 
         query: str, 
-        k_retrieve: int = 80
+        k_retrieve: int = 80,
+        include_embeddings: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Hybrid Retrieval mit RRF Fusion.
@@ -815,6 +816,7 @@ class HybridRetriever:
         Args:
             query: Suchanfrage
             k_retrieve: Anzahl Kandidaten pro Retrieval-Methode (default: 80)
+            include_embeddings: Ob Embeddings mit abgerufen werden sollen (für MMR, default: False)
             
         Returns:
             Liste von Dokumenten mit Metadaten im Format:
@@ -824,10 +826,11 @@ class HybridRetriever:
                 'metadata': dict,
                 'rrf_score': float,
                 'dense_rank': int | None,
-                'sparse_rank': int | None
+                'sparse_rank': int | None,
+                'embedding': List[float] | None  # Nur wenn include_embeddings=True
             }
         """
-        logger.info(f"Hybrid Retrieval: query='{query[:50]}...', k_retrieve={k_retrieve}")
+        logger.info(f"Hybrid Retrieval: query='{query[:50]}...', k_retrieve={k_retrieve}, include_embeddings={include_embeddings}")
         
         # 1. Parallel Retrieval (Dense + Sparse)
         dense_results = self._dense_retrieve(query, k_retrieve)
@@ -850,19 +853,34 @@ class HybridRetriever:
         sparse_ranks = {doc_id: rank for rank, (doc_id, _) in enumerate(sparse_results, 1)}
         
         # 4. Metadata Enrichment: Hole vollständige Daten aus ChromaDB
+        # Optionally include embeddings for MMR (single DB request)
         collection = self._get_chroma_collection()
+        include_fields = ['documents', 'metadatas']
+        if include_embeddings:
+            include_fields.append('embeddings')
+            
         chroma_data = collection.get(
             ids=all_ids,
-            include=['documents', 'metadatas']
+            include=include_fields
         )
         
         # Baue Lookup-Dict für ChromaDB-Daten
         chroma_lookup = {}
         for i, chunk_id in enumerate(chroma_data['ids']):
-            chroma_lookup[chunk_id] = {
+            lookup_entry = {
                 'document': chroma_data['documents'][i] if chroma_data.get('documents') else '',
                 'metadata': chroma_data['metadatas'][i] if chroma_data.get('metadatas') else {}
             }
+            # Include embedding if requested
+            # Prüfe ob embeddings existieren und nicht leer sind (sicher für numpy arrays)
+            embeddings_available = (
+                include_embeddings and 
+                chroma_data.get('embeddings') is not None and
+                len(chroma_data['embeddings']) > 0
+            )
+            if embeddings_available:
+                lookup_entry['embedding'] = chroma_data['embeddings'][i]
+            chroma_lookup[chunk_id] = lookup_entry
         
         # 5. Formatiere Ergebnisse (alle fusionierten Dokumente)
         results = []
@@ -877,9 +895,13 @@ class HybridRetriever:
                 'dense_rank': dense_ranks.get(chunk_id),
                 'sparse_rank': sparse_ranks.get(chunk_id)
             }
+            # Include embedding if present
+            if include_embeddings:
+                result['embedding'] = chunk_data.get('embedding')
             results.append(result)
         
-        logger.info(f"Hybrid Retrieval abgeschlossen: {len(results)} Ergebnisse")
+        logger.info(f"Hybrid Retrieval abgeschlossen: {len(results)} Ergebnisse" + 
+                   (f" (mit Embeddings)" if include_embeddings else ""))
         return results
     
     def get_statistics(self) -> Dict[str, Any]:
@@ -918,7 +940,8 @@ def hybrid_retrieve(
     sparse_index_dir: str = "data/sparse_index",
     vector_db_path: str = "data/vector_db",
     rrf_k: int = 60,
-    embedding_model: Optional[Any] = None
+    embedding_model: Optional[Any] = None,
+    include_embeddings: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Convenience-Funktion für Hybrid Retrieval.
@@ -939,9 +962,11 @@ def hybrid_retrieve(
         vector_db_path: Pfad zur ChromaDB
         rrf_k: RRF-K Parameter
         embedding_model: Optionales vorgeladenes Embedding-Modell (Performance-Optimierung)
+        include_embeddings: Ob Embeddings mit abgerufen werden sollen (für MMR, default: False)
         
     Returns:
         Liste von Dokumenten mit Metadaten (alle fusionierten Ergebnisse)
+        Wenn include_embeddings=True, enthält jedes Dokument auch 'embedding'
     """
     retriever = HybridRetriever(
         collection_name=collection_name,
@@ -951,4 +976,4 @@ def hybrid_retrieve(
         embedding_model=embedding_model
     )
     
-    return retriever.retrieve(query, k_retrieve=k_retrieve)
+    return retriever.retrieve(query, k_retrieve=k_retrieve, include_embeddings=include_embeddings)

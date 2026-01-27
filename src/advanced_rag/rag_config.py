@@ -49,8 +49,8 @@ class RAGConfig:
     enable_result_formatting: bool = False
     enable_context_hints: bool = False
     enable_empty_result_handling: bool = False
-    enable_reranking: bool = False
-    enable_mmr: bool = True  # Maximum Marginal Relevance für Diversität
+    enable_reranking: bool = True
+    enable_mmr: bool = False  # Maximum Marginal Relevance für Diversität
     
     # ============================================================================
     # PRE-RETRIEVAL HYPERPARAMETER
@@ -122,12 +122,12 @@ class RAGConfig:
     empty_result_suggest_alternatives: bool = True
     
     # ReRanking
-    reranking_provider: str = "voyage"  # "voyage" oder "cohere"
-    reranking_model: str = "rerank-2.5"  # Modellname (provider-abhängig)
+    reranking_provider: str = "voyage"  # "voyage", "cohere" oder "local"
+    reranking_model: str = "rerank-2.5"  # Modellname (provider-abhängig, bei local: cross-encoder/ms-marco-MiniLM-L-12-v2)
     reranking_candidates: int = 40  # Anzahl Dokumente die dem ReRanker übergeben werden
     
     # Maximum Marginal Relevance (MMR)
-    mmr_lambda: float = 0.8  # Trade-off: 0.0 = Diversität, 1.0 = Relevanz
+    mmr_lambda: float = 0.9  # Trade-off: 0.0 = Diversität, 1.0 = Relevanz
     mmr_similarity_metric: str = "cosine"  # "cosine" oder "dot"
     
     # ============================================================================

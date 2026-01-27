@@ -2,12 +2,13 @@
 ReRanking Module for Advanced RAG
 =================================
 
-ReRanking mittels Voyage AI oder Cohere Modellen.
+ReRanking mittels Voyage AI, Cohere oder lokalen Cross-Encoder Modellen.
 Sortiert alle übergebenen Dokumente nach semantischer Relevanz zur Query.
 
 Unterstützte Provider:
 - Voyage AI (rerank-2.5, rerank-2.5-lite)
 - Cohere (rerank-v3.5, rerank-english-v3.0, rerank-multilingual-v3.0)
+- Local (cross-encoder/ms-marco-MiniLM-L-12-v2) - läuft auf GPU
 
 Inkludiert LangSmith-Tracing für Token-Usage-Tracking.
 """
@@ -448,6 +449,282 @@ class CohereReranker:
 
 
 # ============================================================================
+# Local Cross-Encoder Reranker
+# ============================================================================
+class LocalReranker:
+    """
+    ReRanking mittels lokalem Cross-Encoder Modell.
+    
+    Nutzt das ms-marco-MiniLM-L-12-v2 Modell (oder anderes Cross-Encoder Modell)
+    für lokales Reranking ohne API-Kosten.
+    
+    WICHTIG: Das Modell läuft auf der GPU und belegt VRAM!
+    Bei gleichzeitiger Nutzung mit dem Chatbot-LLM muss genügend VRAM vorhanden sein.
+    - ms-marco-MiniLM-L-12-v2: ~120MB VRAM
+    - Chatbot (z.B. llama3.1:8b): ~5-6GB VRAM
+    - Beide zusammen: ~6GB VRAM (sollte auf 8GB GPU passen)
+    
+    Inkludiert LangSmith-Tracing für Token-Usage-Tracking (geschätzt).
+    """
+    
+    # Default Modell
+    DEFAULT_MODEL = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+    
+    def __init__(self, model: str = None):
+        """
+        Initialisiert den LocalReranker.
+        
+        Args:
+            model: Name des Cross-Encoder Modells (default: ms-marco-MiniLM-L-12-v2)
+        """
+        self.model_name = model or self.DEFAULT_MODEL
+        self._model = None
+        self._device = None
+    
+    @property
+    def model(self):
+        """Lazy-load des Cross-Encoder Modells."""
+        if self._model is None:
+            try:
+                from sentence_transformers import CrossEncoder
+                import torch
+                
+                # Bestimme Device (GPU wenn verfügbar)
+                self._device = "cuda" if torch.cuda.is_available() else "cpu"
+                
+                # Lade Cross-Encoder
+                self._model = CrossEncoder(self.model_name, device=self._device)
+                
+                # Log VRAM-Nutzung wenn GPU
+                if self._device == "cuda":
+                    vram_mb = torch.cuda.memory_allocated() / 1024 / 1024
+                    logger.info(
+                        f"Local Reranker geladen: {self.model_name} "
+                        f"(Device: {self._device}, VRAM: ~{vram_mb:.0f}MB)"
+                    )
+                else:
+                    logger.info(f"Local Reranker geladen: {self.model_name} (Device: {self._device})")
+                    
+            except ImportError:
+                raise ImportError(
+                    "sentence-transformers nicht installiert. "
+                    "Bitte installieren mit: pip install sentence-transformers"
+                )
+        return self._model
+    
+    @traceable(
+        run_type="llm",
+        name="LocalReranker",
+        metadata={"provider": "local"}
+    )
+    def _trace_reranking(
+        self, 
+        query: str, 
+        input_documents: List[Dict[str, Any]],
+        output_documents: List[Dict[str, Any]],
+        total_tokens: int
+    ) -> Dict[str, Any]:
+        """
+        LangSmith Trace für ReRanking.
+        
+        Args:
+            query: Die Suchanfrage
+            input_documents: Dokumente vor Reranking
+            output_documents: Dokumente nach Reranking mit Score
+            total_tokens: Geschätzte Tokens
+            
+        Returns:
+            Dict mit Output-Informationen für LangSmith
+        """
+        output_chunk_ids = [
+            doc.get('metadata', {}).get('id', f'doc_{i}') 
+            for i, doc in enumerate(output_documents)
+        ]
+        
+        output_scores = [
+            doc.get('metadata', {}).get('rerank_score', 0.0) 
+            for doc in output_documents
+        ]
+        
+        output_texts = [
+            doc.get('page_content', '') 
+            for doc in output_documents
+        ]
+        
+        top_score = output_scores[0] if output_scores else 0.0
+        
+        return {
+            "model": self.model_name,
+            "device": self._device or "unknown",
+            "num_documents": len(input_documents),
+            "output_chunk_ids": output_chunk_ids,
+            "output_scores": output_scores,
+            "output_texts": output_texts,
+            "top_score": top_score,
+            "usage_metadata": {
+                "total_tokens": total_tokens,
+                "input_tokens": total_tokens,
+                "output_tokens": 0
+            }
+        }
+    
+    def rerank(
+        self, 
+        query: str, 
+        documents: List[Dict[str, Any]], 
+        embedding_model: Optional[Any] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Sortiert ALLE Dokumente nach Relevanz zur Query mittels Cross-Encoder.
+        
+        Der Cross-Encoder bewertet jedes (Query, Document) Paar einzeln
+        und gibt einen Relevanz-Score zurück.
+        
+        Token-Berechnung (wie bei Cohere):
+        - Dokument-Tokens: Aus metadata['token_count'] oder Schätzung (~4 Zeichen/Token)
+        - Query-Tokens: Via embedding_model.tokenize() oder Schätzung
+        - Query wird für JEDES Dokument verarbeitet
+        
+        Args:
+            query: Die Suchanfrage
+            documents: Liste von Dokumenten (mit 'page_content' Key)
+            embedding_model: Optional - für exakte Token-Berechnung
+            
+        Returns:
+            Nach Relevanz sortierte Dokumente (ALLE, mit rerank_score in metadata)
+        """
+        if not documents:
+            logger.warning("Keine Dokumente zum Reranken übergeben")
+            return documents
+        
+        # Kopie der Input-Dokumente für LangSmith Trace
+        import copy
+        input_documents_copy = copy.deepcopy(documents)
+        
+        try:
+            # 1. Extrahiere Texte für Cross-Encoder
+            texts = [doc.get('page_content', '') for doc in documents]
+            
+            if not any(texts):
+                logger.warning("Alle Dokumente haben leeren page_content")
+                return documents
+            
+            # 2. Erstelle Query-Document Paare für Cross-Encoder
+            pairs = [(query, text) for text in texts]
+            
+            # 3. Cross-Encoder Prediction
+            logger.info(f"ReRanking {len(documents)} Dokumente mit lokalem {self.model_name}...")
+            
+            # Cross-Encoder gibt Scores direkt zurück (höher = relevanter)
+            scores = self.model.predict(pairs, show_progress_bar=False)
+            
+            # 4. Token-Berechnung (wie bei Cohere - geschätzt)
+            num_documents = len(documents)
+            doc_tokens = 0
+            for doc in documents:
+                meta = doc.get('metadata', {})
+                if 'token_count' in meta and meta['token_count']:
+                    doc_tokens += int(meta['token_count'])
+                else:
+                    # Fallback: Schätzung basierend auf Zeichenlänge
+                    doc_tokens += len(doc.get('page_content', '')) // 4
+            
+            # Query-Tokens
+            if embedding_model is not None and hasattr(embedding_model, 'tokenize'):
+                tokens = embedding_model.tokenize([query])
+                query_tokens_per_doc = tokens['attention_mask'].sum().item()
+            else:
+                query_tokens_per_doc = len(query) // 4
+            
+            total_query_tokens = query_tokens_per_doc * num_documents
+            total_tokens = total_query_tokens + doc_tokens
+            
+            logger.info(
+                f"ReRanking: {total_tokens} Tokens geschätzt "
+                f"(Query: {query_tokens_per_doc}x{num_documents}={total_query_tokens}, Docs: {doc_tokens})"
+            )
+            
+            # 5. Füge rerank_score zu metadata hinzu
+            for i, doc in enumerate(documents):
+                if 'metadata' not in doc:
+                    doc['metadata'] = {}
+                # Cross-Encoder Scores können negativ sein, normalisieren auf [0, 1] ist optional
+                doc['metadata']['rerank_score'] = float(scores[i])
+            
+            # 6. Sortiere nach rerank_score (absteigend)
+            documents.sort(
+                key=lambda x: x.get('metadata', {}).get('rerank_score', 0.0),
+                reverse=True
+            )
+            
+            top_score = documents[0]['metadata'].get('rerank_score', 0) if documents else 0
+            logger.info(f"ReRanking abgeschlossen. Top-Score: {top_score:.4f}")
+            
+            # 7. LangSmith Tracing
+            self._trace_reranking(
+                query=query,
+                input_documents=input_documents_copy,
+                output_documents=documents,
+                total_tokens=total_tokens
+            )
+            
+            return documents
+            
+        except Exception as e:
+            logger.error(f"Fehler beim lokalen ReRanking: {e}", exc_info=True)
+            logger.warning("Fallback: Original-Reihenfolge wird beibehalten")
+            return documents
+    
+    def check_vram_compatibility(self) -> Dict[str, Any]:
+        """
+        Prüft VRAM-Verfügbarkeit und Kompatibilität mit Chatbot.
+        
+        Returns:
+            Dict mit VRAM-Informationen und Empfehlung
+        """
+        try:
+            import torch
+            
+            if not torch.cuda.is_available():
+                return {
+                    "gpu_available": False,
+                    "message": "Keine GPU verfügbar - Modell läuft auf CPU"
+                }
+            
+            # Hole VRAM Info
+            total_vram = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            allocated_vram = torch.cuda.memory_allocated() / 1024**3
+            free_vram = total_vram - allocated_vram
+            
+            # Geschätzte Größen
+            reranker_vram = 0.12  # ~120MB für ms-marco-MiniLM-L-12-v2
+            chatbot_vram = 5.5    # ~5.5GB für llama3.1:8b
+            
+            can_run_both = free_vram >= (reranker_vram + chatbot_vram)
+            
+            return {
+                "gpu_available": True,
+                "total_vram_gb": round(total_vram, 2),
+                "allocated_vram_gb": round(allocated_vram, 2),
+                "free_vram_gb": round(free_vram, 2),
+                "reranker_vram_gb": reranker_vram,
+                "chatbot_vram_gb": chatbot_vram,
+                "can_run_both": can_run_both,
+                "message": (
+                    f"✅ Genug VRAM für Reranker + Chatbot"
+                    if can_run_both else
+                    f"⚠️ Möglicherweise nicht genug VRAM für beide Modelle gleichzeitig"
+                )
+            }
+        except Exception as e:
+            return {
+                "gpu_available": False,
+                "error": str(e),
+                "message": f"Fehler bei VRAM-Prüfung: {e}"
+            }
+
+
+# ============================================================================
 # Factory Functions
 # ============================================================================
 def create_voyage_reranker(model: str = "rerank-2.5") -> VoyageReranker:
@@ -476,6 +753,19 @@ def create_cohere_reranker(model: str = "rerank-v3.5") -> CohereReranker:
     return CohereReranker(model=model)
 
 
+def create_local_reranker(model: str = None) -> LocalReranker:
+    """
+    Factory-Funktion für LocalReranker.
+    
+    Args:
+        model: Name des Cross-Encoder Modells (default: ms-marco-MiniLM-L-12-v2)
+        
+    Returns:
+        LocalReranker-Instanz
+    """
+    return LocalReranker(model=model)
+
+
 def create_reranker(
     provider: str = "voyage",
     model: Optional[str] = None
@@ -484,11 +774,11 @@ def create_reranker(
     Universelle Factory-Funktion für Reranker.
     
     Args:
-        provider: "voyage" oder "cohere"
+        provider: "voyage", "cohere" oder "local"
         model: Optionaler Modellname (sonst Provider-Default)
         
     Returns:
-        Reranker-Instanz (VoyageReranker oder CohereReranker)
+        Reranker-Instanz (VoyageReranker, CohereReranker oder LocalReranker)
         
     Raises:
         ValueError: Bei unbekanntem Provider
@@ -499,8 +789,10 @@ def create_reranker(
         return VoyageReranker(model=model or "rerank-2.5")
     elif provider == "cohere":
         return CohereReranker(model=model or "rerank-v3.5")
+    elif provider == "local":
+        return LocalReranker(model=model)  # Default wird in Klasse gesetzt
     else:
         raise ValueError(
             f"Unbekannter Reranking-Provider: '{provider}'. "
-            f"Unterstützt: 'voyage', 'cohere'"
+            f"Unterstützt: 'voyage', 'cohere', 'local'"
         )
