@@ -143,7 +143,8 @@ class MaximumMarginalRelevance:
     def _trace_mmr_result(
         self,
         result: MMRResult,
-        query: str
+        query: str,
+        input_documents: List[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         LangSmith Trace für MMR-Ergebnis.
@@ -151,10 +152,23 @@ class MaximumMarginalRelevance:
         Args:
             result: MMR-Ergebnis mit Dokumenten und Swap-Informationen
             query: Die ursprüngliche Query
+            input_documents: Alle Input-Dokumente VOR MMR-Selektion
             
         Returns:
             Dict mit Tracing-Informationen
         """
+        # Input-Dokumente für Tracing (alle Kandidaten)
+        input_docs_info = []
+        if input_documents:
+            for i, doc in enumerate(input_documents):
+                metadata = doc.get('metadata', {})
+                input_docs_info.append({
+                    "position": i + 1,
+                    "chunk_id": self._get_chunk_id(doc, i),
+                    "text_preview": self._get_text_preview(doc.get('page_content', ''), max_length=100),
+                    "relevance_score": self._get_relevance_score(doc)
+                })
+        
         # Extrahiere Informationen über Austausche
         swap_details = []
         for swap in result.swaps:
@@ -191,6 +205,7 @@ class MaximumMarginalRelevance:
             "query": query,
             "lambda": result.lambda_param,
             "total_candidates": result.total_candidates,
+            "input_documents": input_docs_info,  # ALLE Input-Dokumente für Verifizierung
             "selected_count": result.selected_count,
             "num_swaps": len(result.swaps),
             "swaps": swap_details,
@@ -386,8 +401,8 @@ class MaximumMarginalRelevance:
             lambda_param=self.lambda_param
         )
         
-        # LangSmith Tracing
-        self._trace_mmr_result(result, query)
+        # LangSmith Tracing - übergebe auch Input-Dokumente für Verifizierung
+        self._trace_mmr_result(result, query, input_documents=documents)
         
         return result
 

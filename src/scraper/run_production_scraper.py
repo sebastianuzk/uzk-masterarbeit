@@ -43,9 +43,9 @@ try:
     USE_DEDUPLICATION = rag_config.use_deduplication  # Aktiviert Exact + Near Deduplication
     USE_MULTI_COLLECTION = rag_config.use_multi_collection_search
     USE_HYBRID_RETRIEVAL = rag_config.use_hybrid_retrieval  # BM25 Sparse Index + RRF
-    SPARSE_INDEX_DIR = rag_config.hybrid_retrieval_sparse_index_dir
+    SPARSE_INDEX_DIR = "data/sparse_index"  # Fixer Pfad für Sparse Index
 except Exception as e:
-    print(f"⚠️  Fehler beim Laden der RAG-Config: {e}")
+    print(f"Fehler beim Laden der RAG-Config: {e}")
     print("   Verwende Naive RAG als Fallback")
     USE_ADVANCED = False
     USE_SEMANTIC_CHUNKING = False
@@ -606,9 +606,16 @@ def run_production_scraper():
             similarity_threshold=rag_config.deduplication_similarity_threshold,
             shingle_size=rag_config.deduplication_shingle_size
         )
-        print("   ✅ ContentDeduplicator")
+        print("   ✅ Deduplication aktiviert:")
+        print(f"      • Exact Dedup (Hash-basiert)")
+        print(f"      • Near Dedup (MinHash+LSH, shingle_size=5, threshold={rag_config.near_deduplication_threshold})")
     else:
-        print("   ❌ ContentDeduplicator (deaktiviert)")
+        print("   ❌ Deduplication (deaktiviert)")
+    
+    if USE_HYBRID_RETRIEVAL:
+        print(f"   ✅ Hybrid Retrieval (Dense + BM25 Sparse Index → {SPARSE_INDEX_DIR})")
+    else:
+        print("   ❌ Hybrid Retrieval (deaktiviert) → nur Dense Embeddings")
     
     if USE_MULTI_COLLECTION:
         categorizer = CollectionCategorizer()
