@@ -77,20 +77,18 @@ np.random.seed(RANDOM_SEED)
 
 # Timestamps für Batch-Evaluation (Array wird in main() iteriert)
 from datetime import datetime
-EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
+#EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
 
-'''
+
 EVAL_TIMESTAMPS = [
-    "20260126_104954",  # Cohere 1
-    "20260126_113244",  # Cohere 2
-    "20260126_121548",  # Cohere 3
-    "20260126_210033",  # MMR 0.7 1
-    "20260126_215004",  # MMR 0.7 2
-    "20260126_223612"   # MMR 0.7 3
+    "20260128_165351",  # Advanced_lokal 1
+    #"20260128_174356",  # Advanced_lokal 2
+    #"20260128_183659",  # Advanced_lokal 3
 
     # Weitere Timestamps hier hinzufügen...
 ]
-'''
+
+
 
 
 # Aktueller Timestamp (wird in main() pro Iteration gesetzt)
@@ -1470,10 +1468,10 @@ def main():
                 print()
             
             # 5. RAGAS-Evaluation (immer ausführen, Modus aus Config)
-            #results_df, evaluation_time = run_ragas_evaluation(dataset)
+            results_df, evaluation_time = run_ragas_evaluation(dataset)
             
             # 6. Ergebnisse anzeigen und speichern (mit allen neuen Daten inkl. Token-Usage)
-            #display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time, token_usage_list)
+            display_and_save_results(results_df, test_df, response_times, urls_list, content_types_list, evaluation_time, token_usage_list)
             
             print(f"✅ Evaluation für {EVAL_TIMESTAMP} erfolgreich abgeschlossen!")
             
