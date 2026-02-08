@@ -33,14 +33,11 @@ for table in tables:
         pdf_count = cur.fetchone()[0]
         print(f"  Gesamt PDF URLs: {pdf_count}")
 
-cur.execute("SELECT COUNT(*) FROM pages WHERE url LIKE '%.pdf%'")
-pdf_count = cur.fetchone()[0]
-print(f"\nGesamt PDF URLs in 'pages': {pdf_count}")
-
-# Prüfe alle Tabellen
-cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-tables = [t[0] for t in cur.fetchall()]
-print(f"\n\nAlle Tabellen in DB: {tables}")
+# Prüfe ob 'pages' Tabelle existiert und PDF-URLs enthält
+if 'pages' in tables:
+    cur.execute("SELECT COUNT(*) FROM pages WHERE url LIKE '%.pdf%'")
+    pdf_count = cur.fetchone()[0]
+    print(f"\nGesamt PDF URLs in 'pages': {pdf_count}")
 
 # Prüfe ob es eine PDF-spezifische Tabelle gibt
 for table in tables:

@@ -72,7 +72,10 @@ for endpunkt in sorted(zugeordnet.keys()):
         for url in zugeordnet[endpunkt]:
             print(f"    - {url}")
 
-print(f"\n  SUMME: {total} PDFs ({100*total/len(pdf_urls):.1f}%)")
+if pdf_urls:
+    print(f"\n  SUMME: {total} PDFs ({100*total/len(pdf_urls):.1f}%)")
+else:
+    print(f"\n  SUMME: {total} PDFs (keine PDF-URLs gefunden)")
 
 print(f"\nNicht zuordenbar: {len(nicht_zugeordnet)} PDFs")
 # Analysiere Pfade der nicht zugeordneten
