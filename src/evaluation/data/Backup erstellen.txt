@@ -1,1 +1,1 @@
-Copy-Item -Path "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\data\vector_db" -Destination "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\backups\vector_db_deduplication_1500_300_95" -Recurse -Force; Write-Host "Backup erstellt: vector_db_deduplication_1500_300_95"
+Copy-Item -Path "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\data\vector_db" -Destination "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\backups\vector_db_fully_advanced" -Recurse -Force; Write-Host "Backup erstellt: vector_db_fully_advanced"

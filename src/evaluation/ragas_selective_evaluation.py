@@ -81,7 +81,7 @@ from datetime import datetime
 
 
 EVAL_TIMESTAMPS = [
-    "20260128_122607",
+    "20260128_183659",
 
     # Weitere Timestamps hier hinzufügen...
 ]
@@ -89,7 +89,7 @@ EVAL_TIMESTAMPS = [
 # IDs der Testfragen die evaluiert werden sollen (None = alle Fragen)
 # Beispiel: EVAL_IDS = [1, 5, 10, 15]  → Nur diese IDs evaluieren
 # Beispiel: EVAL_IDS = None  → Alle Fragen aus dem Testset evaluieren
-EVAL_IDS = [11, 39
+EVAL_IDS = [1, 8, 22, 23, 29, 32, 40, 46, 47, 49, 52
 ]
 
   # None = alle Fragen, oder Liste von IDs z.B. [1, 2, 3]

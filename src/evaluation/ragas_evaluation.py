@@ -81,9 +81,9 @@ from datetime import datetime
 
 
 EVAL_TIMESTAMPS = [
-    "20260128_165351",  # Advanced_lokal 1
-    #"20260128_174356",  # Advanced_lokal 2
-    #"20260128_183659",  # Advanced_lokal 3
+    #"20260128_165351",  # Advanced_lokal 1
+    "20260128_174356",  # Advanced_lokal 2
+    "20260128_183659",  # Advanced_lokal 3
 
     # Weitere Timestamps hier hinzufügen...
 ]
