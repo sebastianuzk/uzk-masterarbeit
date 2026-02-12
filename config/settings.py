@@ -25,7 +25,7 @@ class Settings:
     
     # OpenAI Konfiguration
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Default OpenAI Modell
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.2")  # Default OpenAI Modell
     OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # Optional: für Custom OpenAI-kompatible APIs
     
     # LLM Provider (ollama oder openai)

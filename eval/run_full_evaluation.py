@@ -103,6 +103,12 @@ AVAILABLE_MODELS = {
         "description": "OpenAI GPT-5 (latest)",
         "provider": "openai"
     },
+    "gpt-5.2": {
+        "name": "GPT-5.2",
+        "ctx_size": 200000,
+        "description": "OpenAI GPT-5.2 with temperature 0",
+        "provider": "openai"
+    },
 }
 
 # Agent-Typen

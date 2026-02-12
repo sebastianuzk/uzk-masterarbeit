@@ -93,7 +93,10 @@ def create_llm(
             openai_kwargs["base_url"] = settings.OPENAI_BASE_URL
         
         logger.info(f"Creating ChatOpenAI with model: {_model} (temperature={_temperature})")
-        return ChatOpenAI(**openai_kwargs)
+        logger.info(f"OpenAI kwargs: {openai_kwargs}")
+        llm_instance = ChatOpenAI(**openai_kwargs)
+        logger.info(f"Created ChatOpenAI instance with temperature: {getattr(llm_instance, 'temperature', 'N/A')}")
+        return llm_instance
     
     else:  # Ollama (default)
         _model = model or settings.OLLAMA_MODEL
