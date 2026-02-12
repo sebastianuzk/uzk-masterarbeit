@@ -422,7 +422,7 @@ def run_ragas_evaluation(
         from config.settings import settings
         llm = ChatOpenAI(
             model=final_judge_model,
-            temperature=0.0,
+            temperature=settings.TEMPERATURE,
             api_key=settings.OPENAI_API_KEY,
             max_retries=3
         )
@@ -431,7 +431,7 @@ def run_ragas_evaluation(
         llm = ChatOllama(
             model=final_judge_model,
             base_url=OLLAMA_BASE_URL,
-            temperature=0.0
+            temperature=settings.TEMPERATURE
         )
     
     # Ollama Embeddings für answer_relevancy (später aktivieren)

@@ -57,59 +57,8 @@ logger = get_logger(__name__)
 # Verfügbare LLM-Provider
 LLM_PROVIDERS = ["ollama", "openai"]
 
-# Verfügbare Modelle für Evaluation (nach Provider gruppiert)
-AVAILABLE_MODELS = {
-    # Ollama-Modelle
-    "llama3.1:8b": {
-        "name": "LLaMA 3.1 8B",
-        "ctx_size": 8192,
-        "description": "Meta's LLaMA 3.1 mit 8B Parametern",
-        "provider": "ollama"
-    },
-    "gpt-oss:20b": {
-        "name": "GPT-OSS 20B", 
-        "ctx_size": 16384,
-        "description": "Open-Source GPT-Variante mit 20B Parametern",
-        "provider": "ollama"
-    },
-    # OpenAI-Modelle
-    "gpt-4o": {
-        "name": "GPT-4o",
-        "ctx_size": 128000,
-        "description": "OpenAI GPT-4o (multimodal, schnell)",
-        "provider": "openai"
-    },
-    "gpt-4o-mini": {
-        "name": "GPT-4o Mini",
-        "ctx_size": 128000,
-        "description": "OpenAI GPT-4o Mini (kosteneffizient)",
-        "provider": "openai"
-    },
-    "gpt-4-turbo": {
-        "name": "GPT-4 Turbo",
-        "ctx_size": 128000,
-        "description": "OpenAI GPT-4 Turbo",
-        "provider": "openai"
-    },
-    "gpt-3.5-turbo": {
-        "name": "GPT-3.5 Turbo",
-        "ctx_size": 16385,
-        "description": "OpenAI GPT-3.5 Turbo (günstig)",
-        "provider": "openai"
-    },
-    "gpt-5": {
-        "name": "GPT-5",
-        "ctx_size": 200000,
-        "description": "OpenAI GPT-5 (latest)",
-        "provider": "openai"
-    },
-    "gpt-5.2": {
-        "name": "GPT-5.2",
-        "ctx_size": 200000,
-        "description": "OpenAI GPT-5.2 with temperature 0",
-        "provider": "openai"
-    },
-}
+# Verfügbare Modelle: zentral definiert in config/settings.py
+from config.settings import AVAILABLE_MODELS
 
 # Agent-Typen
 AGENT_TYPES = ["single", "multi", "constrained", "confirmation"]

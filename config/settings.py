@@ -45,7 +45,7 @@ class Settings:
     SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "BAAI/bge-m3")
     
     # LLM Konfiguration
-    TEMPERATURE = 0.0
+    TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
     
     # Agent Konfiguration
     MAX_ITERATIONS = 10
@@ -53,13 +53,13 @@ class Settings:
     
     # Recursion Limits für verschiedene Agent-Typen
     # Alle Agenten nutzen ein gemeinsames Standard-Limit mit optionalen Overrides
-    DEFAULT_RECURSION_LIMIT = int(os.getenv("DEFAULT_RECURSION_LIMIT", "25"))
+    DEFAULT_RECURSION_LIMIT = _safe_int(os.getenv("DEFAULT_RECURSION_LIMIT"), 25)
     
     RECURSION_LIMITS = {
-        "single": int(os.getenv("AGENT_RECURSION_LIMIT", str(DEFAULT_RECURSION_LIMIT))),
-        "multi": int(os.getenv("MULTI_AGENT_RECURSION_LIMIT", str(DEFAULT_RECURSION_LIMIT))),
-        "confirmation": int(os.getenv("CONFIRMATION_AGENT_RECURSION_LIMIT", str(DEFAULT_RECURSION_LIMIT))),
-        "constrained": int(os.getenv("CONSTRAINED_AGENT_RECURSION_LIMIT", str(DEFAULT_RECURSION_LIMIT))),
+        "single": _safe_int(os.getenv("AGENT_RECURSION_LIMIT"), DEFAULT_RECURSION_LIMIT),
+        "multi": _safe_int(os.getenv("MULTI_AGENT_RECURSION_LIMIT"), DEFAULT_RECURSION_LIMIT),
+        "confirmation": _safe_int(os.getenv("CONFIRMATION_AGENT_RECURSION_LIMIT"), DEFAULT_RECURSION_LIMIT),
+        "constrained": _safe_int(os.getenv("CONSTRAINED_AGENT_RECURSION_LIMIT"), DEFAULT_RECURSION_LIMIT),
     }
     
     # Backward compatibility - deprecated, use RECURSION_LIMITS instead
@@ -76,7 +76,7 @@ class Settings:
     
     # E-Mail-Konfiguration
     SMTP_SERVER = os.getenv("SMTP_SERVER")
-    SMTP_PORT = int(os.getenv("SMTP_PORT"))
+    SMTP_PORT = _safe_int(os.getenv("SMTP_PORT"), 587)
     SMTP_USERNAME = os.getenv("SMTP_USERNAME")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
     DEFAULT_RECIPIENT = os.getenv("DEFAULT_RECIPIENT")
@@ -88,7 +88,7 @@ class Settings:
     # LangSmith Tracing Konfiguration
     LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
     LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT")
-    LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING", "false").lower() == "true"
+    LANGSMITH_TRACING = _str_to_bool(os.getenv("LANGSMITH_TRACING", "false"))
     
     @classmethod
     def validate(cls):
@@ -162,3 +162,6 @@ SMTP_PORT = settings.SMTP_PORT
 SMTP_USERNAME = settings.SMTP_USERNAME
 SMTP_PASSWORD = settings.SMTP_PASSWORD
 DEFAULT_RECIPIENT = settings.DEFAULT_RECIPIENT
+
+# Modell-Konfiguration Export (bereits auf Modul-Ebene definiert)
+# AVAILABLE_MODELS ist direkt importierbar: from config.settings import AVAILABLE_MODELS

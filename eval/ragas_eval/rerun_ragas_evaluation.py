@@ -112,7 +112,7 @@ def run_ragas_evaluation(
     if judge_provider == 'openai':
         llm = ChatOpenAI(
             model=judge_model,
-            temperature=0.0,
+            temperature=settings.TEMPERATURE,
             api_key=settings.OPENAI_API_KEY,
             max_retries=3
         )
@@ -120,7 +120,7 @@ def run_ragas_evaluation(
         llm = ChatOllama(
             model=judge_model,
             base_url=settings.OLLAMA_BASE_URL,
-            temperature=0.0
+            temperature=settings.TEMPERATURE
         )
     
     # RAGAS metrics (using deprecated imports until collections API stabilizes)

@@ -4,9 +4,12 @@ Centralized LLM Factory for all agent types.
 Provides unified LLM creation supporting both Ollama and OpenAI providers.
 Eliminates code duplication across agent implementations.
 """
+from __future__ import annotations
+
 from typing import Optional, Union
 
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
 from config.logging_config import get_logger
 from config.settings import settings
@@ -48,7 +51,7 @@ def create_llm(
     temperature: Optional[float] = None,
     timeout: Optional[int] = None,
     json_mode: bool = False,
-) -> Union[ChatOllama, "ChatOpenAI"]:
+) -> Union[ChatOllama, ChatOpenAI]:
     """
     Create an LLM instance based on the provider.
     
@@ -73,8 +76,6 @@ def create_llm(
     _timeout = timeout or settings.REQUEST_TIMEOUT
     
     if _provider == "openai":
-        from langchain_openai import ChatOpenAI
-        
         _model = model or settings.OPENAI_MODEL
         
         if not settings.OPENAI_API_KEY:
@@ -84,19 +85,14 @@ def create_llm(
             "model": _model,
             "temperature": _temperature,
             "timeout": _timeout,
+            "api_key": settings.OPENAI_API_KEY,
         }
-        
-        if settings.OPENAI_API_KEY:
-            openai_kwargs["api_key"] = settings.OPENAI_API_KEY
         
         if settings.OPENAI_BASE_URL:
             openai_kwargs["base_url"] = settings.OPENAI_BASE_URL
         
         logger.info(f"Creating ChatOpenAI with model: {_model} (temperature={_temperature})")
-        logger.info(f"OpenAI kwargs: {openai_kwargs}")
-        llm_instance = ChatOpenAI(**openai_kwargs)
-        logger.info(f"Created ChatOpenAI instance with temperature: {getattr(llm_instance, 'temperature', 'N/A')}")
-        return llm_instance
+        return ChatOpenAI(**openai_kwargs)
     
     else:  # Ollama (default)
         _model = model or settings.OLLAMA_MODEL
@@ -122,7 +118,7 @@ def create_llm(
 def create_json_llm(
     provider: Optional[str] = None,
     model: Optional[str] = None,
-) -> Union[ChatOllama, "ChatOpenAI"]:
+) -> Union[ChatOllama, ChatOpenAI]:
     """
     Create an LLM configured for JSON output.
     

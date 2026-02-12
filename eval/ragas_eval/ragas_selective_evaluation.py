@@ -34,7 +34,8 @@ from config.settings import (
     OLLAMA_BASE_URL,
     LANGSMITH_API_KEY,
     LANGSMITH_PROJECT,
-    RAGAS_JUDGE_MODEL
+    RAGAS_JUDGE_MODEL,
+    TEMPERATURE,
 )
 from src.agent.react_agent import create_react_agent
 
@@ -235,7 +236,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset, model: str = None) -> pd.Da
     llm = ChatOllama(
         model=RAGAS_JUDGE_MODEL,
         base_url=OLLAMA_BASE_URL,
-        temperature=0.0
+        temperature=TEMPERATURE
     )
     
     metrics = [
