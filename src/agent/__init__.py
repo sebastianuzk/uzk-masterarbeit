@@ -32,10 +32,14 @@ Verwendung:
 from enum import Enum
 from typing import Union
 
+from config.logging_config import get_logger
+
 from .react_agent import ReactAgent, create_react_agent
 from .multi import MultiAgentSystem, create_multi_agent_system
 from .confirmation import ConfirmationAgent, create_confirmation_agent
 from .constrained import ConstrainedAgent, create_constrained_agent
+
+logger = get_logger(__name__)
 
 
 class AgentMode(str, Enum):
@@ -64,16 +68,16 @@ def create_agent(mode: Union[str, AgentMode] = AgentMode.SINGLE):
         mode = mode.lower()
     
     if mode in (AgentMode.SINGLE, "single"):
-        print("🤖 Starte Single-Agent Modus")
+        logger.info("Starting Single-Agent mode")
         return create_react_agent()
     elif mode in (AgentMode.MULTI, "multi"):
-        print("🎭 Starte Multi-Agent Modus")
+        logger.info("Starting Multi-Agent mode")
         return create_multi_agent_system()
     elif mode in (AgentMode.CONFIRMATION, "confirmation"):
-        print("🔒 Starte Confirmation-Agent Modus")
+        logger.info("Starting Confirmation-Agent mode")
         return create_confirmation_agent()
     elif mode in (AgentMode.CONSTRAINED, "constrained"):
-        print("📐 Starte Constrained-Agent Modus")
+        logger.info("Starting Constrained-Agent mode")
         return create_constrained_agent()
     else:
         raise ValueError(

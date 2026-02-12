@@ -18,19 +18,19 @@ Kritische Tools, die Bestätigung erfordern:
 - send_email: E-Mail-Versand
 """
 
-import os
-import uuid
 import re
 import json
-import logging
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
-from langchain_ollama import ChatOllama
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
 
+from config.logging_config import get_logger
 from config.settings import settings
+from src.agent.agent_config import setup_langsmith_tracing, get_recursion_limit
+from src.agent.llm_factory import create_llm
+from src.agent.tool_loader import load_tool_safely, load_tools_batch, load_klips_tools
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.email_tool import create_email_tool
 from src.tools.klips import (
@@ -45,7 +45,7 @@ from src.tools.web_scraper_tool import create_web_scraper_tool
 
 
 # Logger für Confirmation Agent
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # Tools die eine Bestätigung vor der Ausführung erfordern
@@ -160,40 +160,12 @@ class ConfirmationAgent:
         settings.validate()
         
         # LangSmith Tracing konfigurieren (falls aktiviert)
-        if settings.LANGSMITH_TRACING and settings.LANGSMITH_API_KEY:
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"
-            os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
-            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-            os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
-            print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
+        setup_langsmith_tracing()
         
-        # Context-Size nach Modellgröße
-        MODEL_CTX_SIZES = {
-            "0.5b": 2048,
-            "1b": 4096,
-            "3b": 8192,
-            "8b": 8192,
-            "20b": 16384,
-            "70b": 16384,
-        }
+        # LLM initialisieren mit zentraler Factory
+        self.llm = create_llm(verbose=True)
         
-        model_lower = settings.OLLAMA_MODEL.lower()
-        ctx_size = 8192
-        for size_key, ctx_value in MODEL_CTX_SIZES.items():
-            if size_key in model_lower:
-                ctx_size = ctx_value
-                break
-        
-        print(f"🔒 Initialisiere Confirmation Agent mit Modell: {settings.OLLAMA_MODEL} (ctx_size={ctx_size})")
-        
-        self.llm = ChatOllama(
-            model=settings.OLLAMA_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=settings.TEMPERATURE,
-            num_ctx=ctx_size,
-            timeout=settings.REQUEST_TIMEOUT,
-            keep_alive=settings.OLLAMA_KEEP_ALIVE,
-        )
+        logger.info(f"🔒 Initialisiere Confirmation Agent mit Modell: {settings.OLLAMA_MODEL}")
         
         # Tools initialisieren
         self.tools = self._create_tools()
@@ -211,8 +183,8 @@ class ConfirmationAgent:
             self.wrapped_tools
         )
         
-        # Recursion Limit
-        self.recursion_limit = getattr(settings, 'CONFIRMATION_AGENT_RECURSION_LIMIT', 25)
+        # Recursion Limit from centralized config
+        self.recursion_limit = get_recursion_limit("confirmation")
         
         # Memory
         self.memory = []
@@ -227,40 +199,30 @@ class ConfirmationAgent:
         """Erstelle Liste der verfügbaren Tools."""
         tools = []
         
-        # Debug: Print actual flag values
-        print(f"  🔍 DEBUG Tool Flags: WEB={settings.ENABLE_WEB_SCRAPER}, DDG={settings.ENABLE_DUCKDUCKGO}, EMAIL={settings.ENABLE_EMAIL}, KLIPS={settings.ENABLE_KLIPS}")
+        logger.debug(f"Tool Flags: WEB={settings.ENABLE_WEB_SCRAPER}, DDG={settings.ENABLE_DUCKDUCKGO}, EMAIL={settings.ENABLE_EMAIL}, KLIPS={settings.ENABLE_KLIPS}")
         
         if settings.ENABLE_WEB_SCRAPER:
-            tools.append(create_web_scraper_tool())
+            web_tool = load_tool_safely(create_web_scraper_tool, "Web-Scraper")
+            if web_tool:
+                tools.append(web_tool)
         
         if settings.ENABLE_DUCKDUCKGO:
-            tools.append(create_duckduckgo_tool())
+            ddg_tool = load_tool_safely(create_duckduckgo_tool, "DuckDuckGo")
+            if ddg_tool:
+                tools.append(ddg_tool)
         
-        try:
-            rag_tool = create_university_rag_tool()
+        rag_tool = load_tool_safely(create_university_rag_tool, "Universitäts-RAG")
+        if rag_tool:
             tools.append(rag_tool)
-            print("  ✅ Universitäts-RAG-Tool geladen")
-        except Exception as e:
-            print(f"  ⚠️ RAG-Tool konnte nicht geladen werden: {e}")
         
         if settings.ENABLE_EMAIL:
-            try:
-                email_tool = create_email_tool()
+            email_tool = load_tool_safely(create_email_tool, "E-Mail")
+            if email_tool:
                 tools.append(email_tool)
-                print("  ✅ E-Mail-Tool geladen")
-            except Exception as e:
-                print(f"  ⚠️ E-Mail-Tool konnte nicht geladen werden: {e}")
         
         if settings.ENABLE_KLIPS:
-            try:
-                tools.append(create_klips2_register_tool())
-                tools.append(create_klips2_apply_tool())
-                tools.append(create_klips2_change_password_tool())
-                tools.append(create_klips2_get_course_details_tool())
-                tools.append(create_klips2_change_address_tool())
-                print("  ✅ KLIPS2-Tools geladen")
-            except Exception as e:
-                print(f"  ⚠️ KLIPS2-Tools konnten nicht geladen werden: {e}")
+            klips_tools = load_klips_tools()
+            tools.extend(klips_tools)
         
         return tools
     
@@ -303,8 +265,7 @@ class ConfirmationAgent:
             if validation_result["confirmed"]:
                 # 2. Bei erfolgreicher Validierung: Tool ausführen
                 agent_ref.confirmed_count += 1
-                logger.info(f"Tool '{tool_name}' bestätigt und wird ausgeführt")
-                print(f"  ✅ Bestätigt: {tool_name}")
+                logger.info(f"✅ Tool '{tool_name}' bestätigt und wird ausgeführt")
                 
                 try:
                     result = original_tool.invoke(kwargs)
@@ -328,8 +289,7 @@ class ConfirmationAgent:
             else:
                 # 3. Bei fehlgeschlagener Validierung: Fehler zurückgeben
                 agent_ref.rejected_count += 1
-                logger.warning(f"Tool '{tool_name}' abgelehnt: {validation_result['reason']}")
-                print(f"  ❌ Abgelehnt: {tool_name} - {validation_result['reason']}")
+                logger.warning(f"❌ Tool '{tool_name}' abgelehnt: {validation_result['reason']}")
                 
                 return (
                     f"⚠️ Validierung fehlgeschlagen für {tool_config['description']}:\n"
@@ -767,16 +727,14 @@ Wenn satisfactory=false, beschreibe WIE die Antwort verbessert werden sollte."""
                 
                 # Wenn zufrieden: Fertig
                 if reflection.get("satisfactory", False):
-                    logger.info(f"Self-Reflection: Antwort nach {iteration + 1} Iteration(en) akzeptiert")
-                    print(f"  ✅ Self-Reflection: Antwort OK (Iteration {iteration + 1})")
+                    logger.info(f"✅ Self-Reflection: Antwort nach {iteration + 1} Iteration(en) akzeptiert")
                     break
                 
                 # Wenn nicht zufrieden: Überarbeite
                 issues = reflection.get("issues", [])
                 suggestion = reflection.get("suggestion", "")
                 
-                logger.info(f"Self-Reflection: Antwort unzureichend. Issues: {issues}")
-                print(f"  🔄 Self-Reflection: Überarbeite Antwort (Iteration {iteration + 1})")
+                logger.info(f"🔄 Self-Reflection: Überarbeite Antwort (Iteration {iteration + 1}). Issues: {issues}")
                 
                 # Generiere verbesserte Antwort
                 improvement_prompt = f"""Die folgende Antwort ist nicht gut genug. Verbessere sie.

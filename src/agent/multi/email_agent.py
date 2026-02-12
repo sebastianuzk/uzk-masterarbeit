@@ -12,9 +12,14 @@ from typing import List, Optional
 from langchain_core.tools import BaseTool
 from langchain_ollama import ChatOllama
 
+from config.logging_config import get_logger
+from config.settings import settings
+from src.agent.tool_loader import load_tool_safely
 from src.tools.email_tool import create_email_tool
 
 from .base_agent import BaseSpecializedAgent
+
+logger = get_logger(__name__)
 
 
 class EmailAgent(BaseSpecializedAgent):
@@ -28,7 +33,7 @@ class EmailAgent(BaseSpecializedAgent):
     def __init__(self, shared_llm: Optional[ChatOllama] = None):
         """Initialisiere den Email-Agenten."""
         super().__init__(shared_llm)
-        print(f"✅ {self.name} initialisiert mit {len(self.tools)} Tools")
+        logger.info(f"✅ {self.name} initialisiert mit {len(self.tools)} Tools")
     
     @property
     def name(self) -> str:
@@ -49,13 +54,12 @@ class EmailAgent(BaseSpecializedAgent):
         tools = []
         
         if not settings.ENABLE_EMAIL:
+            logger.debug("E-Mail-Tool deaktiviert")
             return tools
         
-        try:
-            email_tool = create_email_tool()
+        email_tool = load_tool_safely(create_email_tool, "E-Mail")
+        if email_tool:
             tools.append(email_tool)
-        except Exception as e:
-            print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
         
         return tools
     

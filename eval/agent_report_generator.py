@@ -8,19 +8,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 
-
-def format_duration(seconds: float) -> str:
-    """Formatiert Sekunden als lesbare Dauer."""
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        return f"{minutes}m {secs}s"
-    else:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        return f"{hours}h {minutes}m"
+from eval.utils.formatting import format_duration
 
 
 def generate_agent_report(agent_dir: Path, results: Dict[str, Any], model: str, agent_type: str):

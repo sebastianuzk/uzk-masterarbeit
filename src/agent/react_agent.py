@@ -1,101 +1,25 @@
 """
 React Agent basierend auf LangGraph für autonomes Verhalten mit Ollama oder OpenAI
 """
-import os
 import uuid
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
-from langchain_ollama import ChatOllama
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
 
 from config.logging_config import get_logger
 from config.settings import settings
+from src.agent.agent_config import setup_langsmith_tracing, get_recursion_limit
+from src.agent.llm_factory import create_llm
 from src.agent.tool_specs import TOOL_SPECS
+from src.agent.tool_loader import load_tool_safely, load_klips_tools
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.email_tool import create_email_tool
-from src.tools.klips import (
-    create_klips2_register_tool,
-    create_klips2_apply_tool,
-    create_klips2_change_password_tool,
-    create_klips2_get_course_details_tool,
-    create_klips2_change_address_tool
-)
 from src.tools.rag_tool import create_university_rag_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
 
 logger = get_logger(__name__)
-
-
-def create_llm(provider: Optional[str] = None, model: Optional[str] = None):
-    """
-    Erstellt das passende LLM basierend auf dem Provider.
-    
-    Args:
-        provider: 'ollama' oder 'openai' (wenn None, aus settings.LLM_PROVIDER)
-        model: Modellname (wenn None, aus settings)
-        
-    Returns:
-        LangChain Chat-Modell (ChatOllama oder ChatOpenAI)
-    """
-    # Provider aus Settings oder Argument
-    _provider = provider or getattr(settings, 'LLM_PROVIDER', 'ollama')
-    
-    if _provider == "openai":
-        from langchain_openai import ChatOpenAI
-        
-        _model = model or settings.OPENAI_MODEL
-        
-        # OpenAI-Konfiguration
-        openai_kwargs = {
-            "model": _model,
-            "temperature": settings.TEMPERATURE,
-            "timeout": settings.REQUEST_TIMEOUT,
-        }
-        
-        # API-Key aus Settings oder Umgebung
-        if settings.OPENAI_API_KEY:
-            openai_kwargs["api_key"] = settings.OPENAI_API_KEY
-        
-        # Optional: Custom Base-URL für OpenAI-kompatible APIs
-        if settings.OPENAI_BASE_URL:
-            openai_kwargs["base_url"] = settings.OPENAI_BASE_URL
-        
-        logger.info(f"Initialisiere ChatOpenAI mit Modell: {_model} (temperature={openai_kwargs['temperature']})")
-        return ChatOpenAI(**openai_kwargs)
-    
-    else:
-        # Ollama (Standard)
-        _model = model or settings.OLLAMA_MODEL
-        
-        # Context-Size nach Modellgröße
-        MODEL_CTX_SIZES = {
-            "0.5b": 2048,
-            "1b": 4096,
-            "3b": 8192,
-            "8b": 8192,
-            "20b": 16384,
-            "70b": 16384,
-        }
-        
-        model_lower = _model.lower()
-        ctx_size = 8192
-        for size_key, ctx_value in MODEL_CTX_SIZES.items():
-            if size_key in model_lower:
-                ctx_size = ctx_value
-                break
-        
-        logger.info(f"Initialisiere ChatOllama mit Modell: {_model} (ctx_size={ctx_size}, temperature={settings.TEMPERATURE})")
-        
-        return ChatOllama(
-            model=_model,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=settings.TEMPERATURE,
-            num_ctx=ctx_size,
-            timeout=settings.REQUEST_TIMEOUT,
-            keep_alive=settings.OLLAMA_KEEP_ALIVE,
-        )
 
 
 # TOOL_SPECS werden jetzt aus src/agent/tool_specs.py importiert
@@ -109,12 +33,7 @@ class ReactAgent:
         settings.validate()
         
         # LangSmith Tracing konfigurieren (falls aktiviert)
-        if settings.LANGSMITH_TRACING and settings.LANGSMITH_API_KEY:
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"
-            os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
-            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-            os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
-            logger.info(f"LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
+        setup_langsmith_tracing()
         
         # Initialisiere LLM (Ollama oder OpenAI basierend auf settings.LLM_PROVIDER)
         self.llm = create_llm()
@@ -132,7 +51,7 @@ class ReactAgent:
         )
         
         # Konfiguriere Recursion Limit für Agent
-        self.recursion_limit = getattr(settings, 'AGENT_RECURSION_LIMIT', 25)
+        self.recursion_limit = get_recursion_limit("single")
         
         # Speichere System-Prompt als SystemMessage für Memory
         self.system_message = SystemMessage(content=system_prompt)
@@ -267,50 +186,40 @@ Antworte in der Sprache des Nutzers."""
         tools = []
         
         if settings.ENABLE_WEB_SCRAPER:
-            tools.append(create_web_scraper_tool())
+            tool = load_tool_safely(create_web_scraper_tool, "Web Scraper Tool")
+            if tool:
+                tools.append(tool)
         
         if settings.ENABLE_DUCKDUCKGO:
-            tools.append(create_duckduckgo_tool())
+            tool = load_tool_safely(create_duckduckgo_tool, "DuckDuckGo Tool")
+            if tool:
+                tools.append(tool)
         
         # RAG-Tool für Universitäts-Wissensdatenbank immer hinzufügen
-        try:
-            rag_tool = create_university_rag_tool()
+        rag_tool = load_tool_safely(
+            create_university_rag_tool, 
+            "Universitäts-RAG-Tool",
+            fallback_message="Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal"
+        )
+        if rag_tool:
             tools.append(rag_tool)
-            print("✅ Universitäts-RAG-Tool erfolgreich geladen")
-        except Exception as e:
-            print(f"⚠️  Universitäts-RAG-Tool konnte nicht geladen werden: {e}")
-            print("   → Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal")
         
         # E-Mail-Tool für Support-Eskalation
         if settings.ENABLE_EMAIL:
-            try:
-                email_tool = create_email_tool()
+            email_tool = load_tool_safely(
+                create_email_tool,
+                "E-Mail-Tool",
+                fallback_message="Support-Eskalation per E-Mail nicht verfügbar"
+            )
+            if email_tool:
                 tools.append(email_tool)
-                print("✅ E-Mail-Tool erfolgreich geladen")
-            except Exception as e:
-                print(f"⚠️  E-Mail-Tool konnte nicht geladen werden: {e}")
-                print("   → Support-Eskalation per E-Mail nicht verfügbar")
         
         # KLIPS2-Tools
         if settings.ENABLE_KLIPS:
-            try:
-                klips2_tool = create_klips2_register_tool()
-                tools.append(klips2_tool)
-                print("✅ KLIPS2-Registrierungs-Tool erfolgreich geladen")
-            except Exception as e:
-                print(f"⚠️  KLIPS2-Registrierungs-Tool konnte nicht geladen werden: {e}")
-                print("   → KLIPS2-Account-Erstellung nicht verfügbar")
-                
-            # KLIPS2-Erweiterte Tools hinzufügen
-            try:
-                tools.append(create_klips2_apply_tool())
-                tools.append(create_klips2_change_password_tool())
-                tools.append(create_klips2_get_course_details_tool())
-                tools.append(create_klips2_change_address_tool())
-                print("✅ KLIPS2-Erweiterte Tools erfolgreich geladen")
-            except Exception as e:
-                print(f"⚠️  KLIPS2-Erweiterte Tools konnten nicht geladen werden: {e}")
+            klips_tools = load_klips_tools()
+            tools.extend(klips_tools)
         
+        logger.info(f"ReactAgent initialized with {len(tools)} tools")
         return tools
     
     def chat(self, message: str, session_id: str = None) -> str:

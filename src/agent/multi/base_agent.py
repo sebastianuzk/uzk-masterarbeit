@@ -16,8 +16,11 @@ from langchain_core.tools import BaseTool
 from langchain_ollama import ChatOllama
 from langgraph.prebuilt import create_react_agent as create_langgraph_agent
 
-from config.settings import settings
-from src.agent.multi.llm_utils import create_llm
+from config.logging_config import get_logger
+from src.agent.agent_config import get_recursion_limit
+from src.agent.llm_factory import create_llm
+
+logger = get_logger(__name__)
 
 
 class BaseSpecializedAgent(ABC):
@@ -49,8 +52,8 @@ class BaseSpecializedAgent(ABC):
         # Agent mit LangGraph erstellen
         self.agent = create_langgraph_agent(self.llm, self.tools)
         
-        # Recursion Limit
-        self.recursion_limit = getattr(settings, 'MULTI_AGENT_RECURSION_LIMIT', 25)
+        # Recursion Limit from centralized config
+        self.recursion_limit = get_recursion_limit("multi")
         
         # Memory für Konversationshistorie (begrenzt)
         self.memory: List[Any] = []
@@ -58,6 +61,8 @@ class BaseSpecializedAgent(ABC):
         
         # Track last agent response for evaluation/debugging
         self.last_agent_response: Optional[Dict[str, Any]] = None
+        
+        logger.debug(f"Initialized {self.__class__.__name__} with {len(self.tools)} tools")
     
     @property
     @abstractmethod
@@ -141,6 +146,7 @@ class BaseSpecializedAgent(ABC):
             
         except Exception as e:
             error_msg = f"Fehler im {self.name}: {str(e)}"
+            logger.error(error_msg)
             return error_msg
     
     def get_tool_names(self) -> List[str]:
@@ -206,5 +212,5 @@ class BaseSpecializedAgent(ABC):
             return tool_calls
             
         except Exception as e:
-            print(f"Fehler bei Tool-Auswahl im {self.name}: {str(e)}")
+            logger.error(f"Fehler bei Tool-Auswahl im {self.name}: {str(e)}")
             return []

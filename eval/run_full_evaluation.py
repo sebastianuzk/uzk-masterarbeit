@@ -44,7 +44,11 @@ from typing import Optional, Dict, Any, List
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from config.logging_config import get_logger, setup_logging
 from config.settings import settings
+from eval.utils.formatting import format_duration
+
+logger = get_logger(__name__)
 
 # ============================================================================
 # KONFIGURATION
@@ -115,20 +119,6 @@ DEFAULT_TOOL_LIMIT = None  # Alle 100 Tool-Szenarien (None = alle)
 # ============================================================================
 # HILFSFUNKTIONEN
 # ============================================================================
-
-def format_duration(seconds: float) -> str:
-    """Formatiert Sekunden als lesbare Dauer."""
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        return f"{minutes}m {secs}s"
-    else:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        return f"{hours}h {minutes}m"
-
 
 def _generate_ragas_reports(
     results_df: pd.DataFrame,
@@ -467,6 +457,9 @@ def generate_combined_report(base_dir: Path, model: str) -> None:
         base_dir: Basis-Verzeichnis (z.B. llama3.1-8b/20260108_205727/)
         model: Modellname (z.B. "llama3.1:8b")
     """
+    logger.info("=" * 80)
+    logger.info("GENERIERE KOMBINIERTEN REPORT")
+    logger.info("=" * 80)
     print("\n" + "=" * 80)
     print("📊 GENERIERE KOMBINIERTEN REPORT")
     print("=" * 80)
@@ -483,11 +476,14 @@ def generate_combined_report(base_dir: Path, model: str) -> None:
             with open(summary_path, 'r') as f:
                 data = json.load(f)
                 agent_results.append(data)
+                logger.info(f"{agent_type}: Daten geladen")
                 print(f"   ✅ {agent_type}: Daten geladen")
         else:
+            logger.warning(f"{agent_type}: Keine Daten gefunden")
             print(f"   ⚠️  {agent_type}: Keine Daten gefunden")
     
     if not agent_results:
+        logger.error("Keine Evaluationsergebnisse gefunden!")
         print("   ❌ Keine Evaluationsergebnisse gefunden!")
         return
     
@@ -496,6 +492,7 @@ def generate_combined_report(base_dir: Path, model: str) -> None:
     md_path = base_dir / "evaluation_report.md"
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(md_content)
+    logger.info(f"Markdown: {md_path}")
     print(f"   ✅ Markdown: {md_path}")
     
     # Generiere HTML
@@ -503,8 +500,10 @@ def generate_combined_report(base_dir: Path, model: str) -> None:
     html_path = base_dir / "evaluation_report.html"
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
+    logger.info(f"HTML: {html_path}")
     print(f"   ✅ HTML: {html_path}")
     
+    logger.info("=" * 80)
     print("=" * 80)
 
 
@@ -1801,4 +1800,7 @@ Beispiele:
 
 
 if __name__ == "__main__":
+    # Logging einrichten
+    setup_logging(level="INFO")
+    
     main()

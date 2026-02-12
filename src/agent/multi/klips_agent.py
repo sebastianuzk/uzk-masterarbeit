@@ -14,6 +14,9 @@ from typing import List, Optional
 from langchain_core.tools import BaseTool
 from langchain_ollama import ChatOllama
 
+from config.logging_config import get_logger
+from config.settings import settings
+from src.agent.tool_loader import load_tools_batch
 from src.tools.klips import (
     create_klips2_register_tool,
     create_klips2_apply_tool,
@@ -23,6 +26,8 @@ from src.tools.klips import (
 )
 
 from .base_agent import BaseSpecializedAgent
+
+logger = get_logger(__name__)
 
 
 # ============================================================================
@@ -119,7 +124,7 @@ class KlipsAgent(BaseSpecializedAgent):
     def __init__(self, shared_llm: Optional[ChatOllama] = None):
         """Initialisiere den KLIPS-Agenten."""
         super().__init__(shared_llm)
-        print(f"✅ {self.name} initialisiert mit {len(self.tools)} Tools")
+        logger.info(f"✅ {self.name} initialisiert mit {len(self.tools)} Tools")
     
     @property
     def name(self) -> str:
@@ -136,10 +141,9 @@ class KlipsAgent(BaseSpecializedAgent):
     
     def _create_tools(self) -> List[BaseTool]:
         """Erstelle alle KLIPS2-Tools."""
-        tools = []
-        
         if not settings.ENABLE_KLIPS:
-            return tools
+            logger.debug("KLIPS-Tools deaktiviert")
+            return []
         
         tool_creators = [
             ("KLIPS2-Registrierung", create_klips2_register_tool),
@@ -149,14 +153,7 @@ class KlipsAgent(BaseSpecializedAgent):
             ("KLIPS2-Adresse", create_klips2_change_address_tool),
         ]
         
-        for name, creator in tool_creators:
-            try:
-                tool = creator()
-                tools.append(tool)
-            except Exception as e:
-                print(f"⚠️  {name}-Tool konnte nicht geladen werden: {e}")
-        
-        return tools
+        return load_tools_batch(tool_creators)
     
     def _get_system_prompt(self) -> str:
         """Erstelle den System-Prompt für den KLIPS-Agenten."""

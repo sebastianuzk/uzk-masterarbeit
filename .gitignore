@@ -94,6 +94,10 @@ eval/ragas/data/responses_checkpoint.pkl
 eval/ragas_eval/data/*_checkpoint.*
 data/checkpoints/
 
+# Old/Duplicate Evaluation Directories
+eval/ragas/
+eval_old/
+
 # IPython
 profile_default/
 ipython_config.py

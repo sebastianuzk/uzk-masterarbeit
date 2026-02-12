@@ -17,21 +17,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-
-def format_duration(seconds: float) -> str:
-    """Formatiert Sekunden als lesbare Dauer."""
-    if seconds < 1:
-        return f"{seconds*1000:.0f}ms"
-    elif seconds < 60:
-        return f"{seconds:.1f}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        return f"{minutes}m {secs}s"
-    else:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        return f"{hours}h {minutes}m"
+from eval.utils.formatting import format_duration
 
 
 def analyze_negative_tests(results: List[Dict]) -> Dict[str, Any]:

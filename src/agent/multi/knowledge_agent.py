@@ -12,12 +12,16 @@ from typing import List, Optional
 from langchain_core.tools import BaseTool
 from langchain_ollama import ChatOllama
 
+from config.logging_config import get_logger
 from config.settings import settings
+from src.agent.tool_loader import load_tool_safely
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.rag_tool import create_university_rag_tool
 from src.tools.web_scraper_tool import create_web_scraper_tool
 
 from .base_agent import BaseSpecializedAgent
+
+logger = get_logger(__name__)
 
 
 class KnowledgeAgent(BaseSpecializedAgent):
@@ -32,7 +36,7 @@ class KnowledgeAgent(BaseSpecializedAgent):
     def __init__(self, shared_llm: Optional[ChatOllama] = None):
         """Initialisiere den Knowledge-Agenten."""
         super().__init__(shared_llm)
-        print(f"✅ {self.name} initialisiert mit {len(self.tools)} Tools")
+        logger.info(f"✅ {self.name} initialisiert mit {len(self.tools)} Tools")
     
     @property
     def name(self) -> str:
@@ -54,34 +58,25 @@ class KnowledgeAgent(BaseSpecializedAgent):
         tools = []
         
         # RAG-Tool für Universitäts-Wissensdatenbank (immer geladen)
-        try:
-            rag_tool = create_university_rag_tool()
+        rag_tool = load_tool_safely(create_university_rag_tool, "Universitäts-RAG")
+        if rag_tool:
             tools.append(rag_tool)
-            print("  ✅ Universitäts-RAG-Tool geladen")
-        except Exception as e:
-            print(f"  ⚠️  RAG-Tool konnte nicht geladen werden: {e}")
         
         # DuckDuckGo-Suche (nur wenn aktiviert)
         if settings.ENABLE_DUCKDUCKGO:
-            try:
-                ddg_tool = create_duckduckgo_tool()
+            ddg_tool = load_tool_safely(create_duckduckgo_tool, "DuckDuckGo")
+            if ddg_tool:
                 tools.append(ddg_tool)
-                print("  ✅ DuckDuckGo-Tool geladen")
-            except Exception as e:
-                print(f"  ⚠️  DuckDuckGo-Tool konnte nicht geladen werden: {e}")
         else:
-            print("  ⏭️  DuckDuckGo-Tool deaktiviert (RAG-Evaluation-Modus)")
+            logger.debug("DuckDuckGo-Tool deaktiviert (RAG-Evaluation-Modus)")
         
         # Web-Scraper (nur wenn aktiviert)
         if settings.ENABLE_WEB_SCRAPER:
-            try:
-                scraper_tool = create_web_scraper_tool()
+            scraper_tool = load_tool_safely(create_web_scraper_tool, "Web-Scraper")
+            if scraper_tool:
                 tools.append(scraper_tool)
-                print("  ✅ Web-Scraper-Tool geladen")
-            except Exception as e:
-                print(f"  ⚠️  Web-Scraper-Tool konnte nicht geladen werden: {e}")
         else:
-            print("  ⏭️  Web-Scraper-Tool deaktiviert (RAG-Evaluation-Modus)")
+            logger.debug("Web-Scraper-Tool deaktiviert (RAG-Evaluation-Modus)")
         
         return tools
     

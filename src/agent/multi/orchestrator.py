@@ -23,13 +23,17 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from pydantic import BaseModel, Field
 
+from config.logging_config import get_logger
 from config.settings import settings
+from src.agent.agent_config import setup_langsmith_tracing
+from src.agent.llm_factory import create_llm, create_json_llm
 
 from .base_agent import BaseSpecializedAgent
 from .klips_agent import KlipsAgent
 from .email_agent import EmailAgent
 from .knowledge_agent import KnowledgeAgent
-from .llm_utils import create_llm
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -136,7 +140,7 @@ class OrchestratorAgent:
             use_adaptive_routing: Nutze modell-abhängige Routing-Strategien
             force_llm_routing: Erzwinge LLM-Routing (keine Keywords) für Evaluation-Konsistenz
         """
-        print("🎭 Initialisiere Multi-Agent Orchestrator (Enhanced)...")
+        logger.info("🎭 Initialisiere Multi-Agent Orchestrator (Enhanced)...")
         
         # Validiere Einstellungen
         settings.validate()
@@ -155,12 +159,7 @@ class OrchestratorAgent:
         self.force_llm_routing = force_llm_routing
         
         # LangSmith Tracing konfigurieren (falls aktiviert)
-        if settings.LANGSMITH_TRACING and settings.LANGSMITH_API_KEY:
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"
-            os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT
-            os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-            os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
-            print(f"✅ LangSmith-Tracing aktiviert für Projekt: {settings.LANGSMITH_PROJECT}")
+        setup_langsmith_tracing()
         
         # Shared LLM für alle Agenten (Ressourceneffizienz)
         self.shared_llm = create_llm(verbose=True)
@@ -173,15 +172,7 @@ class OrchestratorAgent:
         self.routing_llm = self.shared_llm
         
         # JSON LLM für strukturierte Outputs (Multi-Step Detection, Decomposition)
-        self.json_llm = ChatOllama(
-            model=settings.OLLAMA_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=0.1,  # Niedrig für konsistente JSON-Ausgaben
-            num_ctx=4096,
-            timeout=settings.REQUEST_TIMEOUT,
-            keep_alive=settings.OLLAMA_KEEP_ALIVE,
-            format="json",  # Erzwingt JSON-Ausgabe
-        )
+        self.json_llm = create_json_llm()
         
         # Memory für Konversationshistorie
         self.memory: List[Any] = []
@@ -191,13 +182,13 @@ class OrchestratorAgent:
         if self.force_llm_routing:
             # Override strategy when forcing LLM routing
             self.routing_strategy = 'llm_only'
-            print(f"🎯 Routing-Modus: LLM-only (keine Keywords) für Evaluation-Konsistenz")
+            logger.info("🎯 Routing-Modus: LLM-only (keine Keywords) für Evaluation-Konsistenz")
         else:
             self.routing_strategy = self._determine_routing_strategy()
         
-        print(f"🎭 Orchestrator bereit mit {len(self.agents)} spezialisierten Agenten")
-        print(f"   ✅ State Management aktiviert")
-        print(f"   ✅ Confidence Threshold: {self.confidence_threshold}")
+        logger.info(f"🎭 Orchestrator bereit mit {len(self.agents)} spezialisierten Agenten")
+        logger.debug(f"   ✅ State Management aktiviert")
+        logger.debug(f"   ✅ Confidence Threshold: {self.confidence_threshold}")
     
     def _initialize_agents(self) -> None:
         """Initialisiere alle spezialisierten Agenten."""
@@ -217,14 +208,14 @@ class OrchestratorAgent:
         
         # Nur Knowledge Agent im RAG-Only Modus
         if not settings.ENABLE_KLIPS and not settings.ENABLE_EMAIL:
-            print("🎯 RAG-Evaluation-Modus: Nur Wissens-Agent aktiv")
+            logger.info("🎯 RAG-Evaluation-Modus: Nur Wissens-Agent aktiv")
         
         for agent_class in agent_classes:
             try:
                 agent = agent_class(shared_llm=self.shared_llm)
                 self.agents[agent.name] = agent
             except Exception as e:
-                print(f"⚠️  Fehler beim Initialisieren von {agent_class.__name__}: {e}")
+                logger.error(f"Fehler beim Initialisieren von {agent_class.__name__}: {e}")
     
     def _determine_routing_strategy(self) -> str:
         """
@@ -253,7 +244,7 @@ class OrchestratorAgent:
             # Default: hybrid for unknown models
             strategy = 'hybrid'
         
-        print(f"🎯 Routing-Strategie: {strategy} (Modell: {model_name})")
+        logger.debug(f"🎯 Routing-Strategie: {strategy} (Modell: {model_name})")
         return strategy
     
     def _get_routing_prompt(self) -> str:
@@ -414,7 +405,7 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
         # Versuche erst schnelles Keyword-Routing
         pre_route = self._keyword_pre_route(message)
         if pre_route:
-            print(f"⚡ Pre-Routing: {pre_route.agent_name} (confidence={pre_route.confidence:.2f})")
+            logger.debug(f"⚡ Pre-Routing: {pre_route.agent_name} (confidence={pre_route.confidence:.2f})")
             return pre_route
         
         routing_prompt = self._get_routing_prompt()
@@ -441,7 +432,7 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
             agent_name = decision_data.get("agent_name", "")
             if agent_name not in self.agents:
                 # Fallback auf Wissens-Agent
-                print(f"⚠️  Unbekannter Agent '{agent_name}', Fallback auf Wissens-Agent")
+                logger.warning(f"Unbekannter Agent '{agent_name}', Fallback auf Wissens-Agent")
                 agent_name = "Wissens-Agent"
             
             # Confidence Score
@@ -461,13 +452,13 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
             
             # Check confidence and warn if low
             if confidence < self.confidence_threshold:
-                print(f"⚠️  Niedrige Confidence ({confidence:.2f}), Fallback: {fallback_agent}")
+                logger.warning(f"Niedrige Confidence ({confidence:.2f}), Fallback: {fallback_agent}")
             
             return decision
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             # Fallback: Wissens-Agent bei Parse-Fehler
-            print(f"⚠️  Routing-Parse-Fehler: {e}, Fallback auf Wissens-Agent")
+            logger.warning(f"Routing-Parse-Fehler: {e}, Fallback auf Wissens-Agent")
             return RoutingDecision(
                 agent_name="Wissens-Agent",
                 confidence=0.5,  # Niedrige Confidence bei Fehler
@@ -494,7 +485,7 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
         
         # Einfacher String-Match
         if any(ind in msg_lower for ind in simple_indicators):
-            print(f"📋 Multi-Step erkannt (Keyword-Match)")
+            logger.debug("Multi-Step erkannt (Keyword-Match)")
             return True
         
         # Regex für komplexere Muster
@@ -508,7 +499,7 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
         
         for pattern in regex_patterns:
             if re.search(pattern, msg_lower):
-                print(f"📋 Multi-Step erkannt (Pattern: {pattern})")
+                logger.debug(f"Multi-Step erkannt (Pattern: {pattern})")
                 return True
         
         return False
@@ -548,11 +539,11 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
             steps = data.get("steps", [])
             
             if len(steps) >= 2:
-                print(f"📋 Query in {len(steps)} Schritte zerlegt (LLM-Analyse)")
+                logger.debug(f"Query in {len(steps)} Schritte zerlegt (LLM-Analyse)")
                 return steps
             
         except Exception as e:
-            print(f"⚠️ LLM Decomposition fehlgeschlagen ({e}), nutze Regex-Fallback")
+            logger.warning(f"LLM Decomposition fehlgeschlagen ({e}), nutze Regex-Fallback")
         
         # Fallback: Regex-basierte Zerlegung
         import re
@@ -574,7 +565,7 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
                     step2 = message[pos + len(keyword):].strip()
                     if step1 and step2:
                         steps = [step1, step2]
-                        print(f"📋 Query in {len(steps)} Schritte zerlegt (Regex-Fallback)")
+                        logger.debug(f"Query in {len(steps)} Schritte zerlegt (Regex-Fallback)")
                         return steps
         
         # Strategie 2: Multiple "und" mit verschiedenen Verben
@@ -591,7 +582,7 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
                     steps.append(step)
             
             if len(steps) >= 2:
-                print(f"📋 Query in {len(steps)} Schritte zerlegt (Regex-Multi-Verb)")
+                logger.debug(f"Query in {len(steps)} Schritte zerlegt (Regex-Multi-Verb)")
                 return steps
         
         # Strategie 3: Zwei verschiedene Aktionsverben
@@ -602,11 +593,11 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
             step2 = message[match2.start(3):match2.end(4)].strip()
             if step1 and step2:
                 steps = [step1, step2]
-                print(f"📋 Query in {len(steps)} Schritte zerlegt (Regex-Zwei-Verb)")
+                logger.debug(f"Query in {len(steps)} Schritte zerlegt (Regex-Zwei-Verb)")
                 return steps
         
         # Final Fallback: Original-Nachricht
-        print(f"⚠️ Konnte Query nicht zerlegen, verwende Original")
+        logger.warning("Konnte Query nicht zerlegen, verwende Original")
         return [message]
     
     def process(self, message: str, session_id: Optional[str] = None) -> str:
@@ -635,20 +626,20 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
                 steps = self._decompose_query(message)
                 
                 if len(steps) > 1:
-                    print(f"🔄 Multi-Step-Workflow: {len(steps)} Schritte")
+                    logger.info(f"🔄 Multi-Step-Workflow: {len(steps)} Schritte")
                     step_results = []
                     
                     for i, step in enumerate(steps, 1):
-                        print(f"\n--- Schritt {i}/{len(steps)}: {step[:50]}...")
+                        logger.debug(f"--- Schritt {i}/{len(steps)}: {step[:50]}...")
                         
                         # Route für diesen Schritt
                         routing = self._route_query(step)
-                        print(f"🎯 Routing zu: {routing.agent_name}")
+                        logger.debug(f"🎯 Routing zu: {routing.agent_name}")
                         
                         # Führe Schritt aus
                         agent = self.agents.get(routing.agent_name)
                         if not agent:
-                            print(f"⚠️ Agent nicht gefunden: {routing.agent_name}")
+                            logger.warning(f"Agent nicht gefunden: {routing.agent_name}")
                             continue
                         
                         # Kontext: Vorherige Ergebnisse
@@ -657,7 +648,7 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
                         # Agent ausführen
                         step_result = agent.process(step, context=context)
                         step_results.append(step_result)
-                        print(f"✓ Schritt {i} abgeschlossen")
+                        logger.debug(f"✓ Schritt {i} abgeschlossen")
                     
                     # Aggregiere Ergebnisse
                     if len(step_results) == 1:
@@ -672,7 +663,7 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
             # Single-Step: Normaler Ablauf
             # 1. Routing-Entscheidung treffen
             routing = self._route_query(message)
-            print(f"🎯 Routing zu: {routing.agent_name} ({routing.reasoning})")
+            logger.debug(f"🎯 Routing zu: {routing.agent_name} ({routing.reasoning})")
             
             # 2. Spezialisierten Agenten aufrufen
             agent = self.agents.get(routing.agent_name)
@@ -701,7 +692,7 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
             
         except Exception as e:
             error_msg = f"Fehler im Orchestrator: {str(e)}"
-            print(f"❌ {error_msg}")
+            logger.error(error_msg)
             return error_msg
     
     def get_available_agents(self) -> List[str]:
@@ -775,7 +766,7 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
             
             # Single-Step: Normales Routing
             routing = self._route_query(message)
-            print(f"🎯 Routing zu: {routing.agent_name} ({routing.reasoning})")
+            logger.debug(f"🎯 Routing zu: {routing.agent_name} ({routing.reasoning})")
             
             self.last_routed_agent = routing.agent_name
             
@@ -791,7 +782,7 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
             return routing.agent_name, tool_calls
             
         except Exception as e:
-            print(f"❌ Fehler bei Tool-Auswahl: {str(e)}")
+            logger.error(f"Fehler bei Tool-Auswahl: {str(e)}")
             return "Wissens-Agent", []
     
     def get_memory_summary(self) -> Dict[str, Any]:
