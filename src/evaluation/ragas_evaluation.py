@@ -77,9 +77,9 @@ np.random.seed(RANDOM_SEED)
 
 # Timestamps für Batch-Evaluation (Array wird in main() iteriert)
 from datetime import datetime
-#EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
+EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
 
-
+'''
 EVAL_TIMESTAMPS = [
     #"20260128_165351",  # Advanced_lokal 1
     "20260128_174356",  # Advanced_lokal 2
@@ -87,6 +87,7 @@ EVAL_TIMESTAMPS = [
 
     # Weitere Timestamps hier hinzufügen...
 ]
+'''
 
 
 
@@ -223,132 +224,66 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
 def get_token_usage_from_langsmith(client: Client, trace_id: str) -> dict:
     """
     Holt Token-Usage aus LangSmith für eine spezifische Trace-ID.
-    
-    Summiert alle Tokens aus LLM-Runs (ChatOllama/ChatOpenAI) innerhalb der Trace.
-    Erfasst ReRanking-Tokens (Voyage) separat.
-    
-    Args:
-        client: LangSmith Client
-        trace_id: Die Trace-ID der Session
-        
-    Returns:
-        dict: {
-            'prompt_tokens': int, 
-            'completion_tokens': int, 
-            'total_tokens': int,
-            'reranking_tokens': int  # NEU: Voyage ReRanking Tokens
-        }
+    Liest die top-level Attribute .prompt_tokens / .completion_tokens direkt vom Run-Objekt –
+    diese werden von LangSmith automatisch korrekt befüllt.
+    Summiert alle ChatOllama/ChatOpenAI-LLM-Runs; ReRanking-Tokens separat.
     """
     try:
-        # Hole alle Child-Runs für diese Trace
         child_runs = list(client.list_runs(
             project_name=LANGSMITH_PROJECT,
             trace_id=trace_id,
             is_root=False
         ))
-        
+
         total_prompt = 0
         total_completion = 0
-        total_tokens = 0
-        reranking_tokens = 0  # NEU: Separat für ReRanking
-        
+        reranking_tokens = 0
+
         for child in child_runs:
-            # LLM-Runs haben run_type="llm"
-            if child.run_type == "llm":
-                # Prüfe ob es ein Reranker Run ist (Voyage, Cohere oder Local)
-                is_reranking = child.name in ("VoyageReranker", "CohereReranker", "LocalReranker")
-                
-                # Token-Usage kann in verschiedenen Stellen sein:
-                # 1. Direkt als Attribute: total_tokens, prompt_tokens, completion_tokens
-                # 2. In extra['usage'] oder outputs['usage']
-                
-                run_tokens = 0
-                run_prompt = 0
-                run_completion = 0
-                
-                # Token-Extraktion mit Priorität (nur EINE Quelle verwenden, nicht addieren!)
-                # Priorität: usage_metadata > outputs.usage > outputs.token_usage > direkte Attribute
-                
-                token_found = False
-                
-                # Methode 1: usage_metadata (Voyage ReRanking Format)
-                if not token_found and child.outputs and isinstance(child.outputs, dict):
-                    usage_metadata = child.outputs.get('usage_metadata', {})
-                    if usage_metadata and usage_metadata.get('total_tokens'):
-                        run_tokens = usage_metadata.get('total_tokens', 0) or 0
-                        run_prompt = usage_metadata.get('input_tokens', 0) or 0
-                        token_found = True
-                
-                # Methode 2: outputs.usage (OpenAI Format)
-                if not token_found and child.outputs and isinstance(child.outputs, dict):
-                    usage = child.outputs.get('usage', {})
-                    if usage and (usage.get('total_tokens') or usage.get('prompt_tokens')):
-                        run_prompt = usage.get('prompt_tokens', 0) or 0
-                        run_completion = usage.get('completion_tokens', 0) or 0
-                        run_tokens = usage.get('total_tokens', 0) or 0
-                        token_found = True
-                
-                # Methode 3: outputs.token_usage (LangChain Format)
-                if not token_found and child.outputs and isinstance(child.outputs, dict):
-                    token_usage = child.outputs.get('token_usage', {})
-                    if token_usage and (token_usage.get('total_tokens') or token_usage.get('prompt_tokens')):
-                        run_prompt = token_usage.get('prompt_tokens', 0) or 0
-                        run_completion = token_usage.get('completion_tokens', 0) or 0
-                        run_tokens = token_usage.get('total_tokens', 0) or 0
-                        token_found = True
-                
-                # Methode 4: outputs.llm_output.token_usage (älteres Format)
-                if not token_found and child.outputs and isinstance(child.outputs, dict):
-                    llm_output = child.outputs.get('llm_output', {})
-                    if llm_output and isinstance(llm_output, dict):
-                        tu = llm_output.get('token_usage', {})
-                        if tu and (tu.get('total_tokens') or tu.get('prompt_tokens')):
-                            run_prompt = tu.get('prompt_tokens', 0) or 0
-                            run_completion = tu.get('completion_tokens', 0) or 0
-                            run_tokens = tu.get('total_tokens', 0) or 0
-                            token_found = True
-                
-                # Methode 5: Direkte Attribute
-                if not token_found:
-                    if hasattr(child, 'total_tokens') and child.total_tokens:
-                        run_tokens = child.total_tokens
-                    if hasattr(child, 'prompt_tokens') and child.prompt_tokens:
-                        run_prompt = child.prompt_tokens
-                    if hasattr(child, 'completion_tokens') and child.completion_tokens:
-                        run_completion = child.completion_tokens
-                    if run_tokens or run_prompt or run_completion:
-                        token_found = True
-                
-                # Methode 6: extra.usage (Fallback)
-                if not token_found and hasattr(child, 'extra') and child.extra and isinstance(child.extra, dict):
-                    usage = child.extra.get('usage', {})
-                    if usage and (usage.get('total_tokens') or usage.get('prompt_tokens')):
-                        run_prompt = usage.get('prompt_tokens', 0) or 0
-                        run_completion = usage.get('completion_tokens', 0) or 0
-                        run_tokens = usage.get('total_tokens', 0) or 0
-                
-                # Zuordnung: ReRanking oder LLM
-                if is_reranking:
-                    reranking_tokens += run_tokens
-                else:
-                    total_prompt += run_prompt
-                    total_completion += run_completion
-                    total_tokens += run_tokens
-        
-        # Falls total_tokens nicht direkt verfügbar, berechne aus prompt + completion
-        if total_tokens == 0 and (total_prompt > 0 or total_completion > 0):
-            total_tokens = total_prompt + total_completion
-        
+            if child.run_type != "llm":
+                continue
+
+            p = child.prompt_tokens or 0
+            c = child.completion_tokens or 0
+
+            if not p and not c:
+                # Fallback: generations[0][0].message.kwargs.usage_metadata (langchain-ollama 0.3.x)
+                try:
+                    gen = (child.outputs or {}).get('generations', [])
+                    item = gen[0][0] if isinstance(gen[0], list) else gen[0]
+                    kwargs = item['message']['kwargs']
+                    um = kwargs.get('usage_metadata') or {}
+                    p = um.get('input_tokens', 0) or 0
+                    c = um.get('output_tokens', 0) or 0
+                    if not p and not c:
+                        rm = kwargs.get('response_metadata') or {}
+                        p = rm.get('prompt_eval_count', 0) or 0
+                        c = rm.get('eval_count', 0) or 0
+                except (KeyError, IndexError, TypeError):
+                    pass
+
+            if not p and not c:
+                print(f"      ⚠️ Token-Debug [{getattr(child, 'name', '?')}]: "
+                      f"outputs.keys={list((child.outputs or {}).keys())}")
+
+            is_reranking = getattr(child, 'name', '') in ("VoyageReranker", "CohereReranker", "LocalReranker")
+            if is_reranking:
+                reranking_tokens += (child.total_tokens or (p + c))
+            else:
+                total_prompt += p
+                total_completion += c
+
         return {
             'prompt_tokens': total_prompt,
             'completion_tokens': total_completion,
-            'total_tokens': total_tokens,
-            'reranking_tokens': reranking_tokens  # NEU
+            'total_tokens': total_prompt + total_completion,
+            'reranking_tokens': reranking_tokens
         }
-    
+
     except Exception as e:
         print(f"      ⚠️ Token-Usage Fehler: {str(e)[:100]}")
         return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'reranking_tokens': 0}
+
 
 
 def stop_ollama_model(model_name: str):
