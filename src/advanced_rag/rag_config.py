@@ -60,10 +60,6 @@ class RAGConfig:
     naive_chunking_max_size: int = 1500
     naive_chunking_overlap: int = 300
     
-    # Deduplication (Exact)
-    deduplication_similarity_threshold: float = 0.85
-    deduplication_shingle_size: int = 3
-    
     # Near-Deduplication (Document-Level)
     near_deduplication_shingle_k: int = 5
     near_deduplication_similarity_threshold: float = 0.90
@@ -93,20 +89,11 @@ class RAGConfig:
     # EMBEDDING & DATABASE
     # ============================================================================
     embedding_model_name: str = "BAAI/bge-m3"
-    embedding_model_dimension: int = 1024
     vector_db_path: str = "data/vector_db"
-    vector_db_distance_metric: str = "cosine"
     
     # ============================================================================
     # GENERAL
     # ============================================================================
-    debug_mode: bool = False
-    log_level: str = "INFO"
-    
-    def __post_init__(self):
-        """Validierung nach Initialisierung."""
-        if self.naive_setup and self.debug_mode:
-            logger.info("🔒 NAIVE SETUP aktiviert - alle Advanced-Techniken deaktiviert")
     
     # ============================================================================
     # COMPUTED PROPERTIES (basierend auf naive_setup UND individual flags)
@@ -216,9 +203,6 @@ class RAGConfig:
             naive_chunking_max_size=_get_int_env("NAIVE_CHUNKING_MAX_SIZE", 1750),
             naive_chunking_overlap=_get_int_env("NAIVE_CHUNKING_OVERLAP", 300),
             
-            deduplication_similarity_threshold=_get_float_env("DEDUPLICATION_SIMILARITY_THRESHOLD", 0.85),
-            deduplication_shingle_size=_get_int_env("DEDUPLICATION_SHINGLE_SIZE", 3),
-            
             # Near-Deduplication (Document-Level)
             near_deduplication_shingle_k=_get_int_env("NEAR_DEDUPLICATION_SHINGLE_K", 5),
             near_deduplication_similarity_threshold=_get_float_env("NEAR_DEDUPLICATION_SIMILARITY_THRESHOLD", 0.90),
@@ -240,13 +224,7 @@ class RAGConfig:
             
             # === EMBEDDING & DATABASE ===
             embedding_model_name=os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-m3"),
-            embedding_model_dimension=_get_int_env("EMBEDDING_MODEL_DIMENSION", 1024),
             vector_db_path=os.getenv("VECTOR_DB_PATH", "data/vector_db"),
-            vector_db_distance_metric=os.getenv("VECTOR_DB_DISTANCE_METRIC", "cosine"),
-            
-            # === GENERAL ===
-            debug_mode=_get_bool_env("DEBUG_MODE", False),
-            log_level=os.getenv("LOG_LEVEL", "INFO")
         )
     
     def get_enabled_techniques(self) -> Dict[str, bool]:

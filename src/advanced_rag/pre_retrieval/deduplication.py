@@ -559,17 +559,6 @@ def create_dedup_excel(unique_docs: list, removed_docs: list, dedup_stats: dict,
     
     return str(excel_path)
 
-
-@dataclass
-class ContentFingerprint:
-    """Fingerprint eines Dokuments für Deduplication"""
-    url: str
-    content_hash: str
-    shingles_hash: str
-    word_count: int
-
-
-class ContentDeduplicator:
     """
     Dedupliziert Inhalte basierend auf Similarity-Hashing.
     
