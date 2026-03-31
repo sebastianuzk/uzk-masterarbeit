@@ -4,16 +4,10 @@ Module contains advanced post-retrieval techniques that can be used
 to enhance the naive RAG baseline.
 """
 
-from .relevance_filtering import RelevanceFilter
-from .result_formatting import ResultFormatter
-from .context_hints import ContextHintProvider
-from .empty_result_handler import EmptyResultHandler
 from .reranking import VoyageReranker
+from .maximum_marginal_relevance import create_mmr
 
 __all__ = [
-    'RelevanceFilter',
-    'ResultFormatter',
-    'ContextHintProvider',
-    'EmptyResultHandler',
-    'VoyageReranker'
+    'VoyageReranker',
+    'create_mmr',
 ]

@@ -39,9 +39,7 @@ try:
     USE_ADVANCED = not rag_config.baseline_enabled
     # Individuelle Feature-Flags
     USE_SEMANTIC_CHUNKING = rag_config.use_semantic_chunking
-    USE_CONTENT_CLEANING = rag_config.use_content_cleaning
     USE_DEDUPLICATION = rag_config.use_deduplication  # Aktiviert Exact + Near Deduplication
-    USE_MULTI_COLLECTION = rag_config.use_multi_collection_search
     USE_HYBRID_RETRIEVAL = rag_config.use_hybrid_retrieval  # BM25 Sparse Index + RRF
     SPARSE_INDEX_DIR = "data/sparse_index"  # Fixer Pfad für Sparse Index
 except Exception as e:
@@ -49,17 +47,13 @@ except Exception as e:
     print("   Verwende Naive RAG als Fallback")
     USE_ADVANCED = False
     USE_SEMANTIC_CHUNKING = False
-    USE_CONTENT_CLEANING = False
     USE_DEDUPLICATION = False
-    USE_MULTI_COLLECTION = False
     USE_HYBRID_RETRIEVAL = False
     SPARSE_INDEX_DIR = "data/sparse_index"
 
 # Conditional Imports für Advanced-Techniken (nur wenn benötigt)
 if USE_SEMANTIC_CHUNKING:
     from src.advanced_rag.pre_retrieval.chunking import SemanticChunker
-if USE_CONTENT_CLEANING:
-    from src.advanced_rag.pre_retrieval.cleaning import ContentCleaner
 if USE_DEDUPLICATION:
     from src.advanced_rag.pre_retrieval.deduplication import (
         ContentDeduplicator, 
@@ -71,8 +65,6 @@ if USE_DEDUPLICATION:
         deduplicate_documents_datasketch,
         create_near_dedup_excel_datasketch
     )
-if USE_MULTI_COLLECTION:
-    from src.advanced_rag.pre_retrieval.collection_categorizer import CollectionCategorizer
 if USE_HYBRID_RETRIEVAL:
     from src.advanced_rag.retrieval.hybrid_retrieval_rrf import (
         BM25SparseIndex,
@@ -86,22 +78,8 @@ VECTOR_DB = Path("data/vector_db")
 # Initialisiere Checkpoint Manager
 checkpoint_mgr = CheckpointManager()
 
-def get_collection_name(url: str, categorizer=None) -> str:
-    """
-    Bestimme Collection-Name basierend auf URL.
-    
-    Args:
-        url: Dokument-URL
-        categorizer: Optional CollectionCategorizer (Advanced RAG)
-    
-    Returns:
-        Collection-Name
-    """
-    # ADVANCED RAG: Multi-Collection via CollectionCategorizer
-    if categorizer is not None:
-        return categorizer.get_collection_name(url)
-    
-    # NAIVE RAG (Standard): Nur eine Collection
+def get_collection_name() -> str:
+    """Collection-Name für alle Dokumente (Single Collection)."""
     return 'wiso_documents'
 
 def check_existing_progress():
@@ -338,7 +316,7 @@ def create_skipped_docs_excel(skipped_docs: list, output_dir: Path = None) -> st
     return str(excel_path)
 
 
-def extract_document_text(doc_id, url, title, content, content_type, content_cleaner=None):
+def extract_document_text(doc_id, url, title, content, content_type):
     """
     Extrahiere und bereinige Text aus einem Dokument (OHNE Chunking).
     Für Exact-Deduplication auf Dokument-Ebene.
@@ -349,7 +327,6 @@ def extract_document_text(doc_id, url, title, content, content_type, content_cle
         title: Dokumenttitel
         content: Komprimierter Inhalt (gzip)
         content_type: 'html' oder 'pdf'
-        content_cleaner: Optional ContentCleaner
     
     Returns:
         dict mit doc_id, url, title, content_type, text
@@ -364,10 +341,6 @@ def extract_document_text(doc_id, url, title, content, content_type, content_cle
             cleaned_text = naive_extract_text_from_html(raw_content)
         else:  # pdf
             cleaned_text = naive_clean_text(raw_content)
-        
-        # Optional: Erweitertes Content Cleaning
-        if USE_CONTENT_CLEANING and content_cleaner is not None:
-            cleaned_text = content_cleaner._clean_text(cleaned_text)
         
         if not cleaned_text or len(cleaned_text.strip()) < 50:
             return None
@@ -385,14 +358,13 @@ def extract_document_text(doc_id, url, title, content, content_type, content_cle
         return None
 
 
-def chunk_document(doc_dict, chunker=None, categorizer=None):
+def chunk_document(doc_dict, chunker=None):
     """
     Chunke ein bereits extrahiertes Dokument.
     
     Args:
         doc_dict: Dictionary mit doc_id, url, title, content_type, text
         chunker: Optional SemanticChunker
-        categorizer: Optional CollectionCategorizer
     
     Returns:
         dict mit Chunks und Metadaten oder None
@@ -414,8 +386,7 @@ def chunk_document(doc_dict, chunker=None, categorizer=None):
         if len(chunks) == 0:
             return None
         
-        # Bestimme Collection
-        collection_name = get_collection_name(url, categorizer if USE_MULTI_COLLECTION else None)
+        collection_name = get_collection_name()
         
         return {
             'doc_id': doc_dict['doc_id'],
@@ -431,12 +402,9 @@ def chunk_document(doc_dict, chunker=None, categorizer=None):
         return None
 
 
-def process_document(doc_id, url, title, content, content_type, 
-                     content_cleaner=None, chunker=None, deduplicator=None, categorizer=None,
-                     embedding_model=None):
+def process_document(doc_id, url, title, content, content_type, chunker=None):
     """
     Verarbeite ein einzelnes Dokument (ohne Embeddings).
-    Respektiert individuelle Feature-Flags.
     
     Args:
         doc_id: Dokument-ID
@@ -444,34 +412,20 @@ def process_document(doc_id, url, title, content, content_type,
         title: Dokumenttitel
         content: Komprimierter Inhalt (gzip)
         content_type: 'html' oder 'pdf'
-        content_cleaner: Optional ContentCleaner
         chunker: Optional SemanticChunker
-        deduplicator: Optional ContentDeduplicator
-        categorizer: Optional CollectionCategorizer
-        embedding_model: Optional SentenceTransformer - wenn gesetzt, werden Token-Counts berechnet
     
     Returns:
-        dict mit Chunks und Metadaten oder None wenn übersprungen.
-        
-        Wenn embedding_model gesetzt:
-            chunks = Liste von dicts: {text, char_count, token_count, chunk_index}
-            + original_text_length, total_chunks
-        Sonst (Rückwärtskompatibilität):
-            chunks = Liste von Strings
+        dict mit Chunks (Liste von Strings) und Metadaten oder None wenn übersprungen.
     """
     try:
         # Dekomprimiere
         raw_content = decompress_content(content)
         
-        # Basis-Cleaning für alle Modi: HTML → Markdown-ähnlicher Text
+        # Basis-Cleaning: HTML → Markdown-ähnlicher Text
         if content_type == 'html':
             cleaned_text = naive_extract_text_from_html(raw_content)
         else:  # pdf
             cleaned_text = naive_clean_text(raw_content)
-        
-        # Optional: Erweitertes Content Cleaning
-        if USE_CONTENT_CLEANING and content_cleaner is not None:
-            cleaned_text = content_cleaner._clean_text(cleaned_text)
         
         if not cleaned_text or len(cleaned_text.strip()) < 50:
             return None
@@ -480,61 +434,23 @@ def process_document(doc_id, url, title, content, content_type,
         if USE_SEMANTIC_CHUNKING and chunker is not None:
             chunk_texts = chunker.chunk_by_paragraphs(cleaned_text)
         else:
-            # Naive Chunking mit konfigurierbaren Parametern aus rag_config
             chunk_texts = naive_chunk_text(
                 cleaned_text, 
                 chunk_size=rag_config.naive_chunking_max_size,
                 overlap=rag_config.naive_chunking_overlap
             )
         
-        # Optional: Deduplication (nur für HTMLs)
-        if USE_DEDUPLICATION and deduplicator is not None and content_type == 'html' and len(chunk_texts) > 0:
-            chunk_docs = [{"url": f"{url}#chunk_{i}", "content": chunk} for i, chunk in enumerate(chunk_texts)]
-            unique_chunks, _ = deduplicator.deduplicate_batch(chunk_docs)
-            chunk_texts = [doc["content"] for doc in unique_chunks]
-        
         if len(chunk_texts) == 0:
             return None
         
-        # Bestimme Collection (Multi-Collection oder Single)
-        collection_name = get_collection_name(url, categorizer if USE_MULTI_COLLECTION else None)
-        
-        # Token-Zählung wenn embedding_model übergeben
-        if embedding_model is not None:
-            tokenizer = embedding_model.tokenizer
-            tokenized = tokenizer(chunk_texts, add_special_tokens=False, truncation=False, padding=False)
-            token_counts = [len(ids) for ids in tokenized['input_ids']]
-            
-            # Erstelle Chunk-Dicts mit allen Metadaten
-            chunks = []
-            for i, (text, token_count) in enumerate(zip(chunk_texts, token_counts)):
-                chunks.append({
-                    'text': text,
-                    'char_count': len(text),
-                    'token_count': token_count,
-                    'chunk_index': i
-                })
-            
-            return {
-                'doc_id': doc_id,
-                'url': url,
-                'title': title,
-                'content_type': content_type,
-                'original_text_length': len(cleaned_text),
-                'chunks': chunks,
-                'total_chunks': len(chunks),
-                'collection_name': collection_name
-            }
-        else:
-            # Rückwärtskompatibilität: Chunks als Strings (ohne Token-Counts)
-            return {
-                'doc_id': doc_id,
-                'url': url,
-                'title': title,
-                'content_type': content_type,
-                'chunks': chunk_texts,
-                'collection_name': collection_name
-            }
+        return {
+            'doc_id': doc_id,
+            'url': url,
+            'title': title,
+            'content_type': content_type,
+            'chunks': chunk_texts,
+            'collection_name': get_collection_name()
+        }
         
     except Exception as e:
         print(f"\n⚠️  Fehler bei Dokument {doc_id}: {e}")
@@ -571,16 +487,8 @@ def run_production_scraper():
     embedding_model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
     print(f"   ✅ {SENTENCE_TRANSFORMER_MODEL} (max_seq_length={EMBEDDING_MAX_SEQ_LENGTH})")
     
-    content_cleaner = None
     chunker = None
     deduplicator = None
-    categorizer = None
-    
-    if USE_CONTENT_CLEANING:
-        content_cleaner = ContentCleaner()
-        print("   ✅ ContentCleaner")
-    else:
-        print("   ❌ ContentCleaner (deaktiviert)")
     
     if USE_SEMANTIC_CHUNKING:
         chunker = SemanticChunker(
@@ -617,66 +525,32 @@ def run_production_scraper():
     else:
         print("   ❌ Hybrid Retrieval (deaktiviert) → nur Dense Embeddings")
     
-    if USE_MULTI_COLLECTION:
-        categorizer = CollectionCategorizer()
-        print(f"   ✅ CollectionCategorizer ({len(categorizer.get_collection_names())} Collections)")
-    else:
-        print("   ❌ CollectionCategorizer (deaktiviert) → Single Collection")
-    
     # Verbinde zu ChromaDB
     print("\n💾 Initialisiere ChromaDB...")
     client = chromadb.PersistentClient(path=str(VECTOR_DB))
     
-    # Erstelle/Lade Collections
+    # Erstelle/Lade Collection
     collections_dict = {}
-    
-    # Single Collection (wenn Multi-Collection deaktiviert)
-    if not USE_MULTI_COLLECTION:
-        collection_name = 'wiso_documents'
-        if collection_name in completed_collections:
-            collections_dict[collection_name] = client.get_collection(name=collection_name)
-            print(f"   ♻️  Collection '{collection_name}' geladen (bereits fertig)")
-        else:
-            try:
-                collections_dict[collection_name] = client.create_collection(
-                    name=collection_name,
-                    metadata={"description": "WiSo Fakultät - Alle Dokumente (Single Collection)"}
-                )
-                print(f"   ✅ Collection '{collection_name}' erstellt")
-            except:
-                collections_dict[collection_name] = client.get_collection(name=collection_name)
-                print(f"   ♻️  Collection '{collection_name}' geladen")
-    
-    # Multi-Collections
+    collection_name = 'wiso_documents'
+    if collection_name in completed_collections:
+        collections_dict[collection_name] = client.get_collection(name=collection_name)
+        print(f"   ♻️  Collection '{collection_name}' geladen (bereits fertig)")
     else:
-        collection_names = categorizer.get_collection_names()
-        for collection_name in collection_names:
-            if collection_name in completed_collections:
-                # Collection existiert bereits - lade sie
-                collections_dict[collection_name] = client.get_collection(name=collection_name)
-                print(f"   ♻️  Collection '{collection_name}' geladen (bereits fertig)")
-            else:
-                # Neue Collection erstellen
-                try:
-                    collections_dict[collection_name] = client.create_collection(
-                        name=collection_name,
-                        metadata={"description": f"WiSo Fakultät - {collection_name}"}
-                    )
-                    print(f"   ✅ Collection '{collection_name}' erstellt")
-                except:
-                    # Falls Collection existiert aber leer ist
-                    collections_dict[collection_name] = client.get_collection(name=collection_name)
-                    print(f"   ♻️  Collection '{collection_name}' geladen")
+        try:
+            collections_dict[collection_name] = client.create_collection(
+                name=collection_name,
+                metadata={"description": "WiSo Fakultät - Alle Dokumente (Single Collection)"}
+            )
+            print(f"   ✅ Collection '{collection_name}' erstellt")
+        except:
+            collections_dict[collection_name] = client.get_collection(name=collection_name)
+            print(f"   ♻️  Collection '{collection_name}' geladen")
     
     # Verbinde zur Content Database
     conn = sqlite3.connect(CONTENT_DB)
     
     # Initialisiere Stats und Collections
-    # Multi-Collection nur wenn aktiviert UND categorizer vorhanden
-    if USE_MULTI_COLLECTION and categorizer is not None:
-        collection_names = categorizer.get_collection_names()
-    else:
-        collection_names = ['wiso_documents']
+    collection_names = ['wiso_documents']
     
     stats = {
         'total': 0,
@@ -762,7 +636,7 @@ def run_production_scraper():
                     pbar.set_description(f"📝 [{content_type.upper()}] {short_title}")
                     
                     result = extract_document_text(
-                        doc_id, url, title, content, content_type, content_cleaner
+                        doc_id, url, title, content, content_type
                     )
                     
                     stats['total'] += 1
@@ -850,7 +724,7 @@ def run_production_scraper():
                     short_title = doc_dict['title'][:40] + "..." if len(doc_dict['title']) > 40 else doc_dict['title']
                     pbar.set_description(f"✂️  [{doc_dict['content_type'].upper()}] {short_title}")
                     
-                    result = chunk_document(doc_dict, chunker, categorizer)
+                    result = chunk_document(doc_dict, chunker)
                     
                     if result is not None:
                         collection_name = result['collection_name']
@@ -885,8 +759,7 @@ def run_production_scraper():
                     pbar.set_description(f"📝 [{content_type.upper()}] {short_title}")
                     
                     result = process_document(
-                        doc_id, url, title, content, content_type,
-                        content_cleaner, chunker, deduplicator, categorizer
+                        doc_id, url, title, content, content_type, chunker
                     )
                     
                     stats['total'] += 1
@@ -1235,12 +1108,10 @@ def run_production_scraper():
         active_techniques = []
         if USE_SEMANTIC_CHUNKING:
             active_techniques.append("SemanticChunking")
-        if USE_CONTENT_CLEANING:
-            active_techniques.append("ContentCleaning")
         if USE_DEDUPLICATION:
             active_techniques.append("Deduplication")  # Enthält Exact + Near
-        if USE_MULTI_COLLECTION:
-            active_techniques.append("MultiCollection")
+        if USE_HYBRID_RETRIEVAL:
+            active_techniques.append("HybridRetrieval")
         
         if active_techniques:
             rag_mode = "_".join(active_techniques)
@@ -1259,6 +1130,13 @@ def run_production_scraper():
         avg_chunk_len = 0
         min_chunk_len = 0
         max_chunk_len = 0
+
+    if USE_DEDUPLICATION and 'near_dedup' in stats:
+        stats['total'] = stats['near_dedup']['unique']   # nach Near-Dedup
+    elif USE_DEDUPLICATION and 'dedup' in stats:
+        stats['total'] = stats['dedup']['unique']        # falls nur Exact-Dedup
+    else:
+        stats['total'] = stats['total'] - stats['skipped']
     
     # Erstelle DataFrame mit Statistiken
     scraping_stats = {

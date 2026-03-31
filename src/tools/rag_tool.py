@@ -263,26 +263,6 @@ class UniversityRAGTool(BaseTool):
         
         return documents
     
-    @traceable(run_type="retriever")
-    def _multi_collection_retrieve(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
-        """
-        Multi-Collection RAG: Importiert komplette Logik aus multi_collection_search.
-        
-        Args:
-            query: Die Suchanfrage
-            k: Anzahl der Ergebnisse (wird für k_per_collection verwendet)
-            
-        Returns:
-            Liste von Dokumenten mit erweiterten Metadaten
-        """
-        from src.advanced_rag.retrieval.multi_collection_search import advanced_retrieve
-        
-        # Nutze k_per_collection aus Config
-        k_per_collection = self.config.multi_collection_k_per_collection if self.config else 3
-        
-        # Alle Advanced-Logik ist in multi_collection_search.py
-        return advanced_retrieve(query, k_per_collection=k_per_collection)
-    
     def _get_collection_names(self) -> List[str]:
         """
         Hole alle Collection-Namen aus der Vektordatenbank.
@@ -595,15 +575,6 @@ class UniversityRAGTool(BaseTool):
                 documents = self._sparse_retrieve(query)
                 # Sparse verwendet eigene Formatierung (naive Format)
                 return self._format_naive_results(documents)
-            elif self._use_advanced and self.config:
-                # Multi-Collection Search (Legacy) mit Post-Processing
-                documents = self._multi_collection_retrieve(query, k=k_final)
-                if not documents:
-                    return (
-                        "ℹ️ Keine relevanten Informationen in der Universitäts-Wissensdatenbank gefunden. "
-                        "Möglicherweise ist die Datenbank leer oder Ihre Anfrage konnte nicht zugeordnet werden."
-                    )
-                return self._advanced_process(query, documents)
             else:
                 # Naive: Single Collection Search (ohne ReRanking)
                 documents = self._naive_retrieve(query, k=k_final)
@@ -654,91 +625,6 @@ class UniversityRAGTool(BaseTool):
                 response_parts.append(f"   (Quelle: {metadata['source']})")
         
         return "\n".join(response_parts)
-    
-    def _advanced_process(self, query: str, documents: List[Dict[str, Any]]) -> str:
-        """
-        Verarbeite Ergebnisse mit Advanced-Techniken.
-        
-        Args:
-            query: Die ursprüngliche Anfrage
-            documents: Liste von Dokumenten (von _naive_retrieve)
-            
-        Returns:
-            Verarbeiteter Response-String mit allen Advanced-Techniken
-        """
-        from src.advanced_rag.retrieval import (
-            DistanceConverter,
-            ResultAggregator,
-            GlobalReranker
-        )
-        from src.advanced_rag.post_retrieval import (
-            RelevanceFilter,
-            ResultFormatter,
-            ContextHintProvider,
-            EmptyResultHandler
-        )
-        
-        logger.info("Verwende Advanced RAG-Techniken")
-        
-        # Merke ob wir Ergebnisse vor Filterung hatten
-        had_results = len(documents) > 0
-        
-        # 1. Distance → Relevance Conversion
-        if self.config.use_distance_conversion:
-            converter = DistanceConverter()
-            documents = converter.convert(documents)
-            logger.debug("✓ Distance Conversion angewendet")
-        
-        # 2. Result Aggregation (deduplizieren + sortieren)
-        if self.config.use_result_aggregation:
-            aggregator = ResultAggregator(top_k=self.config.top_k)
-            documents = aggregator.deduplicate(documents)
-            documents = aggregator.aggregate(documents, sort_by='relevance')
-            logger.debug("✓ Result Aggregation angewendet")
-        
-        # 3. Global Re-Ranking
-        if self.config.use_global_reranking:
-            reranker = GlobalReranker(use_relevance=True)
-            documents = reranker.rerank(documents)
-            # Optional: Diversity-Penalty
-            documents = reranker.apply_diversity_penalty(documents, max_per_source=2)
-            logger.debug("✓ Global Re-Ranking angewendet")
-        
-        # 4. Relevance Filtering
-        if self.config.use_relevance_filtering:
-            relevance_filter = RelevanceFilter(threshold=self.config.relevance_threshold)
-            documents = relevance_filter.filter(documents)
-            logger.debug(f"✓ Relevance Filtering angewendet (Threshold: {self.config.relevance_threshold})")
-        
-        # 5. Prüfe ob noch Ergebnisse vorhanden
-        if not documents:
-            if self.config.use_empty_result_handling:
-                handler = EmptyResultHandler()
-                return handler.handle_empty_results(
-                    query=query,
-                    had_results_before_filtering=had_results,
-                    relevance_threshold=self.config.relevance_threshold
-                )
-            else:
-                return "ℹ️ Keine relevanten Informationen gefunden."
-        
-        # 6. Result Formatting
-        if self.config.use_result_formatting:
-            formatter = ResultFormatter(include_metadata=True, include_sources=True)
-            formatted = formatter.format(documents, query=query)
-            logger.debug("✓ Result Formatting angewendet")
-        else:
-            # Fallback: Kompakte Formatierung
-            formatted = "\n\n".join([doc.get('document', '') for doc in documents])
-        
-        # 7. Context Hints
-        if self.config.use_context_hints:
-            hint_provider = ContextHintProvider()
-            formatted = hint_provider.add_hints(formatted, query=query, results=documents)
-            logger.debug("✓ Context Hints hinzugefügt")
-        
-        logger.info("Advanced RAG-Pipeline abgeschlossen")
-        return formatted
     
     async def _arun(self, query: str) -> str:
         """Asynchrone Version - ruft die synchrone Version auf."""
