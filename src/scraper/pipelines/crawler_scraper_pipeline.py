@@ -27,11 +27,11 @@ logger = logging.getLogger(__name__)
 # KONFIGURATION – hier zentral anpassen
 # =============================================================================
 DEFAULT_OUTPUT_DIR        = Path("data")   # Ausgabeverzeichnis
-DEFAULT_MAX_PAGES         = 5           # Maximale Seitenanzahl (Testlauf: z.B. 5)
+DEFAULT_MAX_PAGES         = 5000           # Maximale Seitenanzahl (Testlauf: z.B. 5)
 DEFAULT_CRAWL_DELAY       = 1.0           # Sekunden zwischen Requests
 DEFAULT_CONCURRENT_REQ    = 10            # Parallele Requests
 DEFAULT_ENABLE_CACHING    = True          # HTML-Cache nutzen (empfohlen)
-DEFAULT_HTML_CACHE_MAX_AGE = 300          # Cache-Gültigkeit in Tagen
+DEFAULT_HTML_CACHE_MAX_AGE = 30          # Cache-Gültigkeit in Tagen
 # =============================================================================
 
 

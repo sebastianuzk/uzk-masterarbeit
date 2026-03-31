@@ -532,7 +532,9 @@ class WisoCrawler:
             else:
                 logger.info(f"📄 HTML Cache MISS (stale): {self.format_url_for_log(url)}")
         else:
-            logger.info(f"📄 HTML Cache MISS: {self.format_url_for_log(url)}")        # Nur bei echten HTTP-Requests: Delays und Rate-Limiting
+            logger.info(f"📄 HTML Cache MISS: {self.format_url_for_log(url)}")
+
+        # Nur bei echten HTTP-Requests: Delays und Rate-Limiting
         self.retry_stats['total_requests'] += 1
         self.request_count += 1
         
