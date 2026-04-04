@@ -31,7 +31,7 @@ class Settings:
     
     # OpenAI Konfiguration (für RAGAS-Evaluation mit Cloud-LLM als Judge)
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_EVAL_MODEL = os.getenv("OPENAI_EVAL_MODEL", "gpt-4o-mini")  # Günstiges GPT-4 Modell für Evaluation
+    OPENAI_EVAL_MODEL = os.getenv("OPENAI_EVAL_MODEL", "gpt-4.1-mini")  # Günstiges GPT-4 Modell für Evaluation
     
     # RAGAS Evaluation Mode: True = lokales Ollama-LLM, False = OpenAI-LLM als Judge
     # Hinweis: Embeddings werden IMMER lokal mit Ollama (embeddinggemma) berechnet

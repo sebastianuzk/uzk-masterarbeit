@@ -56,7 +56,6 @@ if USE_SEMANTIC_CHUNKING:
     from src.advanced_rag.pre_retrieval.chunking import SemanticChunker
 if USE_DEDUPLICATION:
     from src.advanced_rag.pre_retrieval.deduplication import (
-        ContentDeduplicator, 
         deduplicate_documents_exact, 
         create_dedup_excel
     )
@@ -488,7 +487,6 @@ def run_production_scraper():
     print(f"   ✅ {SENTENCE_TRANSFORMER_MODEL} (max_seq_length={EMBEDDING_MAX_SEQ_LENGTH})")
     
     chunker = None
-    deduplicator = None
     
     if USE_SEMANTIC_CHUNKING:
         chunker = SemanticChunker(
@@ -510,13 +508,9 @@ def run_production_scraper():
         print(f"   ❌ SemanticChunker (deaktiviert) → Naive Chunking (max={rag_config.naive_chunking_max_size}, overlap={rag_config.naive_chunking_overlap})")
     
     if USE_DEDUPLICATION:
-        deduplicator = ContentDeduplicator(
-            similarity_threshold=rag_config.deduplication_similarity_threshold,
-            shingle_size=rag_config.deduplication_shingle_size
-        )
         print("   ✅ Deduplication aktiviert:")
         print(f"      • Exact Dedup (Hash-basiert)")
-        print(f"      • Near Dedup (MinHash+LSH, shingle_size=5, threshold={rag_config.near_deduplication_threshold})")
+        print(f"      • Near Dedup (MinHash+LSH, shingle_size=5, threshold={rag_config.near_deduplication_similarity_threshold})")
     else:
         print("   ❌ Deduplication (deaktiviert)")
     
@@ -966,9 +960,6 @@ def run_production_scraper():
     # Lösche Phase 1 Checkpoint (alle Collections erfolgreich)
     checkpoint_mgr.delete_phase1_checkpoint()
     
-    # Deduplication-Statistiken (nur für Advanced RAG)
-    dedup_stats = deduplicator.get_statistics() if deduplicator else None
-    
     # Finale Statistiken
     elapsed_time = time.time() - start_time
     minutes = int(elapsed_time // 60)
@@ -995,11 +986,14 @@ def run_production_scraper():
             actual_count = collection.count()
             print(f"   • {collection_name}: {actual_count:,} Chunks")
     
-    if dedup_stats:
+    if USE_DEDUPLICATION and 'dedup' in stats:
         print(f"\n🔍 Deduplication:")
-        print(f"   • Unique Chunks: {dedup_stats['total_seen']:,}")
-        print(f"   • Similarity Threshold: {dedup_stats['similarity_threshold']}")
-        print(f"   • Duplikate entfernt: {stats['chunks'] - dedup_stats['total_seen']:,}")
+        d = stats['dedup']
+        print(f"   • Exact Dedup:   {d['total']:,} → {d['unique']:,} Dokumente ({d['duplicates_removed']:,} entfernt)")
+        if 'near_dedup' in stats:
+            nd = stats['near_dedup']
+            print(f"   • Near Dedup:    {nd['total']:,} → {nd['unique']:,} Dokumente ({nd['duplicates_removed']:,} entfernt)")
+            print(f"   • Gesamt-Reduktion: {d['total']:,} → {nd['unique']:,} ({(1 - nd['unique']/d['total'])*100:.1f}%)")
     else:
         print(f"\n🔍 Deduplication:")
         print(f"   • Naive Setup: Keine Deduplizierung")
@@ -1132,11 +1126,24 @@ def run_production_scraper():
         max_chunk_len = 0
 
     if USE_DEDUPLICATION and 'near_dedup' in stats:
-        stats['total'] = stats['near_dedup']['unique']   # nach Near-Dedup
+        # Unique-Docs nach Near-Dedup + übersprungene Dokumente (fehlgeschlagene Extraktion)
+        unique_html  = sum(1 for d in unique_docs if d['content_type'] == 'html')
+        unique_pdf   = sum(1 for d in unique_docs if d['content_type'] == 'pdf')
+        skipped_html = sum(1 for d in skipped_docs if d['content_type'] == 'html')
+        skipped_pdf  = sum(1 for d in skipped_docs if d['content_type'] == 'pdf')
+        stats['html']  = unique_html  + skipped_html
+        stats['pdf']   = unique_pdf   + skipped_pdf
+        stats['total'] = stats['near_dedup']['unique'] + stats['skipped']
     elif USE_DEDUPLICATION and 'dedup' in stats:
-        stats['total'] = stats['dedup']['unique']        # falls nur Exact-Dedup
-    else:
-        stats['total'] = stats['total'] - stats['skipped']
+        # Unique-Docs nach Exact-Dedup + übersprungene Dokumente
+        unique_html  = sum(1 for d in unique_docs if d['content_type'] == 'html')
+        unique_pdf   = sum(1 for d in unique_docs if d['content_type'] == 'pdf')
+        skipped_html = sum(1 for d in skipped_docs if d['content_type'] == 'html')
+        skipped_pdf  = sum(1 for d in skipped_docs if d['content_type'] == 'pdf')
+        stats['html']  = unique_html  + skipped_html
+        stats['pdf']   = unique_pdf   + skipped_pdf
+        stats['total'] = stats['dedup']['unique'] + stats['skipped']
+    # else: Naive-Modus → stats['total'] bleibt unveraendert (= alle Dokumente inkl. Uebersprungene)
     
     # Erstelle DataFrame mit Statistiken
     scraping_stats = {
@@ -1166,7 +1173,7 @@ def run_production_scraper():
             stats['html'],
             stats['pdf'],
             stats['chunks'],
-            round(stats['chunks'] / max(stats['total'], 1), 2),
+            round(stats['chunks'] / max(stats['total'] - stats['skipped'], 1), 2),
             avg_chunk_len,
             min_chunk_len,
             max_chunk_len,
