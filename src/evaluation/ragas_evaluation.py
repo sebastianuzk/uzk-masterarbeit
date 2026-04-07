@@ -81,13 +81,26 @@ EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evalua
 
 '''
 EVAL_TIMESTAMPS = [
-    #"20260128_165351",  # Advanced_lokal 1
-    "20260128_174356",  # Advanced_lokal 2
-    "20260128_183659",  # Advanced_lokal 3
+    "20260406_141220",  # Advanced Local 2
+    "20260406_150335",  # Advanced Local 3
 
-    # Weitere Timestamps hier hinzufügen...
+    "20260406_160308",  # MMR 80 2
+    "20260406_165420",  # MMR 80 3
+
+    "20260406_173743",  # Reranking Voyage 2
+    "20260406_181853",  # Reranking Voyage 3
+
+    "20260406_210558",  # Reranking local 2
+    "20260406_215221",  # Reranking local 3
 ]
 '''
+
+
+
+
+
+
+
 
 
 
@@ -120,7 +133,7 @@ def calculate_RR_at5(context_hint: str, retrieved_urls: list) -> float:
         # Exakte Übereinstimmung
         if context_hint_str == url_str:
             return 1.0 / (i + 1)
-        
+        '''
         # Für Web-URLs: Prüfe ob context_hint in der URL enthalten ist
         # z.B. https://wiso.uni-koeln.de/de/studium -> file://...html_cache/html/wiso.uni-koeln.de_de_studium...
         if context_hint_str.startswith('https://'):
@@ -133,6 +146,7 @@ def calculate_RR_at5(context_hint: str, retrieved_urls: list) -> float:
         if context_hint_str.startswith('file://') and url_str.startswith('file://'):
             if context_hint_str == url_str:
                 return 1.0 / (i + 1)
+                '''
     
     # Nicht gefunden
     return 0.0
@@ -243,35 +257,56 @@ def get_token_usage_from_langsmith(client: Client, trace_id: str) -> dict:
             if child.run_type != "llm":
                 continue
 
+            # Reranking-Runs zuerst prüfen – keine LLM-Token-Daten erwartet
+            is_reranking = getattr(child, 'name', '') in ("VoyageReranker", "CohereReranker", "LocalReranker")
+            if is_reranking:
+                reranking_tokens += (child.total_tokens or 0)
+                continue
+
             p = child.prompt_tokens or 0
             c = child.completion_tokens or 0
 
             if not p and not c:
-                # Fallback: generations[0][0].message.kwargs.usage_metadata (langchain-ollama 0.3.x)
+                # Fallback: outputs.generations – unterstützt zwei Strukturvarianten:
+                # Variante A (Standard): message.kwargs.usage_metadata  (langchain-ollama ≤ 0.2.x)
+                # Variante B (Streaming/Chunk): message.usage_metadata  (langchain-ollama ≥ 0.3.x / AIMessageChunk)
+                # Variante C (Ollama nativ): message.[kwargs.]response_metadata.prompt_eval_count
                 try:
                     gen = (child.outputs or {}).get('generations', [])
-                    item = gen[0][0] if isinstance(gen[0], list) else gen[0]
-                    kwargs = item['message']['kwargs']
-                    um = kwargs.get('usage_metadata') or {}
-                    p = um.get('input_tokens', 0) or 0
-                    c = um.get('output_tokens', 0) or 0
-                    if not p and not c:
-                        rm = kwargs.get('response_metadata') or {}
-                        p = rm.get('prompt_eval_count', 0) or 0
-                        c = rm.get('eval_count', 0) or 0
-                except (KeyError, IndexError, TypeError):
+                    if gen:
+                        item = gen[0][0] if isinstance(gen[0], list) else gen[0]
+                        if isinstance(item, dict):
+                            msg = item.get('message') or {}
+                            # Probiere mit und ohne 'kwargs'-Wrapper
+                            for msg_src in (msg.get('kwargs') or {}, msg):
+                                if not isinstance(msg_src, dict):
+                                    continue
+                                um = msg_src.get('usage_metadata') or {}
+                                p = int(um.get('input_tokens', 0) or 0)
+                                c = int(um.get('output_tokens', 0) or 0)
+                                if p or c:
+                                    break
+                                rm = msg_src.get('response_metadata') or {}
+                                p = int(rm.get('prompt_eval_count', 0) or 0)
+                                c = int(rm.get('eval_count', 0) or 0)
+                                if p or c:
+                                    break
+                except (KeyError, IndexError, TypeError, AttributeError):
                     pass
 
             if not p and not c:
+                # Letzter Fallback: total_tokens direkt (kein Input/Output-Split möglich)
+                total = child.total_tokens or 0
+                if total > 0:
+                    p = total
+
+            if not p and not c:
                 print(f"      ⚠️ Token-Debug [{getattr(child, 'name', '?')}]: "
+                      f"prompt_tokens={child.prompt_tokens!r}, total_tokens={child.total_tokens!r}, "
                       f"outputs.keys={list((child.outputs or {}).keys())}")
 
-            is_reranking = getattr(child, 'name', '') in ("VoyageReranker", "CohereReranker", "LocalReranker")
-            if is_reranking:
-                reranking_tokens += (child.total_tokens or (p + c))
-            else:
-                total_prompt += p
-                total_completion += c
+            total_prompt += p
+            total_completion += c
 
         return {
             'prompt_tokens': total_prompt,
@@ -453,20 +488,20 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         print(f"   ✅ Antwort: {answer[:80]}... ({response_time:.2f}s)")
         
         # Warten damit LangSmith Trace vollständig ist
-        time.sleep(2)  # Erhöht auf 2s für zuverlässigere Synchronisation
+        time.sleep(3)  # 3s Basis-Wartezeit für Root-Run-Propagation
         
         # RAG-Kontext aus LangSmith holen - nach Session-ID suchen
         print(f"   🔍 Hole RAG-Kontext aus LangSmith...")
         
         # Hole die letzten Runs und suche manuell nach unserer Session-ID
         matching_run = None
-        max_retries = 3
+        max_retries = 5  # Erhöht von 3 auf 5
         
         for retry in range(max_retries):
             recent_runs = list(langsmith_client.list_runs(
                 project_name=LANGSMITH_PROJECT,
                 is_root=True,
-                limit=10  # Mehr Runs holen für Sicherheit
+                limit=20  # Erhöht von 10 auf 20 für mehr Treffsicherheit
             ))
             
             # Suche nach der Session-ID in Metadata
@@ -480,14 +515,16 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
             if matching_run:
                 break
             
-            # Warte und versuche erneut
+            # Warte und versuche erneut (wachsende Wartezeit)
             if retry < max_retries - 1:
-                time.sleep(1)
+                wait = 2 * (retry + 1)  # 2s, 4s, 6s, 8s
+                print(f"   ⏳ Session-ID noch nicht gefunden, warte {wait}s (Retry {retry+1}/{max_retries-1})...")
+                time.sleep(wait)
         
-        # Fallback: Nehme den neuesten Run wenn Session-ID nicht gefunden
-        if not matching_run and recent_runs:
-            matching_run = recent_runs[0]
-            print(f"   ⚠️ Session-ID {session_id[:8]}... nicht in Metadata gefunden, verwende neuesten Run")
+        # KEIN blinder Fallback auf recent_runs[0] mehr!
+        # recent_runs[0] könnte der Run einer anderen Frage sein → falsche Kontexte
+        if not matching_run:
+            print(f"   ⚠️ Session-ID {session_id[:8]}... nach {max_retries} Versuchen nicht gefunden → leere Kontexte")
         
         contexts = []  # Leere Liste als Default
         urls = []  # Leere Liste als Default
@@ -495,12 +532,26 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         
         if matching_run:
             trace_id = matching_run.trace_id
-            contexts, urls, content_types = get_rag_context_from_langsmith(langsmith_client, trace_id)
+            
+            # Retry-Loop für Child-Runs: auch nach gefundenem Root-Run können
+            # die Retriever-Child-Runs noch nicht propagiert sein
+            ctx_retries = 5
+            for ctx_retry in range(ctx_retries):
+                contexts, urls, content_types = get_rag_context_from_langsmith(langsmith_client, trace_id)
+                if contexts:
+                    break
+                if ctx_retry < ctx_retries - 1:
+                    wait = 2 * (ctx_retry + 1)  # 2s, 4s, 6s, 8s
+                    print(f"   ⏳ Child-Runs noch nicht propagiert, warte {wait}s (Retry {ctx_retry+1}/{ctx_retries-1})...")
+                    time.sleep(wait)
+            
+            if not contexts:
+                print(f"   ⚠️ Keine Retriever-Child-Runs nach {ctx_retries} Versuchen gefunden → leere Kontexte")
+            
             # Token-Usage aus LangSmith holen
             token_usage = get_token_usage_from_langsmith(langsmith_client, trace_id)
-            print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
+            print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}... ({len(contexts)} Chunks)")
         else:
-            print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
             token_usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'reranking_tokens': 0}
         
         urls_list.append(urls)
@@ -700,6 +751,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset, run_local: bool = None) -> 
     eval_start = time.time()
     
     # Evaluation durchführen
+
     results = evaluate(
         dataset=dataset,
         metrics=metrics,
@@ -712,7 +764,7 @@ def run_ragas_evaluation(dataset: EvaluationDataset, run_local: bool = None) -> 
     
     print(f"\n   ✅ Evaluation abgeschlossen in {evaluation_time:.2f}s")
     print(f"   ⏱️ Durchschn. pro Sample: {evaluation_time/len(dataset.samples):.2f}s\n")
-    
+
     # ========================================================================
     # BERT-SCORE: Token-Level semantische Ähnlichkeit (nach RAGAS-Evaluation)
     # ========================================================================
