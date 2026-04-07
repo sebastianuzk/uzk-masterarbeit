@@ -8,7 +8,7 @@ Sortiert alle übergebenen Dokumente nach semantischer Relevanz zur Query.
 Unterstützte Provider:
 - Voyage AI (rerank-2.5, rerank-2.5-lite)
 - Cohere (rerank-v3.5, rerank-english-v3.0, rerank-multilingual-v3.0)
-- Local (cross-encoder/ms-marco-MiniLM-L-12-v2) - läuft auf GPU
+- Local (cross-encoder/msmarco-MiniLM-L12-en-de-v1) - läuft auf GPU
 
 Inkludiert LangSmith-Tracing für Token-Usage-Tracking.
 """
@@ -644,11 +644,12 @@ class LocalReranker:
                 f"(Query: {query_tokens_per_doc}x{num_documents}={total_query_tokens}, Docs: {doc_tokens})"
             )
             
-            # 5. Füge rerank_score zu metadata hinzu
+            # 5. Füge rerank_score zu metadata hinzu (rohe Logits, ordinales Ranking)
+            # CrossEncoder gibt unkalibrierte Logits aus – nur für Sortierung geeignet,
+            # nicht als absolute Relevanzmaße (Nogueira & Cho, 2019)
             for i, doc in enumerate(documents):
                 if 'metadata' not in doc:
                     doc['metadata'] = {}
-                # Cross-Encoder Scores können negativ sein, normalisieren auf [0, 1] ist optional
                 doc['metadata']['rerank_score'] = float(scores[i])
             
             # 6. Sortiere nach rerank_score (absteigend)
