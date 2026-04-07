@@ -475,7 +475,7 @@ class LocalReranker:
         Initialisiert den LocalReranker.
         
         Args:
-            model: Name des Cross-Encoder Modells (default: ms-marco-MiniLM-L-12-v2)
+            model: Name des Cross-Encoder Modells (default: cross-encoder/msmarco-MiniLM-L12-en-de-v1)
         """
         self.model_name = model or self.DEFAULT_MODEL
         self._model = None
@@ -623,6 +623,7 @@ class LocalReranker:
             doc_tokens = 0
             for doc in documents:
                 meta = doc.get('metadata', {})
+                    # Tokens sind bereits als Metadata pro Chunk vorhanden
                 if 'token_count' in meta and meta['token_count']:
                     doc_tokens += int(meta['token_count'])
                 else:
