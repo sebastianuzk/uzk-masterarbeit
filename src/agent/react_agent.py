@@ -171,7 +171,7 @@ Nutzer: "What are the requirements for the Economics program?"
                 config = {
                     "metadata": {
                         "session_id": session_id,
-                        "user_message": message[:100] + "..." if len(message) > 100 else message,
+                        "user_message": message,
                         "available_tools": len(self.tools)
                     }
                 }
