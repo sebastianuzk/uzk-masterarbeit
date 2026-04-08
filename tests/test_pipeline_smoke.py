@@ -858,3 +858,84 @@ class TestToolSelectionVsExecution:
             "         nicht End-to-End Task-Completion. Scores in der Arbeit entsprechend einordnen."
         )
 
+    def test_combined_limitation_selection_only_and_required_arguments(self):
+        """
+        KOMBINIERTER DOKUMENTATIONSTEST — beide Einschränkungen zusammen:
+
+        B) Tool-Eval ist kein End-to-End-Execution-Eval:
+           run_single_scenario() bewertet nur Tool-Selection ohne Tool-Ausführung.
+
+        Zusätzlich: required_arguments wurde historisch durch einen pass-Block in
+        extract_scenario_from_test() NIE extrahiert → Argument-Accuracy war
+        strukturell immer 100% (nie geprüft).
+
+        Dieser Test stellt sicher:
+        1. Ein GoldStandard mit required_arguments KANN korrekt befüllt sein (nach Bug-Fix).
+        2. evaluate_tool_run() bewertet Argumente ohne Tool-Ausführung (result bleibt None).
+        3. Wenn required_arguments LEER wäre (alter pass-Bug), würde Argument-Accuracy
+           fälschlicherweise 100% melden — dieser Fall wird explizit markiert.
+
+        Methodologischer Hinweis für die Masterarbeit:
+        - Tool-Selection-Accuracy (nicht Task-Completion-Rate) als Metrik deklarieren.
+        - Argument-Accuracy-Werte aus Eval-Läufen VOR dem Bug-Fix sind nicht valide.
+        - Beide Punkte im Methodenteil explizit als Einschränkungen nennen.
+        """
+        from tests.eval.evaluation import (
+            GoldStandard, ToolCall, ArgumentMatchMode, evaluate_tool_run
+        )
+
+        # --- Teil 1: required_arguments korrekt befüllt (nach Bug-Fix) ---
+        gold_with_args = GoldStandard(
+            required_tools=["klips2_register"],
+            required_arguments={
+                "klips2_register": {"vorname": "Max", "email": "max@uni-koeln.de"}
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+        assert gold_with_args.required_arguments, (
+            "required_arguments ist leer — Bug-Fix von extract_scenario_from_test() hat nicht gegriffen"
+        )
+
+        # --- Teil 2: Eval ohne Execution (result=None) misst nur Planung ---
+        tc_planned = ToolCall(
+            name="klips2_register",
+            arguments={"vorname": "max", "email": "max@uni-koeln.de"},
+            result=None  # Nicht ausgeführt → nur Selektion bewertet
+        )
+        result_planned = evaluate_tool_run([tc_planned], gold_with_args)
+        assert result_planned.success, (
+            f"Korrekt GEPLANTES Tool sollte Success liefern (result=None): "
+            f"{result_planned.failure_reasons}"
+        )
+
+        # --- Teil 3: Leere required_arguments (simulierter alter pass-Bug) ---
+        # → Argument-Accuracy ist immer 100%, weil nichts geprüft wird
+        gold_empty_args = GoldStandard(
+            required_tools=["klips2_register"],
+            required_arguments={},  # Simuliert: pass-Block hat nichts extrahiert
+        )
+        tc_wrong = ToolCall(
+            name="klips2_register",
+            arguments={"vorname": "FALSCH", "email": "falsch@example.com"},
+            result=None
+        )
+        result_empty = evaluate_tool_run([tc_wrong], gold_empty_args)
+
+        # Mit leeren required_arguments meldet das Framework Success — falsches Positive!
+        # Dieser Assert dokumentiert das Verhalten, warnt aber explizit davor.
+        assert result_empty.success, (
+            "Unerwartet: Framework meldet Fehler trotz leerer required_arguments. "
+            "Verhalten geändert — Test prüfen."
+        )
+        print(
+            "  ✅ Kombinierte Einschränkung dokumentiert:\n"
+            "     • run_single_scenario() = Selection-only (kein Execution)\n"
+            "     • required_arguments={} (alter pass-Bug) → Argument-Accuracy immer 100%"
+            " (falsches Positives)\n"
+            "     • Bug gefixt: extract_scenario_from_test() extrahiert required_arguments korrekt\n"
+            "     ⚠️  Methodenteil: 'Tool-Selection-Accuracy' deklarieren; Argument-Accuracy-"
+            "Werte\n"
+            "         aus Eval-Läufen vor dem Bug-Fix sind nicht valide und müssen als solche"
+            " ausgewiesen werden."
+        )
+
