@@ -8,6 +8,7 @@ Testet:
 4. Einen hypothetischen RAGAS-Metrik-Sample (Strukturtest, kein LLM-Call)
 5. Kritische Pfade: Query-Passing, Embedding-Normalisierung, MMR-Embedding-Arithmetik,
    Kontext-Vollständigkeit, Embedding-Cleanup nach MMR
+6. Eval-Framework: required_arguments-Extraktion, Tool-Selektion vs. Execution
 """
 
 import sys
@@ -229,6 +230,7 @@ class TestRAGConfig:
         assert not cfg.use_reranking
         assert not cfg.use_mmr
         assert not cfg.use_hybrid_retrieval
+        assert not cfg.use_sparse_retrieval
         print("  ✅ RAGConfig naive_setup=True: alle Advanced-Flags deaktiviert")
 
     def test_advanced_setup_respects_individual_flags(self):
@@ -238,6 +240,34 @@ class TestRAGConfig:
         assert not cfg.use_mmr
         assert not cfg.use_hybrid_retrieval
         print("  ✅ RAGConfig granulare Flags: nur Reranking aktiv")
+
+    def test_naive_setup_cannot_be_bypassed_even_with_all_enables_true(self):
+        """Kritisch: naive_setup=True muss alle enable_*=True Flags übersteuern.
+        Dieser Test stellt sicher, dass das Retrieval-Tool keine Advanced-Features
+        aktiviert, auch wenn alle enable_*-Flags auf True stehen."""
+        from src.advanced_rag.rag_config import RAGConfig
+        from src.tools.rag_tool import UniversityRAGTool
+
+        # Worst case: alle Features explizit aktiviert, aber naive_setup=True
+        cfg = RAGConfig(
+            naive_setup=True,
+            enable_hybrid_retrieval=True,
+            enable_reranking=True,
+            enable_mmr=True,
+            enable_sparse_retrieval=True,
+        )
+
+        # Properties müssen alle False liefern
+        assert not cfg.use_hybrid_retrieval, "use_hybrid_retrieval muss False sein bei naive_setup=True"
+        assert not cfg.use_reranking,        "use_reranking muss False sein bei naive_setup=True"
+        assert not cfg.use_mmr,              "use_mmr muss False sein bei naive_setup=True"
+        assert not cfg.use_sparse_retrieval, "use_sparse_retrieval muss False sein bei naive_setup=True"
+
+        # Das Tool darf weder Advanced noch Sparse aktivieren
+        tool = UniversityRAGTool(config=cfg)
+        assert not tool._use_advanced, "_use_advanced darf bei naive_setup=True nicht True sein"
+        assert not tool._use_sparse,   "_use_sparse darf bei naive_setup=True nicht True sein"
+        print("  ✅ Naive-Setup-Bypass-Schutz: naive_setup=True übersteuert alle enable_*=True Flags")
 
 
 # ============================================================================
@@ -311,20 +341,20 @@ class TestQueryPassing:
 
     def test_rag_tool_run_passes_full_query_to_retrieval(self, monkeypatch):
         """_run() übergibt die Query 1:1 — keine Modifikation auf dem Weg zum Retrieval.
-        
-        RAGConfig(naive_setup=True, enable_sparse_retrieval=False) → _naive_retrieve-Pfad.
-        RAGConfig(naive_setup=True)                                 → _sparse_retrieve-Pfad.
-        Wir testen beide explizit.
+
+        Nach dem Fix gilt:
+        - naive_setup=True → immer _naive_retrieve (unabhängig von enable_sparse_retrieval)
+        - naive_setup=False, enable_sparse_retrieval=True → _sparse_retrieve
         """
         from src.tools.rag_tool import UniversityRAGTool
         from src.advanced_rag.rag_config import RAGConfig
 
         test_query = "Wie bewerbe ich mich für den Master BWL an der WiSo-Fakultät?"
 
-        # --- Pfad 1: Naive (sparse disabled) → _naive_retrieve ---
+        # --- Pfad 1: Naive (naive_setup=True) → _naive_retrieve ---
         captured_naive = []
         tool_naive = UniversityRAGTool(
-            config=RAGConfig(naive_setup=True, enable_sparse_retrieval=False)
+            config=RAGConfig(naive_setup=True, enable_sparse_retrieval=True)  # enable hat keine Wirkung mehr
         )
         monkeypatch.setattr(tool_naive, "_naive_retrieve",
                             lambda q, **kw: captured_naive.append(q) or [])
@@ -335,10 +365,11 @@ class TestQueryPassing:
             f"Naive-Pfad: Query verändert! '{captured_naive[0]}' ≠ '{test_query}'"
         )
 
-        # --- Pfad 2: Sparse → _sparse_retrieve ---
+        # --- Pfad 2: Sparse (naive_setup=False) → _sparse_retrieve ---
         captured_sparse = []
         tool_sparse = UniversityRAGTool(
-            config=RAGConfig(naive_setup=True, enable_sparse_retrieval=True)
+            config=RAGConfig(naive_setup=False, enable_sparse_retrieval=True,
+                             enable_reranking=False, enable_hybrid_retrieval=False, enable_mmr=False)
         )
         monkeypatch.setattr(tool_sparse, "_sparse_retrieve",
                             lambda q, **kw: captured_sparse.append(q) or [])
@@ -349,7 +380,7 @@ class TestQueryPassing:
             f"Sparse-Pfad: Query verändert! '{captured_sparse[0]}' ≠ '{test_query}'"
         )
 
-        print(f"  ✅ Query-Passing: Query unverändert in beiden Retrieval-Pfaden")
+        print(f"  ✅ Query-Passing: Query unverändert in Naive- und Sparse-Pfad")
 
 
 # ============================================================================
@@ -582,4 +613,248 @@ class TestContextCompleteness:
             "Dokument-Reihenfolge im Kontext stimmt nicht mit Eingabe-Reihenfolge überein"
         )
         print(f"  ✅ Kontext-Reihenfolge: Positionen {pos_first} < {pos_second} < {pos_third}")
+
+
+# ============================================================================
+# 14. Eval-Framework: required_arguments werden tatsächlich extrahiert
+#     (Issue #3 — Methodologische Validität)
+# ============================================================================
+class TestRequiredArgumentsExtraction:
+    """
+    Stellt sicher, dass extract_scenario_from_test() required_arguments korrekt
+    parst — und nicht leer lässt (was zu künstlich guten Argument-Accuracy-Scores führt).
+
+    Hintergrund: Der `pass`-Block in run_evaluation.py:
+        if args_match:
+            pass   # ← wird nie befüllt
+    bewirkt, dass required_arguments immer {} ist, also nie geprüft wird.
+    """
+
+    def test_gold_standard_with_arguments_is_not_empty(self):
+        """GoldStandard mit required_arguments ist nach Konstruktion nicht leer."""
+        from tests.eval.evaluation import GoldStandard, ArgumentMatchMode
+
+        gold = GoldStandard(
+            required_tools=["klips2_register"],
+            required_arguments={
+                "klips2_register": {
+                    "vorname": "Max",
+                    "nachname": "Mustermann",
+                    "email": "max@example.com",
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+
+        # Prüfung: required_arguments muss befüllt sein
+        assert gold.required_arguments, (
+            "required_arguments ist leer — GoldStandard-Konstruktion fehlerhaft"
+        )
+        assert "klips2_register" in gold.required_arguments
+        assert len(gold.required_arguments["klips2_register"]) == 3
+        print("  ✅ GoldStandard: required_arguments korrekt befüllt")
+
+    def test_extract_scenario_required_arguments_are_populated(self):
+        """
+        KRITISCH: extract_scenario_from_test() darf required_arguments nicht leer lassen.
+
+        Dieser Test erkennt den bekannten `pass`-Bug:
+        Wenn der extrahierte GoldStandard bei einem Test, der required_arguments
+        definiert, ein leeres Dict zurückgibt, schlägt dieser Test fehl.
+        """
+        from tests.eval.run_evaluation import extract_scenario_from_test, Difficulty
+
+        # Wir laden einen Testfall, der required_arguments definiert
+        from tests.eval.klips.test_register import TestRegisterEasy
+        method = TestRegisterEasy.test_register_01_complete_german_male
+
+        scenario = extract_scenario_from_test(
+            method,
+            tool_name="klips2_register",
+            difficulty=Difficulty.EASY,
+            category="registration",
+            test_id="TestRegisterEasy.test_register_01_complete_german_male"
+        )
+
+        assert scenario is not None, "Szenario konnte nicht extrahiert werden"
+        assert scenario.gold_standard.required_arguments, (
+            "FEHLER (Issue #3): required_arguments ist leer trotz definierter Argumente "
+            "im Testfall. Der `pass`-Block in extract_scenario_from_test() verhindert "
+            "die Extraktion → Argument-Accuracy wird immer als 100% gemeldet, "
+            "obwohl keine Argumente geprüft werden. "
+            "Fix: Regex-Parser für required_arguments-Dict implementieren."
+        )
+        # Erwartete Argumente
+        args = scenario.gold_standard.required_arguments.get("klips2_register", {})
+        assert "vorname" in args, f"'vorname' fehlt in extrahierten Argumenten: {args}"
+        assert "email" in args,   f"'email' fehlt in extrahierten Argumenten: {args}"
+        print(f"  ✅ required_arguments-Extraktion: {len(args)} Argumente korrekt extrahiert")
+
+    def test_argument_accuracy_is_zero_if_wrong_arguments_passed(self):
+        """
+        Argument-Accuracy darf nicht 100% sein, wenn falsche Argumente übergeben werden.
+
+        Dieser Test prüft, dass evaluate_tool_run() Argument-Fehler erkennt,
+        sofern required_arguments korrekt befüllt ist.
+        """
+        from tests.eval.evaluation import (
+            GoldStandard, ToolCall, ArgumentMatchMode, evaluate_tool_run
+        )
+
+        gold = GoldStandard(
+            required_tools=["klips2_register"],
+            required_arguments={
+                "klips2_register": {
+                    "vorname": "Max",
+                    "email": "max@example.com",
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+
+        # Falsche Argumente: falscher Vorname, fehlende E-Mail
+        wrong_call = ToolCall(
+            name="klips2_register",
+            arguments={"vorname": "Hans", "email": "wrong@example.com"}
+        )
+
+        result = evaluate_tool_run([wrong_call], gold)
+
+        assert not result.success, (
+            "evaluate_tool_run() meldet Success obwohl falsche Argumente übergeben wurden"
+        )
+        assert len(result.wrong_arguments) > 0, (
+            "wrong_arguments ist leer trotz falscher Argumentwerte"
+        )
+        print(f"  ✅ Argument-Fehler erkannt: {result.failure_reasons}")
+
+    def test_argument_accuracy_is_perfect_when_correct(self):
+        """evaluate_tool_run() meldet Success bei korrekten Argumenten."""
+        from tests.eval.evaluation import (
+            GoldStandard, ToolCall, ArgumentMatchMode, evaluate_tool_run
+        )
+
+        gold = GoldStandard(
+            required_tools=["klips2_register"],
+            required_arguments={
+                "klips2_register": {
+                    "vorname": "Max",
+                    "email": "max@example.com",
+                }
+            },
+            argument_match_mode=ArgumentMatchMode.NORMALIZED
+        )
+
+        correct_call = ToolCall(
+            name="klips2_register",
+            arguments={"vorname": "max", "email": "max@example.com"}  # Lowercase OK bei NORMALIZED
+        )
+
+        result = evaluate_tool_run([correct_call], gold)
+
+        assert result.success, (
+            f"evaluate_tool_run() meldet Fehler bei korrekten Argumenten: {result.failure_reasons}"
+        )
+        print("  ✅ Korrekte Argumente → Success (NORMALIZED-Matching)")
+
+
+# ============================================================================
+# 15. Eval-Framework: Tool-Selektion vs. End-to-End-Execution
+#     (Issue #4 — Methodologische Einschränkung explizit dokumentieren)
+# ============================================================================
+class TestToolSelectionVsExecution:
+    """
+    Dokumentiert und überprüft die methodologische Einschränkung:
+    run_single_scenario() prüft nur Tool-SELEKTION, nicht Tool-AUSFÜHRUNG.
+
+    Korrekte wissenschaftliche Einordnung:
+    - Was gemessen wird: Ob das LLM das richtige Tool mit richtigen Argumenten plant
+    - Was NICHT gemessen wird: Ob die Ausführung des Tools erfolgreich ist
+    - Implikation für die Arbeit: Claims über "Agent löst Aufgaben" müssen auf
+      "Agent plant Aufgaben korrekt" eingeschränkt werden.
+    """
+
+    def test_tool_selection_metric_is_planning_not_execution(self):
+        """
+        Stellt sicher, dass ToolCall.result=None ein legitimer Zustand ist —
+        d.h. das Framework erlaubt Bewertung ohne tatsächliche Ausführung.
+        """
+        from tests.eval.evaluation import ToolCall
+
+        # run_single_scenario() liefert ToolCalls ohne result (kein Execution)
+        tc = ToolCall(name="klips2_register", arguments={"vorname": "Max"}, result=None)
+        assert tc.result is None, (
+            "ToolCall.result sollte None sein bei reiner Tool-Selektion (kein Execution)"
+        )
+        print("  ✅ ToolCall.result=None: Tool-Selektion ohne Execution ist valider Zustand")
+
+    def test_evaluation_succeeds_without_tool_execution_result(self):
+        """
+        evaluate_tool_run() bewertet nur Tool-Name und Argumente, nicht das result-Feld.
+        Das bedeutet: ein Tool kann als 'korrekt gewählt' gelten, auch wenn es
+        in der Realität fehlschlagen würde.
+        """
+        from tests.eval.evaluation import GoldStandard, ToolCall, evaluate_tool_run
+
+        gold = GoldStandard(
+            required_tools=["send_email"],
+            required_arguments={
+                "send_email": {"subject": "Test", "body": "Hallo"}
+            }
+        )
+
+        # Tool korrekt selektiert und Argumente korrekt — result=None (kein Execution)
+        tc = ToolCall(
+            name="send_email",
+            arguments={"subject": "Test", "body": "Hallo"},
+            result=None  # Nicht ausgeführt
+        )
+
+        result = evaluate_tool_run([tc], gold)
+
+        assert result.success, (
+            f"evaluate_tool_run() sollte Success melden (Selektion korrekt), "
+            f"auch ohne result: {result.failure_reasons}"
+        )
+        print(
+            "  ✅ Eval-Einschränkung bestätigt: Tool korrekt GEPLANT (result=None) → Success\n"
+            "     ⚠️  METHODOLOGISCHER HINWEIS: Dies misst Planning-Accuracy, nicht Execution-Success.\n"
+            "         In der Masterarbeit als 'Tool-Selection-Accuracy' benennen, nicht als "
+            "'Task-Completion-Rate'."
+        )
+
+    def test_execution_failure_is_not_captured_by_current_eval(self):
+        """
+        Zeigt explizit: Das aktuelle Framework kann keinen Ausführungsfehler erkennen.
+        Ein Tool, das korrekt geplant aber fehlerhaft ausgeführt wird, bekommt Success=True.
+
+        Dieser Test ist ein DOKUMENTATIONSTEST — er beschreibt eine bekannte Lücke.
+        """
+        from tests.eval.evaluation import GoldStandard, ToolCall, evaluate_tool_run
+
+        gold = GoldStandard(
+            required_tools=["klips2_register"],
+            required_arguments={"klips2_register": {"vorname": "Max"}}
+        )
+
+        # Simulation: Tool korrekt geplant, aber Ausführung hätte Fehler geworfen
+        # (z.B. API nicht erreichbar, Credentials falsch)
+        tc = ToolCall(
+            name="klips2_register",
+            arguments={"vorname": "Max"},
+            result="ERROR: Connection refused"  # Execution-Fehler — wird nicht bewertet
+        )
+
+        result = evaluate_tool_run([tc], gold)
+
+        # Das Framework ignoriert result → Success=True obwohl Execution fehlschlug
+        assert result.success, (
+            "Unerwartet: Framework bewertet jetzt auch result-Fehler. "
+            "Dann diesen Test aktualisieren."
+        )
+        print(
+            "  ✅ Bekannte Lücke dokumentiert: Execution-Fehler im result-Feld wird nicht erkannt.\n"
+            "     ⚠️  Framework misst Tool-Planning-Accuracy (Selektion + Argumente),\n"
+            "         nicht End-to-End Task-Completion. Scores in der Arbeit entsprechend einordnen."
+        )
 

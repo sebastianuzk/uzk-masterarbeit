@@ -176,16 +176,41 @@ def extract_scenario_from_test(
             forbidden_str = forbidden_match.group(1)
             forbidden_tools = set(re.findall(r'["\']([^"\']+)["\']', forbidden_str))
         
-        # Extract required_arguments (simplified - just check if present)
+        # Extract required_arguments — parse the nested dict from source
         required_arguments = {}
         args_match = re.search(
-            r'required_arguments\s*=\s*\{',
+            r'required_arguments\s*=\s*(\{)',
             source
         )
         if args_match:
-            # For now, we'll do a simplified extraction
-            # A more robust parser would be needed for complex nested dicts
-            pass
+            # Find the full nested dict by counting braces
+            start_idx = args_match.start(1)
+            depth = 0
+            end_idx = start_idx
+            for i, ch in enumerate(source[start_idx:], start=start_idx):
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end_idx = i + 1
+                        break
+            raw_dict_str = source[start_idx:end_idx]
+            try:
+                # Safe evaluation: only allow literals
+                import ast
+                required_arguments = ast.literal_eval(raw_dict_str)
+            except Exception:
+                # Fallback: best-effort flat key-value extraction
+                required_arguments = {}
+                for tool_match in re.finditer(r'["\'](\w+)["\']:\s*\{([^}]+)\}', raw_dict_str):
+                    tool_name_inner = tool_match.group(1)
+                    kv_str = tool_match.group(2)
+                    args = {}
+                    for kv in re.finditer(r'["\'](\w+)["\']:\s*["\']([^"\']+)["\']', kv_str):
+                        args[kv.group(1)] = kv.group(2)
+                    if args:
+                        required_arguments[tool_name_inner] = args
         
         # Determine argument match mode
         if "ArgumentMatchMode.EXACT" in source:
