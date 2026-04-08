@@ -151,7 +151,8 @@ class UniversityRAGTool(BaseTool):
             return False
         
         # Advanced Retrieval wenn Hybrid ODER ReRanking ODER MMR aktiv
-        return self.config.enable_hybrid_retrieval or self.config.use_reranking or self.config.use_mmr
+        # Wichtig: use_* Properties verwenden (nicht enable_*), da use_* an naive_setup gebunden ist
+        return self.config.use_hybrid_retrieval or self.config.use_reranking or self.config.use_mmr
     
     def _should_use_sparse(self) -> bool:
         """
@@ -160,8 +161,9 @@ class UniversityRAGTool(BaseTool):
         if not self.config:
             return False
         
-        # Sparse Retrieval ist explizit aktiviert
-        return self.config.enable_sparse_retrieval
+        # Wichtig: use_sparse_retrieval Property verwenden (nicht enable_sparse_retrieval),
+        # da use_* an naive_setup gebunden ist und bei naive_setup=True immer False liefert
+        return self.config.use_sparse_retrieval
     
     def _get_chromadb_client(self):
         """Hole ChromaDB Client (Shared Helper)."""
@@ -298,7 +300,9 @@ class UniversityRAGTool(BaseTool):
         reranking_candidates = self.config.reranking_candidates if self.config else 40
         
         # Entscheide: Hybrid Retrieval oder nur Dense Retrieval?
-        if self.config and self.config.enable_hybrid_retrieval:
+        # Wichtig: use_hybrid_retrieval Property verwenden (nicht enable_hybrid_retrieval),
+        # da use_* an naive_setup gebunden ist und bei naive_setup=True immer False liefert
+        if self.config and self.config.use_hybrid_retrieval:
             # === HYBRID RETRIEVAL (Dense + BM25 + RRF) ===
             from src.advanced_rag.retrieval.hybrid_retrieval_rrf import hybrid_retrieve
             
