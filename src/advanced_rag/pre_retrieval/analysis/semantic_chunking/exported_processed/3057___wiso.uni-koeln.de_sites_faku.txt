@@ -1,0 +1,292 @@
+--- Page 1 ---
+ 
+    
+ 
+ 
+ 
+ 
+Getting Started with  
+Wharton Research Data Services  
+  
+http://wrds.wharton.upenn.edu  
+ 
+ 
+ 
+
+--- Page 2 ---
+ 
+ 
+CONTENTS  
+Welcome to Wharton Research Data Services  ................................ ................................ ................................ ........................  3 
+Access Options  ................................ ................................ ................................ ................................ ................................ .........  3 
+How to Access the Data  ................................ ................................ ................................ ................................ ...........................  3 
+Browser -Based Access  ................................ ................................ ................................ ................................ .........................  3 
+Command Line Access  ................................ ................................ ................................ ................................ .........................  4 
+Interactive Applications  ................................ ................................ ................................ ................................ .......................  4 
+Serv ices ................................ ................................ ................................ ................................ ................................ ....................  5 
+Accounts ................................ ................................ ................................ ................................ ................................ ...................  5 
+Applying for an Account  ................................ ................................ ................................ ................................ ......................  5 
+Types of Accounts  ................................ ................................ ................................ ................................ ................................  6 
+WRDS Terms of Use  ................................ ................................ ................................ ................................ ................................ . 7 
+Database Sub scriptions  ................................ ................................ ................................ ................................ ............................  7 
+WRDS Access Pass  ................................ ................................ ................................ ................................ ................................ .... 7 
+End User Experience  ................................ ................................ ................................ ................................ ............................  7 
+Duration of Access Pass  ................................ ................................ ................................ ................................ .......................  7 
+Vendor  Contact Information  ................................ ................................ ................................ ................................ ....................  8 
+WRDS Representative  ................................ ................................ ................................ ................................ ..............................  8 
+WRDS Administration  ................................ ................................ ................................ ................................ ..............................  8 
+Additional Help  ................................ ................................ ................................ ................................ ................................ ........  8 
+Technical and Research Support  ................................ ................................ ................................ ................................ .........  8 
+Electronic Resources ................................ ................................ ................................ ................................ ............................  9 
+Change Password  ................................ ................................ ................................ ................................ ................................  9 
+WRDS Support ................................ ................................ ................................ ................................ ................................ ..........  9 
+ 
+
+--- Page 3 ---
+ 
+WELCOME TO  WHARTON RESEARCH DATA SERVICES  
+ 
+WRDS  democratizes data access so that all disciplines — Accounting, Banking, Economics, ESG, Finance, Healthcare, 
+Insurance, Marketing, and Statistics — can easily search for concepts across the data repository. Partnering with global 
+vendors,  WRDS  hosts 350+TB of data — the broadest collection of data on the most robust computing infrastructure to 
+give users the power to analyze complex information at speeds of up to 400MB per second.  
+Our rigorous data review and validation  give users the confidence to tailor research and create a wide range of reliable 
+data models. WRDS’ unique array of resources and services include access to a suite of  ANALYTICS  tools dev eloped by 
+our doctoral -level research team, tutorials, research support.  Learning Pathways by WRDS  — online learning and 
+instructor pathways — provide curated, guided, online resources  for Researchers, Instructors, and Information 
+Professionals. Through Data, Analytics, Research and Technology, approach your research using real world examples and 
+advance your analysis to answer the most critical questions with your data.  
+WRDS is more th an just a data platform. Supporting over 75,000 commercial, academic, and government users at 500+ 
+institutions in 3 5+ countries, WRDS is the global gold standard in data management, innovative tools, analytics, and 
+research services — all backed by the cr edibility and leadership of the Wharton School.  
+ 
+ACCESS  OPTIONS  
+WRDS provides a common interface to a variety of databases in order to make the process of extracting data more 
+simple for you and help you focus on what’s important – your research.  
+WRDS offers 3 ways of accessing data: On our website  using form -based que ries, through a UNIX terminal  session, or 
+using PC -SAS on your desktop computer . Each method has its own benefits and strengths.  
+ 
+HOW T O ACCESS  THE DATA  
+BROWSER -BASED ACCESS  
+All you need is a web browser and Internet access  to query data from WRDS. No sof tware to install, no specific 
+programming language to learn. After you've decided on which dataset to use, you can used our web -based query form 
+to extract and output data in the format of your choice.  
+• Simple, powerful queries  with a few clicks.  
+• Export  into the format of your choice.  
+• Import  into popular programs with ease.  
+Each dataset on WRDS includes a description of what's included as well as links to the pages for each query. The web -
+based version of WRDS is designed to work with any modern br owser.  
+Our web queries have the same general format for all databases in WRDS. In almost all cases, you need to complete four 
+steps:  
+
+--- Page 4 ---
+ 
+1. Chose your  date range  
+2. Select your  company codes  or tickers  
+3. Select your query  variables  
+4. Select your query  output type  
+When y ou submit your query, it runs on our powerful servers and is made available for you to download when it is 
+complete.  For additional information on running web queries please click here . 
+WRDS CLOUD  
+WRDS also provides a high performance computing cluster we call the WRDS Cloud. This system gives you command -line 
+access to a powerful resea rch computing system that provides direct access to all of our data, and includes support for 
+many powerful research programming languages. Some of the benefits of the WRDS Cloud include:  
+• Run your own customized programs  with several data sources at once.  
+• Use our powerful servers, offering up to  24 cores  and 256GB RAM  each.  
+• Store up to  10GB of your programs and data  in your own directory.  
+• Access up to  500GB of temporary disk space  to process programs and store results.  
+• Direct access to WRDS data over a  high -speed network.  
+The WRDS Cloud is accessible via SSH, a way of easily and securely connecting to WRDS. Once connected, you'll be able 
+to access WRDS data directly in your favorite programming languages. Languages supported on the WRDS Cloud:  
+• SAS 
+• Python  
+• R 
+• Stata  (requires active Stata license with StataCorp)  
+Some knowledge of UNIX is helpful when working on the WRDS Cloud, but we've included everything you need to get 
+started in our documentation.  For additional information using the WRDS Cloud plea se click here .  
+CONNECTING REMOTELY  
+WRDS data is further accessible remotely from the comfort of your workstation or laptop, through many popular 
+programming applications.  
+You can connect to WRDS and access WRDS datasets in the following interactive applications:  
+• SAS via PC-SAS/Connect  
+• Python  via Jupyter Notebooks  or Spyder  
+• R via RStudio  
+• MATLAB  
+• Stata  
+Each of these allows you to program on your local workstation while connecting remotely to WRDS to have access to all 
+WRDS data. Each solution requires a small amount of setup to initially connect, but once connected, accessing WRDS 
+data within your progra mming environment is as simple as referencing a variable or libname. Besides the SAS 
+connection method, all other methods rely of submitting SQL statements to WRDS and receiving the results directly in 
+your program. For additional information about Program ming at WRDS please click here .  
+ 
+
+--- Page 5 ---
+ 
+SERVICES  
+WRDS provides a common interface to a variety for databases, simplifying extraction and increasing productivity with:  
+• WRDS Support  Support from a team of Ph.D. , data,  and technical  specialists  is available to you r researchers.  
+• DART  Videos  Self paced remote access to our library of data, analytics, research and technology training 
+resources.  The library contains a range of resources curated to researchers, info rmation professionals and 
+instructors.  
+• Classroom Tools  Instructors can use Classroom Tools by WRDS as a core component of their curriculum, as 
+stand -alone lessons, or as assignments . This is also a helpful place to our Introduction to WRDS guides which can 
+be a helpful resource as you familiarize yourself with WRDS.  
+• Analytic Tools  Analytics tools are designed to impro ve efficiency, enabling researchers to tap into different data 
+sources and research areas without having to create sophisticated programs. Results are presented graphically 
+and include the underlying data for further analysis and exploration.  
+• Knowledgebase  Knowledgebase articles offer dynamic articles regarding WRDS and our data.  
+• Data Validation, Integrity and Consistency.  Working with multiple vendors, we provide the broade st collection 
+of data and most robust computing infrastructure to give users the power to analyze complex information at 
+spee ds of up to 400MB per second.  We provide a r eliable infrastructure with  professionals managing the 
+process of uploading and updating the data on state -of-the art systems.  
+ACCOUNTS  
+All full -time faculty, staff, and students at a subscribing institution are eligible for web access to WRDS.  Individual 
+(faculty, doctoral, staff, v isitor and research assistant) may be provided with access at the discretion of your local  WRDS 
+Representative.  Alumni members, research colleagues, and other persons not actively employed or registered with your 
+organization  do not qualify  for an account .  
+Our WRDS policy prohibits Undergraduate/Masters students from accessing WRDS during the extended break between 
+semesters. Once the new semester begins, these students will again be able to access their WRDS accounts.  Please 
+contact WRDS Support  with any questions.  
+APPLYING FOR A N ACCOUNT  
+Step 1:  Point your web browser to https://wrds -www.wharton.upenn.edu/register/   
+Step 2:  Complete the registration form , review the Terms of Use and submit.  
+Step 3:  Check your email for a link to verify and complete your registration.  
+Step 4:  Once your verification is complete, your local W RDS representatives will review your  account  request and you 
+will receive a system generated email to notify you when your request has been processed . 
+ 
+ 
+ 
+
+--- Page 6 ---
+ 
+TYPES OF ACCOUNTS  
+Faculty : Faculty accounts are available to all standing faculty of member institutions. Standard accounts allow unlimited 
+access via web, SSH, and/or FTP, and include 10 GB  of permanent disk storage.  Faculty will have their own password 
+access; this password is to remain confidential and is not to be shared with any other individual . 
+Please note: Lecturers are not eligible for faculty accounts but may apply for a visitor account.  
+Staff : Staff accounts can only be requested by support personnel such as librarians, I T support staff or other staff  of 
+member institutions. (Please note that this type of account does not automatically carry WRDS Rep privileges, though 
+many WRDS reps have this kind of account. WRDS Rep administrative capabilities are assigned separately fr om the 
+account designation.) Staff  accounts allow unlimited access via web, SSH, and/or FTP, and include 10 GB  of permanent 
+disk storage . Staff  will have their own password access; this password is to remain confidential and is not to be shared 
+with any other individual . 
+Ph.D.  student : Ph.D.  accounts are available to all current Ph.D.  candidates of member institutions. Ph.D.  candidates who 
+accept a faculty appointment at another institution may continue to use their WRDS account until they defend their 
+dissertation. After the defense, then the WRDS Rep will disable the account. Standard accounts allow unlimited access 
+via web, SSH, and/or FTP, and include 10 GB of permanent disk storage . Doctoral students will have their own password 
+access; this password is to remain confidential and is not to be shared with any other individual . 
+Masters / Undergrad student:  Masters accounts are available to full -time masters students of member institutions. 
+These accounts allow access via web, and SAS. Masters students wi ll have their own password access. This password is 
+to remain confidential and is not to be shared with any other individual . These accounts do NOT include disk storage. 
+Please note:  Our WRDS policy prohibits undergraduate/Masters students from accessing WRDS during the extended 
+break between semesters.  Once the new semester begins, students will again be able to access their WRDS accounts. 
+Please contact WRDS  support  should you  have any questions regarding this access.   
+Visitor : Visitor accounts are available to visiting faculty (non -permanent or part time position).  These accounts are 
+subject to additional review and may not be used after the visiting appointment ends.  The WRDS Rep w ill choose to 
+approve this person as a visitor. The guidelines for “ visitors” require a formal relationship between the institution and 
+the individual  -- the individual is being paid to be at your institution or has a formal letter of appointment (from a D ean) 
+to an unpaid position. This generally precludes co -authors and Ph.D.  candidates  as well as unpaid research associates . 
+The User will have to accept additional T erms of Use prior to access.  Standard accounts allow unlimited access via web, 
+SSH, and/or FTP, and include 10 GB  of permanent disk storage.  Visitor accounts will have their own password access,  is 
+to remain confidential and is not to be shared with any other individual . 
+Research Assistant : Research accounts are available to graduate and undergraduate students performing research for a 
+faculty member.  Research Accounts allow access v ia web, SSH, and/or FTP, and  include 10 GB  of permanent disk 
+storage.  A standing faculty member may have one Research Assistant account.  Research assistants wi ll have their own 
+password access; this password is to remain confidential and is not to be shared with any other individual . 
+Class: Class accounts may be requested by standing faculty of member institutions and are used to access the WRDS 
+web interface. T hese accounts are primarily for student usage that is associated with a specific class and all students in 
+the class s hare the same password. Up to 15  simultaneous users will share the same account and password. This 
+password is not to be shared with any o ther individual outside of the class.  These accounts provide access only and do 
+NOT include disk storage , access to WRDS Cloud or the ability to access WRDS data interactively through SAS, Python, 
+
+--- Page 7 ---
+ 
+R, MATLAB, Stata, etc . These accounts  expire at the end of the term  or semester . Class accounts need to be set up by 
+the Professor, approved by the WRDS Represenative, and should not be carried over for the next semester’s class.    
+ 
+WRDS TERMS OF USE  
+All users must agree to the WRDS Terms of Use  which are available on our website under  the Getting Started  section  of 
+the WRDS website .  
+DATABASE SUBSCRIPTIONS  
+Although WRDS provides access to a wide variety of databases, users are only given authorization to those  resources 
+that their institution  subscribes. To view the data your institution has provided navigate to Get Data . The products and 
+vendors you r institution  are not subscribed  to will appear in grey.  For more information on data access and permissions, 
+see the " Products " link in the top menu bar under “Your Account”.  
+ 
+WRDS ACCESS PASS  
+IP Authenticated workstation/s can be mad e available within your institution’s library or computer labs. These may only 
+be accessed by valid Users (not the general public) at your institution.  
+When logging into WRDS, Users will be asked to enter an email account w ith your institution’s domain. WRDS will then 
+send an email message to that email account to verify that the account is valid. This email will contain an “Access Pass” 
+link which the User can click on to get direct access into WRDS.  
+This is an ideal way for undergraduate students (who ma y not have access to WRDS via a class account and who do not 
+qualify for an individual account) to use the system. Accessing the WRDS platform through this method does not provide 
+disk storage or access to the WRDS computing cloud.  
+WRDS website URL for IP access is: http://wrds -web.wharton.upenn.edu/wrds/connect  
+END USER EXPERIENCE  
+The Librarians for each institution will consult with WRDS and receive a link for the range of IP -Authenticated 
+computers. The user will open a web browser session and follow the initial steps to obtain an Access Pass. The WRDS 
+server will verify that the email domain  is valid for the institution . Once validated, the user will receive an email with the 
+Access Pass link.  
+DURATION OF ACCESS PASS  
+The access pass can be set to last from 1 to 3 days per user, the default is one day.  Please contact your WRDS 
+Repr esentatives with any questions.   
+What will WRDS do with this contact information?  
+
+--- Page 8 ---
+ 
+WRDS will store the contact information with a record of each data query made during that session, just as it does for all 
+WRDS Users with their own accounts. It will not be treated differently or protected in any way that is less secure than 
+regular WRDS Users. Our privacy policy ensures that WRDS does not share personally identifiable information with any 
+other entities. However, information maintained by WRDS may be disclos ed in connection with any judicial proceeding.  
+ 
+VENDOR CONTACT INFORMATION  
+For data vendor technical support, please contact the data vendors that offer each set.  You will find  contacts and email  
+addresses  for all of our vendors on our website under the Support tab link for Data Vendors . 
+For inquiries regarding subscriptions to the databases, please c ontact your WRDS Representative s. Their contact 
+information is available at the menu bar at the top of the WRDS website under “Your Account”.  
+ 
+WRDS REPRESENTATIVE  
+WRDS representatives  at your institution  are responsible for the following:  
+1. Serve as a liaison between the WRDS students, fa culty, and staff at the university. This may include 
+communicating notices regarding system upgrades, the addition of new vendors, scheduled maintenance, etc . 
+2. Monitor account requests by verifying that a requestor is standing faculty, a Ph.D. or Masters student, an 
+authorize d researcher , or an administrator  at the university.   
+3. Account maintenance which may include disa bling accounts  as needed for users  who are no longer affiliated 
+with  the institution, processing expiration dates  extensions, etc.  
+4. Notify department heads/chairs regarding WRDS administrative changes (i.e.: modification of WRDS fee 
+structure, procedures, etc.).  
+ 
+WRDS ADMINISTRATION  
+For information concerning your subscription, details on upgrading your package, or t he status on negotiations with 
+future data providers, please send an e -mail to: wrds -support@wharton.upenn.edu .  
+WRDS SUPPORT & ELECTRONIC RESOURCES  
+TECHNICAL AND RESEARCH SUPPORT  
+Our staff of technical  and research specialists may be reached be reached via WRDS Support . Our support professionals  
+are available to assist you with difficulties pertaining to database  access, data queries, and programming.  If you request 
+support related to a particular program which you are unable to execute successfully, please copy th e program into the 
+body of your  e-mail message for a quicker response . This is helpful for detecting any errors in your program.   
+
+--- Page 9 ---
+ 
+ELECTRONIC RESOURCES  
+DART Videos  Self paced remote access to our library of data, analytics, research and technology training resources. The  
+library contains a range of resources curated to researchers, information professionals and instructors.  
+Classroom Tools   Teaching and learning toolk it specifically designed for Faculty who are introducing finance and 
+business concepts in the classroom.  
+Additional resources are available from any WRDS web page by clicking on the “ Support ” tab located at the top of  
+your screen. You will find several listings:   
+WRDS Knowledgebase  This resource contains detailed articles pertaining to the data available on WRDS.   
+SAS FAQ:  Compiled by one of our technical specialists, this is an excellent resource for users just getting started with 
+SAS.   
+Manuals and Overviews : All electronic manuals published by our vendor providers are available under  
+this link.  If you do not see a particular manual you are interested in, please contact the vendor directly see Vendor 
+Contact information . 
+CHANGE PASSWORD   
+Go to our Password Reset  page and follow the instructions.  
+WRDS  SUPPORT  
+Our staff of technical and research specialists may be reached via WRDS Support . 
+They are available to assist you with difficulties pertaining to database access, d ata q ueries, and programming . 
+We hope you enjoy your access to WRDS . We are confident that you will find the ease of access, abundance of data, and 
+unique system features a significant benefit to your research and teaching endeavors.   
+ 

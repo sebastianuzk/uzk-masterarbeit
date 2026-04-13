@@ -1,0 +1,127 @@
+Key Research Initiative
+
+# SUSTAINABLE SMART ENERGY & MOBILITY
+
+Exploring the interdependent transition to sustainable energy and mobility
+
+## Table of Content
+
+1. Profile
+2. Aims
+3. Members
+4. Research
+5. Joint activities
+6. Teaching
+7. Transfer
+
+## Profile
+
+The Key Research Initiative (KRI) Sustainable Smart Energy & Mobility explores the interdependent transition to sustainable energy and mobility from an interdisciplinary perspective, ranging from artificial intelligence to economics to social behavior. Under the assumption that the electricity and the transportation sector are both affected by and instrumental in the effort to transform energy systems, a complicated array of economic coordination problems arises due to the increasingly distributed nature of both electricity generation and consumption, which is further complicated by weather-dependent availability profiles of wind and sun. Efficient solutions will necessitate new approaches to optimal congestion management—within electricity grids, transport networks and at the intersection of the two sectors, for example, charging electric vehicles and using the batteries in such vehicles as sources of flexibility for the electricity sector.
+
+#### The KRI focuses on four principle areas:
+
+1. Information Technology (IT)-based mechanisms for congestion management in energy and mobility networks
+2. Efficient coordination of investment across regulated and unregulated sectors
+3. New business models for sustainable energy and mobility
+4. Flexible, distributed, weather-dependent, and versatile electricity systems
+
+## Aims
+
+Efforts are focused on electricity and mobility sector synergies that can lead to the most effective use of solutions to create economic resiliency during the transition to sustainable energy. Information systems must play an important role in a sustainable energy future.
+
+#### The KRI aims to:
+
+- research economic incentive mechanisms that make use of the rapidly increasing computational power of artificial intelligence methods such as machine learning and blockchain.
+- investigate the dynamics of policy and commercial relationships that create obstacles to investment and implementation progress and develop suggestions for potential solutions.
+- explore new business models for sustainable energy and mobility and examine their potential for scalable application in the economy.
+- improve the modeling of energy markets, exploring both analytically closed optimisation models and modern, agent-based simulations. In this context, the interface between the electricity sector and the mobility sector receives particular attention, and the economic trade-offs between the various options for making use of electricity for transport is carefully analysed.
+
+## Members
+
+The members of the Key Research Initiative are long accustomed to a multidisciplinary approach. Prof. Dr. Wolfgang Ketter, member of the World Economic Forum Global Future Council on Mobility, coordinates the KRI. He has been working at the intersection of energy, mobility, sustainability and information systems for more than 30 years.
+
+The complete list of research members is as follows:
+
+ 
+
+### Wolf Ketter (coordinator)
+
+- Prof. Dr. Wolfgang Ketter (Find an Expert)
+- Prof. Dr. Wolfgang Ketter (Chaired Professor of Information Systems at the WiSo Faculty)
+
+### Marc Oliver Bettzüge
+
+- Prof. Dr. Marc Oliver Bettzüge (Find an Expert)
+- Prof. Dr. Marc Oliver Bettzüge (Chair of Energy Economics)
+
+### Ziyue Li (Bonald)
+
+- Jun.-Prof. Dr. Ziyue Li (Bonald) on Find an Expert
+- To the website of the Cologne Institute für Information Systems (CIIS)
+
+### Axel Ockenfels
+
+- Find an Expert: Prof. Dr. Axel Ockenfels
+- Prof. Dr. Axel Ockenfels (Department of Economics of the WiSo Faculty)
+
+### Oliver Ruhnau
+
+- Jun.-Prof. Dr. Oliver Ruhnau on Find an expert
+
+### Christian Schwens
+
+- Prof. Dr. Christian Schwens’ Find an Expert page
+- Prof. Dr. Christian Schwens at the Endowed Chair for Interdisciplinary Management Science of the WiSo Faculty
+
+### Saber Talari
+
+- Dr. Saber Talari
+- To the webpage of the Institute for Information Systems for Sustainable Society
+
+## Research
+
+The members of the KRI have published research papers in renowned scientific journals that relate to a wide variety of KRI focus areas. They continue to produce highly relevant research and articles published both in and outside the scientific community.
+
+## Selected recent publications:
+
+- Ayman Abdelwahed, Pieter van den Berg, Tobias Brandt, Wolfgang Ketter, and Judith Mulder. A Boost for Urban Sustainability: Optimizing Electric Transit BusNetworks in Rotterdam. In INFORMS Journal on Applied Analytics, Forthcoming.
+- Ayman Abdelwahed, Pieter van den Berg, Tobias Brandt, John Collins, and Wolfgang Ketter. Evaluating and Optimizing Opportunity Fast-Charging Schedules in Transit Battery Electric Bus Networks. In Transportation Science, Forthcoming.
+- Derck Koolen, Derek Bunn, and Wolfgang Ketter. Renewable Electricity Technologies and Forward Market Risks. In The Energy Journal, 42(4):-, 2020.
+- Dario Pevec, Jurica Babic, Arthur Carvalho, Yashar Ghiassi-Farrokhfal, Wolfgang Ketter, and Vedran Podobnik. A Survey-Based Assessment of How Existing and Potential Electric Vehicle Owners Perceive Range Anxiety. In Journal of Cleaner Production, 276:122779, 2020.
+- Mohammed Ansarin, Yashar Ghiassi-Farrokhfal,Wolfgang Ketter, and John Collins. Cross-subsidies among Residential Prosumers from Tari_ Design and Metering Infrastructure. In Energy Policy, 145:111736, 2020.
+- Philipp Artur Kienscherf, John Collins, Carlee Joe-Wong, Wolfgang Ketter, and Soumya Sen. Time-Dependent Electricity Pricing Using Variable Announcement Horizons. In Energy Informatics, 3(14), 2020.
+- Konstantina Valogianni,Wolfgang Ketter, John Collins, and Dmitry Zhdanov. Sustainable Electric Vehicle Charging using Adaptive Pricing. In Production and Operations Management (POM), 29(6):1550{1572, 2020.
+- Wolfgang Ketter, John Collins, Ori Marom, and Maytal Saar-Tsechansky. Information Systems for a Sustainable Smart Electricity Grid: Emerging Challenges and Opportunities. In ACM Transactions on Management Information Systems, 9(3):10:1{10:22, 2018.
+- Micha Kahlen, Wolfgang Ketter, and Jan van Dalen. Electric Vehicle Virtual Power Plant Dilemma: Grid Balancing Versus Customer Mobility. In Production and Operations Management, 27(11):2054{2070, 2018.
+- Joshua Paundra, Laurens Rook, Jan van Dalen, and Wolfgang Ketter. Preferences for car sharing services: E_ects of instrumental attributes and psychological ownership. In Journal of Environmental Psychology, 53:121{130, 2017.
+
+## Joint activities
+
+Several activities will bring together the scientists, policymakers and businesses critical for a more coordinated transition to sustainable energy and mobility using the power of information systems management. These events will encourage the exchange of new impulses and ideas in preparation for new research approaches, collaborations and findings. These activities are meant to catalyse new projects and to provide a platform for learning and dissemination:
+
+1. International visitor’s program
+2. Annual academic symposium on Sustainable Energy & Mobility
+3. Annual summer school on Sustainable Energy & Mobility
+4. Annual practitioner’s conference on Sustainable Energy & Mobility
+5. External Advisory Board consisting of practitioners
+6. Cologne papers on Sustainability Energy & Mobility, targeted towards practitioners and the public
+
+These activities are crucial to achieve a deeper and more productive form of collaboration between stakeholders both within and outside the KRI. Significant, long-term collaboration is necessary for the success of such a vast and fast transition of the electricity and mobility sectors to a sustainable energy future. The activities are also designed to have an immediate impact on the visibility of the WiSo Faculty to attractive young researchers, the international research community, and media and business practice.
+
+## Teaching
+
+The KRI's research output flows into many study programs of the WiSo faculty. In the bachelor’s and master's programmes and the executive education at the University of Cologne Business School courses are offered in which students explore and analyse the new findings, thus developing a sensitivity for the subject matter. A Smart Energy and Mobility Diploma is under preparation.
+
+Doctoral students are invited to a regular research seminar as well as an annual jamboree during which they can present and discuss their work.
+
+## Transfer
+
+The triple challenge of decarbonisation, decentralisation, and digitalisation of the energy system is a major component in mankind’s quest to move towards a sustainable global economy in the 21st century. Transforming the electricity and mobility sectors in tandem, potentially involving hydrogen as an additional piece of the puzzle, are critical ingredients of any potential way forward. The KRI is focusing on core elements of the ensuing challenges.
+
+Methods and concepts developed in this KRI will likely have an impact beyond the field of energy, for example, in market design (high-frequency peer-to-peer institutions, auction theory, regulatory economics) or in information systems (artificial intelligence, design science, data analytics and science, machine learning).
+
+By addressing those questions and following the WiSo Faculty’s motto “Today’s Ideas. Tomorrow’s Impact.“, the KRI will help to achieve a positive impact with scientific support.
+
+HI
+
+To top of page
