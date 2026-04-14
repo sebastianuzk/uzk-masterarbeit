@@ -77,23 +77,16 @@ np.random.seed(RANDOM_SEED)
 
 # Timestamps für Batch-Evaluation (Array wird in main() iteriert)
 from datetime import datetime
-EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
+#EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
 
-'''
+
 EVAL_TIMESTAMPS = [
-    "20260406_141220",  # Advanced Local 2
-    "20260406_150335",  # Advanced Local 3
-
-    "20260406_160308",  # MMR 80 2
-    "20260406_165420",  # MMR 80 3
-
-    "20260406_173743",  # Reranking Voyage 2
-    "20260406_181853",  # Reranking Voyage 3
-
-    "20260406_210558",  # Reranking local 2
-    "20260406_215221",  # Reranking local 3
+    "20260403_175716",  
+    # ...
 ]
-'''
+
+
+
 
 
 
