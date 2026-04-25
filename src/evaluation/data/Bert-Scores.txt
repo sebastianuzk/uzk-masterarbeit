@@ -1,1 +1,0 @@
-& ".\Masterarbeit\Scripts\python.exe" src/evaluation/update_excel_trash.py

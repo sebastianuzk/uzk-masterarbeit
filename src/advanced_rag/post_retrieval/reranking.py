@@ -458,11 +458,11 @@ class LocalReranker:
     Nutzt das ms-marco-MiniLM-L-12-v2 Modell (oder anderes Cross-Encoder Modell)
     für lokales Reranking ohne API-Kosten.
     
-    WICHTIG: Das Modell läuft auf der GPU und belegt VRAM!
-    Bei gleichzeitiger Nutzung mit dem Chatbot-LLM muss genügend VRAM vorhanden sein.
+    Das Modell wird auf der GPU ausgeführt. Bei gleichzeitiger Nutzung mit dem
+    Chatbot-LLM muss genügend VRAM vorhanden sein.
     - ms-marco-MiniLM-L-12-v2: ~120MB VRAM
     - Chatbot (z.B. llama3.1:8b): ~5-6GB VRAM
-    - Beide zusammen: ~6GB VRAM (sollte auf 8GB GPU passen)
+    - Beide zusammen: ~6GB VRAM
     
     Inkludiert LangSmith-Tracing für Token-Usage-Tracking (geschätzt).
     """

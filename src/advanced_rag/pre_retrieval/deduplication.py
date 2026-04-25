@@ -376,8 +376,8 @@ def create_dedup_excel(unique_docs: list, removed_docs: list, dedup_stats: dict,
     # ================================================================
     # Sheet 3: Entfernte Dokumente (mit Stichproben-Markierung)
     # ================================================================
-    # WICHTIG: Die entfernten Dokumente müssen in derselben Reihenfolge wie in
-    # deduplication_implementation.py sein: Sortiert nach Duplikat-Gruppen (größte zuerst),
+    # Die entfernten Dokumente werden in derselben Reihenfolge wie in
+    # deduplication_implementation.py aufgebaut: Sortiert nach Duplikat-Gruppen (größte zuerst),
     # innerhalb jeder Gruppe ab dem zweiten Dokument.
     
     # Baue sortierte Liste der entfernten Dokumente (wie in deduplication_implementation.py)
@@ -391,7 +391,7 @@ def create_dedup_excel(unique_docs: list, removed_docs: list, dedup_stats: dict,
                 'kept_doc': kept_doc
             })
     
-    # Stichprobe bestimmen - WICHTIG: Algorithmus muss exakt deduplication_implementation.py entsprechen!
+    # Stichprobe: Algorithmus entspricht exakt deduplication_implementation.py
     # 1. Erst 20 aus ALLEN entfernten Dokumenten ziehen (nicht getrennt nach Typ!)
     # 2. Dann zusätzlich 2 PDFs, die noch nicht in der Stichprobe sind
     random.seed(42)

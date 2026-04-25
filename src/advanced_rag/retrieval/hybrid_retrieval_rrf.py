@@ -636,10 +636,6 @@ def reciprocal_rank_fusion(
     Returns:
         Fusioniertes Ranking als Liste von (doc_id, rrf_score) Tupeln,
         sortiert nach RRF-Score (absteigend)
-    
-    Reference:
-        Cormack, G. V., Clarke, C. L., & Buettcher, S. (2009).
-        Reciprocal rank fusion outperforms condorcet and individual rank learning methods.
     """
     # Sammle RRF-Scores für alle Dokumente
     rrf_scores: Dict[str, float] = {}
@@ -766,9 +762,8 @@ class HybridRetriever:
         )
         
         # Konvertiere zu (chunk_id, score) Format
-        # WICHTIG: ChromaDB gibt Distances zurück (niedriger = besser)
-        # Für RRF brauchen wir aber ein Ranking nach Score (höher = besser)
-        # Wir konvertieren Distance zu Similarity: similarity = 1 - distance (für cosine)
+        # ChromaDB gibt Distances zurück (niedriger = besser), RRF benötigt Scores (höher = besser)
+        # Konvertierung: similarity = 1 - distance (für normalisierte Cosine-Vektoren)
         dense_results = []
         if results and results['ids'] and results['ids'][0]:
             for i, chunk_id in enumerate(results['ids'][0]):

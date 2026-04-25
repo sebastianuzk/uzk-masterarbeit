@@ -13,15 +13,8 @@ Vorteile der Framework-Nutzung:
 - Unterstützung für verschiedene LSH-Varianten
 
 Vergleich zur Custom-Implementierung (deduplication_MinHash_LSH.py):
-- datasketch: Schneller durch C-optimierten Code, weniger Kontrolle über Interna
-- Custom: Volle Kontrolle, vollständig in Python, besser für Lehrzwecke
-
-Literatur:
-- datasketch Dokumentation: https://ekzhu.github.io/datasketch/
-- Broder (1997): On the resemblance and containment of documents
-- Leskovec et al. (2014): Mining of Massive Datasets, Chapter 3
-
-Autor: Masterarbeit Sebastian - Universität zu Köln
+- datasketch: Schneller durch C-optimierten Code
+- Custom: Volle Kontrolle, vollständig in Python
 """
 
 import logging
@@ -130,8 +123,8 @@ def _create_minhash(shingles: Set[str], num_perm: int = 128, seed: int = 42) -> 
     """
     Erstelle MinHash-Signatur für ein Shingle-Set mit datasketch.
     
-    WICHTIG: Wir setzen hashfunc=None und permutations um Determinismus zu
-    gewährleisten! datasketch verwendet sonst zufällige Permutationen.
+    Durch Setzen eines festen Seeds werden die Permutationen deterministisch
+    generiert (andernfalls nutzt datasketch zufällige Permutationen).
     
     Args:
         shingles: Set von Shingle-Strings
@@ -211,7 +204,7 @@ def deduplicate_documents_datasketch(
     5. Union-Find Clustering
     6. Canonical Selection pro Cluster
     
-    WICHTIG: Die Funktion ist DETERMINISTISCH wenn der gleiche Seed verwendet wird.
+    Die Funktion ist deterministisch bei Verwendung desselben Seeds.
     
     Args:
         documents: Liste von Dokumenten (dict mit text_key und id_key)

@@ -101,7 +101,7 @@ class UniversityRAGTool(BaseTool):
             from sentence_transformers import SentenceTransformer
             from config.settings import SENTENCE_TRANSFORMER_MODEL, EMBEDDING_MAX_SEQ_LENGTH
             self._embedding_model = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, trust_remote_code=True)
-            # Setze max_seq_length entsprechend der Konfiguration nur bei bge-m3 --> ansonsten Auskommentieren!
+            # Setze max_seq_length entsprechend der Konfiguration
             self._embedding_model.max_seq_length = EMBEDDING_MAX_SEQ_LENGTH
             logger.info(f"Embedding-Modell geladen: {SENTENCE_TRANSFORMER_MODEL} (max_seq_length={EMBEDDING_MAX_SEQ_LENGTH})")
         return self._embedding_model
@@ -110,9 +110,8 @@ class UniversityRAGTool(BaseTool):
         """
         Lazy-load des Rerankers - wird einmal initialisiert und wiederverwendet.
         
-        WICHTIG für Performance: Bei lokalem Reranking (CrossEncoder) würde eine
-        Neuinitialisierung bei jedem Request das Modell jedes Mal neu laden!
-        Dies führt zu Performance-Einbußen und erhöhter VRAM-Fragmentierung.
+        Bei lokalem Reranking (CrossEncoder) wird das Modell einmalig geladen,
+        um wiederholte Initialisierungen bei aufeinanderfolgenden Requests zu vermeiden.
         
         Returns:
             Reranker-Instanz (VoyageReranker, CohereReranker oder LocalReranker)
@@ -150,8 +149,7 @@ class UniversityRAGTool(BaseTool):
         if not self.config:
             return False
         
-        # Advanced Retrieval wenn Hybrid ODER ReRanking ODER MMR aktiv
-        # Wichtig: use_* Properties verwenden (nicht enable_*), da use_* an naive_setup gebunden ist
+        # use_* Properties berücksichtigen naive_setup-Flag (bei baseline=True immer False)
         return self.config.use_hybrid_retrieval or self.config.use_reranking or self.config.use_mmr
     
     def _should_use_sparse(self) -> bool:
@@ -161,8 +159,7 @@ class UniversityRAGTool(BaseTool):
         if not self.config:
             return False
         
-        # Wichtig: use_sparse_retrieval Property verwenden (nicht enable_sparse_retrieval),
-        # da use_* an naive_setup gebunden ist und bei naive_setup=True immer False liefert
+        # use_sparse_retrieval berücksichtigt naive_setup-Flag
         return self.config.use_sparse_retrieval
     
     def _get_chromadb_client(self):
@@ -170,7 +167,7 @@ class UniversityRAGTool(BaseTool):
         import chromadb
         from pathlib import Path
         
-        # WICHTIG: Relative Paths benutzen! ChromaDB hat Bug mit absoluten Windows-Pfaden
+        # ChromaDB: relative Pfade für plattformübergreifende Kompatibilität
         vector_db_paths = [
             "data/vector_db",
             "src/scraper/vector_db"
@@ -300,8 +297,7 @@ class UniversityRAGTool(BaseTool):
         reranking_candidates = self.config.reranking_candidates if self.config else 40
         
         # Entscheide: Hybrid Retrieval oder nur Dense Retrieval?
-        # Wichtig: use_hybrid_retrieval Property verwenden (nicht enable_hybrid_retrieval),
-        # da use_* an naive_setup gebunden ist und bei naive_setup=True immer False liefert
+        # use_hybrid_retrieval berücksichtigt naive_setup-Flag
         if self.config and self.config.use_hybrid_retrieval:
             # === HYBRID RETRIEVAL (Dense + BM25 + RRF) ===
             from src.advanced_rag.retrieval.hybrid_retrieval_rrf import hybrid_retrieve

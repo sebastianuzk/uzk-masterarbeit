@@ -22,9 +22,6 @@ KEIN Chunking, KEINE Embeddings, KEIN ChromaDB!
 
 Output-Format (JSONL):
 {"doc_id": "1", "source": "https://...", "content_type": "html", "title": "...", "text": "...", "char_count": 1234, "word_count": 200}
-
-Autor: Deduplication Pipeline
-Datum: 2025-12-09
 """
 import sys
 import os

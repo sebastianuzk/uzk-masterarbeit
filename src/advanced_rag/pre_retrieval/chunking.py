@@ -624,7 +624,7 @@ class SemanticChunker:
         und fügt sie am Anfang des nächsten Chunks hinzu.
         Der Schnitt erfolgt an Satz- oder Wortgrenzen, nicht mitten im Wort.
         
-        WICHTIG: Respektiert max_chunk_size - kürzt den Overlap wenn nötig!
+        Overlap wird gekürzt wenn nötig, damit max_chunk_size eingehalten wird.
         
         Args:
             chunks: Liste von Chunks ohne Overlap
