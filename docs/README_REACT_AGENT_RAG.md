@@ -234,7 +234,7 @@ Das RAG-Tool unterstützt **drei Modi**, gesteuert über `RAGConfig`:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           RAG RETRIEVAL PIPELINE                            │
+│                          Advanced RAG RETRIEVAL PIPELINE                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Query: "Bewerbungsfrist BWL Master"                                        │
@@ -270,7 +270,7 @@ Das RAG-Tool unterstützt **drei Modi**, gesteuert über `RAGConfig`:
 │  │ 3. MMR - Maximum Marginal Relevance (optional)                       │   │
 │  │                       ▼                                              │   │
 │  │              ┌─────────────────┐                                     │   │
-│  │              │  Diversitäts-   │ λ=0.7 (relevance vs diversity)      │   │
+│  │              │  Diversitäts-   │ λ (konfig. Relevanz/Diversität)     │   │
 │  │              │  Auswahl        │                                     │   │
 │  │              └────────┬────────┘                                     │   │
 │  └───────────────────────┼─────────────────────────────────────────────┘   │
@@ -392,8 +392,8 @@ if self.config.use_mmr:
     from src.advanced_rag.post_retrieval.maximum_marginal_relevance import create_mmr
     
     mmr = create_mmr(
-        lambda_param=0.7,           # Balance: Relevanz vs. Diversität
-        similarity_metric='cosine'  # Cosine-Similarity für Embeddings
+        lambda_param=self.config.mmr_lambda,  # Balance: Relevanz vs. Diversität
+        similarity_metric='cosine'            # Cosine-Similarity für Embeddings
     )
     
     mmr_result = mmr.select(
@@ -410,7 +410,7 @@ if self.config.use_mmr:
 MMR = arg max [λ · Relevance(d) - (1-λ) · max Similarity(d, d_selected)]
        d∈R\S
 
-λ = 0.7 → 70% Relevanz, 30% Diversität
+λ ∈ [0,1]: konfigurierbare Balance zwischen Relevanz und Diversität
 ```
 
 ### Verwendete Libraries (Advanced)
@@ -483,7 +483,7 @@ RERANKING_CANDIDATES=40          # Max Kandidaten für ReRanking
 
 # MMR
 ENABLE_MMR=true
-MMR_LAMBDA=0.7                   # 0.0-1.0 (Relevanz vs. Diversität)
+MMR_LAMBDA=<0.0-1.0>             # Relevanz vs. Diversität
 MMR_SIMILARITY_METRIC=cosine
 
 # Final Output

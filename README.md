@@ -1,401 +1,163 @@
-# Autonomer Chatbot-Agent mit RAG Web Scraper
+# Autonomer RAG-Chatbot – WiSo-Fakultät Universität zu Köln
 
-Ein autonomer Chatbot-Agent für die WiSo-Fakultät der Universität zu Köln, basierend auf LangChain und LangGraph mit Open-Source-Komponenten und einem erweiterten Web-Scraping-System für RAG (Retrieval-Augmented Generation).
+Ein autonomer Chatbot-Agent für die WiSo-Fakultät der Universität zu Köln, basierend auf LangChain und LangGraph. Das System kombiniert einen vollständig lokal betriebenen LLM-Stack (Ollama) mit einer umfangreichen RAG-Pipeline zur Beantwortung von Fragen rund um die WiSo-Fakultät.
 
-## 🎯 Überblick
+## Überblick
 
-Dieses Projekt bietet einen intelligenten Chatbot, der:
-- ✅ **Fragen zur WiSo-Fakultät beantwortet** (Studiengänge, Bewerbung, Services, etc.)
-- ✅ **Automatisch relevante Informationen** aus der Fakultäts-Website sammelt
-- ✅ **Intelligent kategorisiert** (5 Kategorien: Studium, Fakultät, Services, Forschung, Allgemein)
-- ✅ **Vollständig Open-Source** ohne externe API-Kosten arbeitet
-- ✅ **Lokal läuft** für maximale Privatsphäre
+- Beantwortet Fragen zur WiSo-Fakultät (Studiengänge, Bewerbung, Services, Prüfungsamt, etc.)
+- Basiert auf einem gecrawlten Corpus aus ~2.675 Dokumenten (HTML + PDF) der WiSo-Website
+- Vollständig lokal betrieben – kein externer API-Zwang für Kerndienste
+- Konfigurierbare RAG-Pipeline: Naive Baseline bis hin zu Hybrid-Retrieval + ReRanking + MMR
 
-## ✨ Hauptfunktionen
+## Technologie-Stack
 
-### Chatbot-Agent
-- **Autonomer Agent**: LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
-- **Ollama Integration**: Vollständig Open-Source LLM (llama3.1) ohne API-Kosten
-- **Universitäts-RAG**: Durchsucht 329 kategorisierte Dokumente der WiSo-Fakultät
-- **Multiple Tools**: Web-Scraping, DuckDuckGo-Suche, E-Mail-Eskalation
-- **KLIPS2-Integration** (ERWEITERT): 
-  - Account-Erstellung & Aktivierung
-  - Studienbewerbung (Wizard-Automatisierung)
-  - Kurs-Details abrufen
-  - Adressänderung & Passwort-Management
-- **Streamlit UI**: Moderne, benutzerfreundliche Chat-Oberfläche
-- **Konversations-Memory**: Persistente Chat-Historie
+| Komponente | Technologie |
+|------------|-------------|
+| LLM-Backend | Ollama (`llama3.1:8b`, lokal) |
+| Agent-Framework | LangChain + LangGraph (`create_react_agent`) |
+| Embedding-Modell | BGE-M3 (`BAAI/bge-m3`, lokal) |
+| Vektordatenbank | ChromaDB (persistent, `data/vector_db/`) |
+| Sparse Retrieval | BM25 via `rank-bm25` |
+| Fusion | Reciprocal Rank Fusion (RRF) |
+| Reranking | Voyage AI / Cohere / lokaler CrossEncoder (BGE-Reranker) |
+| Diversity | Maximum Marginal Relevance (MMR) |
+| Web-UI | Streamlit |
+| Evaluation | RAGAS + LangSmith Tracing |
+| Content-DB | SQLite (`data/content_database.db`) |
 
-### Erweiterter Web Scraper (NEU)
-- **Intelligente Kategorisierung**: Automatische Zuordnung zu 5 Kategorien
-- **Multi-Collection Vector DB**: Separate ChromaDB-Collections pro Kategorie
-- **Metadaten-Anreicherung**: 10+ Metadatenfelder pro Dokument
-- **Batch Processing**: Asynchrone Verarbeitung mehrerer URLs
-- **Qualitätsmetriken**: Vollständige Analyse und Reporting
-- **329 Dokumente**: 50 Seiten, 100% Erfolgsrate
-
-## 📊 Daten-Status
+## Corpus-Status
 
 ```
-✅ 50 Webseiten erfolgreich gescraped
-✅ 329 Dokument-Chunks in Vector-Datenbank
-✅ 5 intelligente Kategorien:
-   • wiso_studium (95 Dokumente)      - Studiengänge, Bewerbung
-   • wiso_fakultaet (117 Dokumente)   - Struktur, Departments
-   • wiso_services (61 Dokumente)     - IT, Support, Beratung
-   • wiso_forschung (46 Dokumente)    - Forschungsprojekte
-   • wiso_allgemein (10 Dokumente)    - Sonstiges
+Dokumente in Content-DB:   ~2.675  (HTML: ~2.242 | PDF: ~433)
+Chunks in Vektordatenbank: ~45.960 (Collection: wiso_documents)
+Embedding-Modell:           BAAI/bge-m3 (L2-normalisiert)
 ```
 
-## 🛠️ Technologie-Stack
-
-- **LLM**: Ollama (llama3.1, lokal gehostet)
-- **Framework**: LangChain + LangGraph
-- **UI**: Streamlit
-- **Suche**: DuckDuckGo (privatsphärefreundlich)
-- **Vector Databases**: ChromaDB, FAISS
-- **Embeddings**: Sentence Transformers, OpenAI (optional)
-- **Vector DB**: ChromaDB mit sentence-transformers
-- **Embeddings**: all-MiniLM-L6-v2 (384 Dimensionen)
-- **Web Scraping**: aiohttp, BeautifulSoup
-- **Suche**: DuckDuckGo, Wikipedia
-
-## 📁 Projektstruktur
+## Projektstruktur
 
 ```
 uzk-masterarbeit/
 ├── src/
 │   ├── agent/
-│   │   └── react_agent.py              # LangGraph ReAct Agent
+│   │   └── react_agent.py                  # LangGraph ReAct-Agent
 │   ├── tools/
-│   │   ├── rag_tool.py                 # RAG für WiSo-Fakultät ⭐
-│   │   ├── web_scraper_tool.py         # Web-Scraping Tool
-│   │   ├── duckduckgo_tool.py          # DuckDuckGo-Suche
-│   │   ├── email_tool.py               # E-Mail Support-Eskalation
-│   │   └── klips/                      # KLIPS2 Integration Package ⭐
-│   │       ├── apply.py                # Studienbewerbung
-│   │       ├── register.py             # Account-Erstellung
-│   │       ├── courses.py              # Kurs-Details
-│   │       ├── address.py              # Adressänderung
-│   │       └── ...
-│   ├── scraper/                        # Erweiterte Web Scraper Pipeline ⭐
-│   │   ├── core/                       # Kern-Komponenten
-│   │   │   ├── batch_scraper.py        # Batch-Verarbeitung
-│   │   │   ├── wiso_crawler.py         # WiSo-Website Crawler
-│   │   │   ├── vector_store.py         # Vector DB Integration
-│   │   │   ├── incremental_scraper.py  # Inkrementelles Scraping
-│   │   │   └── resilient_scraper.py    # Fehlertolerantes Scraping
-│   │   ├── pipelines/                  # Ausführbare Workflows
-│   │   │   ├── crawler_scraper_pipeline.py  # Haupt-Pipeline
-│   │   │   ├── scraper_main.py         # Scraper Entry Point
-│   │   │   └── reprocess_existing_data.py   # Daten-Wiederaufbereitung
-│   │   ├── utils/                      # Hilfsfunktionen
-│   │   │   ├── content_cleaner.py      # Content-Bereinigung
-│   │   │   ├── content_deduplicator.py # Duplikat-Erkennung
-│   │   │   ├── pdf_extractor.py        # PDF-Verarbeitung
-│   │   │   ├── semantic_chunker.py     # Intelligentes Chunking
-│   │   │   └── url_cache.py            # URL-Caching
-│   │   ├── analysis/                   # Analyse & Monitoring
-│   │   │   ├── show_cached_urls.py     # Cache-Viewer
-│   │   │   └── scraper_metrics.py      # Metriken & Reports
-│   │   └── hyperparameters.py          # Zentrale Konfiguration
-│   ├── ui/
-│   │   └── streamlit_app.py            # Chat-Interface
-│   └── dev/                            # Entwicklungs-Skripte
+│   │   └── rag_tool.py                     # UniversityRAGTool (Naive/Advanced/Sparse)
+│   ├── scraper/
+│   │   ├── pipelines/
+│   │   │   └── crawler_scraper_pipeline.py # Schritt 1: Website-Crawler
+│   │   ├── tools/
+│   │   │   └── import_to_content_db.py     # Schritt 2: Cache → SQLite
+│   │   └── run_production_scraper.py       # Schritt 3: SQLite → ChromaDB
+│   ├── advanced_rag/
+│   │   ├── rag_config.py                   # RAGConfig (liest rag.env)
+│   │   ├── pre_retrieval/
+│   │   │   ├── chunking.py                 # SemanticChunker
+│   │   │   └── deduplication.py            # Exact + Near-Dedup
+│   │   ├── retrieval/
+│   │   │   └── hybrid_retrieval_rrf.py     # BM25 + RRF
+│   │   └── post_retrieval/
+│   │       ├── reranking.py                # ReRanker (Voyage/Cohere/Local)
+│   │       └── maximum_marginal_relevance.py
+│   ├── evaluation/
+│   │   ├── ragas_evaluation.py             # Vollständige RAGAS-Evaluation
+│   │   ├── ragas_selective_evaluation.py   # Selektive / Batch-Evaluation
+│   │   └── data/
+│   │       └── Testset.CSV                 # Evaluations-Testset
+│   └── ui/
+│       └── streamlit_app.py                # Chat-Interface
 ├── config/
-│   ├── __init__.py
-│   └── settings.py                     # Globale Einstellungen
+│   └── settings.py                         # Globale Einstellungen (liest .env)
 ├── data/
-│   ├── vector_db/                      # ChromaDB Collections ⭐
-│   ├── url_cache.db                    # URL-Cache SQLite
-│   ├── pdfs/                           # Heruntergeladene PDFs
-│   └── *.json                          # Metrics & Reports
+│   ├── content_database.db                 # SQLite (Dokumente komprimiert)
+│   ├── vector_db/                          # ChromaDB
+│   ├── html_cache/                         # Crawler-Output (html_cache.db)
+│   ├── pdf_cache/                          # Crawler-Output (*.pdf)
+│   └── sparse_index/                       # BM25 Index (pickle)
+├── backups/                                # Vektordatenbank-Backups
+├── docs/
+│   └── SYSTEM_GUIDE.md                     # Betriebsanleitung
 ├── tests/
-│   ├── __init__.py
-│   ├── test_agent.py                   # Agent-Tests
-│   ├── test_tools.py                   # Tool-Tests
-│   ├── test_scraper.py                 # Scraper-Tests
-│   ├── test_scraper_components.py      # Komponenten-Tests
-│   └── test_enhanced_pipeline.py       # Pipeline-Tests
-├── .github/
-│   └── copilot-instructions.md         # GitHub Copilot Instruktionen
-├── .venv/                              # Virtual Environment
-├── .env                                # Umgebungsvariablen (lokal)
-├── .gitignore
-├── requirements.txt                    # Python Dependencies
-├── setup.py                            # Package Setup
-└── README.md
+├── .env                                    # Umgebungsvariablen (lokal, nicht im Repo)
+├── .env.example                            # Vorlage
+├── src/advanced_rag/rag.env                # RAG-Feature-Flags
+└── requirements.txt
 ```
 
-## 🚀 Schnellstart
+## Schnellstart
 
 ### Voraussetzungen
-- Python 3.8+
-- Ollama installiert und laufend
-- 4GB+ RAM empfohlen
 
-### Installation in 5 Minuten
+- Python 3.10+
+- [Ollama](https://ollama.com) installiert und gestartet
+- `.env`-Datei im Projektstamm (Vorlage: `.env.example`)
 
-```bash
-# 1. Repository klonen
-git clone https://github.com/sebastianuzk/uzk-masterarbeit.git
-cd uzk-masterarbeit
-
-# 2. Virtuelle Umgebung erstellen
-python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# oder
-venv\Scripts\activate     # Windows
-
-# 3. Dependencies installieren
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# 4. Ollama-Modell laden (in separatem Terminal)
+```powershell
+# Modell laden (einmalig)
 ollama pull llama3.1:8b
-
-# 5. Chatbot starten
-streamlit run src/ui/streamlit_app.py
 ```
 
-### Erste Schritte
+### Installation
 
-Nach dem Start können Sie Fragen stellen wie:
-- "Welche Master-Programme bietet die WiSo-Fakultät an?"
-- "Wie bewerbe ich mich für ein höheres Fachsemester?"
-- "Wo finde ich IT-Support an der WiSo?"
-- "Welche Forschungsschwerpunkte gibt es?"
+```powershell
+# Virtuelle Umgebung erstellen und aktivieren
+python -m venv Masterarbeit
+& ".\Masterarbeit\Scripts\Activate.ps1"
 
-## 💡 Verwendung
+# Abhängigkeiten installieren
+pip install -r requirements.txt
+```
+
+### Corpus aufbauen (einmalig)
+
+```powershell
+# Schritt 1 – Crawler (überspringen, falls Cache vorhanden)
+& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.pipelines.crawler_scraper_pipeline
+
+# Schritt 2 – Cache in SQLite importieren
+& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.tools.import_to_content_db
+
+# Schritt 3 – Vektordatenbank aufbauen
+& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.run_production_scraper
+```
 
 ### Chatbot starten
-```bash
-streamlit run src/ui/streamlit_app.py
-```
-Öffnet http://localhost:8501 im Browser.
 
-### Pipeline ausführen (Daten aktualisieren)
-```bash
-# WiSo-Website scrapen und kategorisieren
-python src/scraper/crawler_scraper_pipeline.py --organize-by-category
-
-# Vorhandene Daten wiederaufbereiten
-python src/scraper/reprocess_existing_data.py --organize-by-category
+```powershell
+& ".\Masterarbeit\Scripts\python.exe" -m streamlit run src/ui/streamlit_app.py
 ```
 
-### CLI-Modus (ohne UI)
-```bash
-python main.py
+Öffnet [http://localhost:8501](http://localhost:8501) im Browser.
+
+## Konfiguration
+
+### RAG-Pipeline – `src/advanced_rag/rag.env`
+
+Steuert alle Feature-Flags (Semantic Chunking, Deduplication, Hybrid Retrieval, ReRanking, MMR) und Hyperparameter. Änderungen an Pre-Retrieval-Flags erfordern einen Neuaufbau der Vektordatenbank (Schritt 3).
+
+### Systemparameter – `.env`
+
+LLM-Modell, Embedding-Modell, Temperaturen, API-Schlüssel. Vorlage: `.env.example`.
+
+Eine vollständige Beschreibung aller Parameter und Pipelines findet sich in **[`docs/SYSTEM_GUIDE.md`](docs/SYSTEM_GUIDE.md)**.
+
+## Evaluation
+
+```powershell
+# Vollständige Evaluation (alle Testfragen)
+& ".\Masterarbeit\Scripts\python.exe" src/evaluation/ragas_evaluation.py
+
+# Selektive Evaluation (bestimmte IDs / Checkpoint-Fortsetzung)
+& ".\Masterarbeit\Scripts\python.exe" src/evaluation/ragas_selective_evaluation.py
 ```
 
-### Tests ausführen
-```bash
-# Pipeline-Tests
-python test_enhanced_pipeline.py
+Testset: `src/evaluation/data/Testset.CSV`. Metriken: MRR@5, Hit@5, Faithfulness, Context Recall u. a. via RAGAS + LangSmith.
 
-# Unit-Tests
-pytest tests/
+## Tests
+
+```powershell
+& ".\Masterarbeit\Scripts\python.exe" -m pytest tests/
 ```
-
-##  Konfiguration
-
-### Ollama-Einstellungen
-Bearbeiten Sie `config/settings.py`:
-```python
-OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "llama3.1:8b"  # oder mistral, llama3.2, etc.
-TEMPERATURE = 0.7
-```
-
-### Scraper-Hyperparameter
-Bearbeiten Sie `src/scraper/hyperparameters.py`:
-```python
-# Performance
-SCRAPER_MAX_CONCURRENT_REQUESTS = 10
-SCRAPER_REQUEST_DELAY = 1.0
-
-# Vector Store
-VECTOR_CHUNK_SIZE = 1500
-VECTOR_CHUNK_OVERLAP = 300
-VECTOR_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-```
-
-## 🎯 Beispiel-Anfragen
-
-### Studium
-```
-"Welche Bachelor-Programme gibt es?"
-"Wie ist das Master-Programm strukturiert?"
-"Was sind Double Degree Programme?"
-```
-
-### Bewerbung
-```
-"Wie bewerbe ich mich für ein höheres Fachsemester?"
-"Welche Fristen muss ich beachten?"
-"Was sind die Zulassungsvoraussetzungen für Master?"
-```
-
-### Services
-```
-"Wo finde ich IT-Support?"
-"Welche Beratungsangebote gibt es?"
-"Wie erreiche ich das Prüfungsamt?"
-```
-
-### Fakultät & Forschung
-```
-"Welche Departments hat die WiSo-Fakultät?"
-"Welche Forschungsschwerpunkte gibt es?"
-"Wie ist die Fakultätsverwaltung organisiert?"
-```
-
-## 🛠️ Erweiterte Features
-
-### Verfügbare Tools
-
-Der Chatbot verfügt über folgende intelligente Tools:
-
-#### 1. **Universitäts-RAG-Tool** 📚
-- Durchsucht 329 kategorisierte WiSo-Dokumente
-- 5 Kategorien: Studium, Fakultät, Services, Forschung, Allgemein
-- Kontextbasierte Antworten mit Quellenangaben
-
-#### 2. **Web-Scraping-Tool** 🌐
-- Extrahiert Inhalte von beliebigen Webseiten
-- Automatische Text-Bereinigung
-- Für aktuelle Informationen außerhalb der Wissensdatenbank
-
-#### 3. **DuckDuckGo-Suche** 🔍
-- Privatsphärefreundliche Websuche
-- Für allgemeine Internetrecherche
-- Keine Tracking-Cookies
-
-#### 4. **KLIPS2-Registrierungs-Tool** ✅ (NEU)
-- Unterstützt bei der Erstellung von Basis-Accounts
-- Validiert Eingabedaten (Datum, E-Mail, etc.)
-- Gibt strukturierte Anleitungen zur manuellen Registrierung
-- Siehe: [KLIPS2_REGISTRATION_TOOL.md](docs/KLIPS2_REGISTRATION_TOOL.md)
-
-#### 5. **E-Mail-Support-Eskalation** 📧
-- Automatische Weiterleitung komplexer Anfragen
-- SMTP-Integration für professionellen Support
-- Siehe: [EMAIL_SETUP.md](docs/EMAIL_SETUP.md)
-
-### Web Scraper Pipeline
-
-Die erweiterte Pipeline bietet:
-- ✅ **Intelligente Kategorisierung**: 8 Kategorien-Muster
-- ✅ **Metadaten-Anreicherung**: Sprache, Themen, Qualität
-- ✅ **Multi-Collection DB**: Separate Collections pro Kategorie
-- ✅ **Batch-Processing**: Asynchrone URL-Verarbeitung
-- ✅ **Qualitätsprüfung**: Automatische Validierung
-
-```bash
-# Standard-Pipeline mit Kategorisierung
-python src/scraper/crawler_scraper_pipeline.py --organize-by-category
-
-# Erweiterte Optionen
-python src/scraper/crawler_scraper_pipeline.py \
-  --max-pages 2000 \
-  --concurrent-requests 20 \
-  --crawl-delay 0.5 \
-  --organize-by-category
-```
-
-### RAG Tool direkt verwenden
-
-```python
-from src.tools.rag_tool import UniversityRAGTool
-
-tool = UniversityRAGTool()
-result = tool._run("Wie bewerbe ich mich für Master?")
-print(result)
-```
-
-### Vector-Datenbank Status prüfen
-
-```python
-import chromadb
-from pathlib import Path
-
-client = chromadb.PersistentClient(path='data/vector_db')
-collections = client.list_collections()
-
-for c in collections:
-    print(f'{c.name}: {c.count()} Dokumente')
-```
-
-## 🔍 Fehlerbehebung
-
-### Ollama nicht erreichbar
-```bash
-# Prüfen ob Ollama läuft
-ollama list
-
-# Ollama starten
-ollama serve
-```
-
-### Keine Vector-Datenbank gefunden
-```bash
-# Pipeline ausführen um Daten zu erstellen
-python src/scraper/crawler_scraper_pipeline.py --organize-by-category
-```
-
-### Import-Fehler
-```bash
-# Sicherstellen dass virtuelle Umgebung aktiviert ist
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
-
-# Dependencies erneut installieren
-pip install -r requirements.txt
-```
-
-### Langsame Performance
-- Kleineres Ollama-Modell verwenden: `ollama pull llama3.2:1b`
-- Weniger concurrent requests: `--concurrent-requests 5`
-- Größere Delays: `--crawl-delay 2.0`
-
-## 📈 Performance-Metriken
-
-| Metrik | Wert |
-|--------|------|
-| Gescrapte Seiten | 50 |
-| Dokument-Chunks | 329 |
-| Collections | 5 |
-| Erfolgsrate | 100% |
-| Durchschn. Antwortzeit | < 1 Sekunde |
-| Embedding-Dimensionen | 384 |
-| Pipeline-Laufzeit | ~30 Sekunden |
-
-## 🔐 Datenschutz
-
-- ✅ Alle Daten werden lokal verarbeitet
-- ✅ Kein Senden von Daten an externe APIs
-- ✅ Ollama LLM läuft vollständig lokal
-- ✅ Vector-Datenbank auf lokalem Dateisystem
-- ✅ Keine Telemetrie oder Tracking
-
-## 🤝 Beitragen
-
-Dieses Projekt ist Teil einer Masterarbeit an der Universität zu Köln.
-
-## 📄 Lizenz
-
-Dieses Projekt ist für akademische Zwecke erstellt.
-
-## 🙏 Danksagungen
-
-- WiSo-Fakultät, Universität zu Köln
-- LangChain & LangGraph Teams
-- Ollama Team
-- Open-Source Community
 
 ---
 
-**Version**: 2.0  
-**Letztes Update**: Januar 2025  
-**Status**: ✅ Produktionsbereit  
-**Daten**: 329 kategorisierte Dokumente aus 50 WiSo-Seiten
+Masterarbeit – Universität zu Köln, WiSo-Fakultät

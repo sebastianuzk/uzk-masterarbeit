@@ -33,7 +33,7 @@ Dieses Dokument beschreibt die Architektur der **Naive RAG Baseline** für den a
 │                      VECTOR DATABASE                                     │
 │                        (ChromaDB)                                        │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  Collection: wiso_documents │ 46.353 Chunks │ 1024-dim Vectors  │   │
+│  │  Collection: wiso_documents │ 45.960 Chunks │ 1024-dim Vectors  │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -183,9 +183,9 @@ normalized = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=
 
 | Metrik | Wert |
 |--------|------|
-| **Gesamt Dokumente** | 2.272 |
-| **Gesamt Chunks** | 46.353 |
-| **Durchschn. Chunks/Dokument** | ~20 |
+| **Gesamt Dokumente** | 2.675 |
+| **Gesamt Chunks** | 45.960 |
+| **Durchschn. Chunks/Dokument** | ~17 |
 | **HTML-Dokumente** | 2.242 |
 | **PDF-Dokumente** | 433 |
 
@@ -288,7 +288,7 @@ def naive_chunk_text(text: str, chunk_size: int = 1500, overlap: int = 300) -> l
                     │  ┌─────────────────┐                                         │
                     │  │  Production     │                                         │
                     │  │  Scraper        │  → vector_db/ (ChromaDB)                │
-                    │  │  (Chunking +    │    (46.353 Chunks + Embeddings)         │
+                    │  │  (Chunking +    │    (45.960 Chunks + Embeddings)         │
                     │  │   Embedding)    │                                         │
                     │  └─────────────────┘                                         │
                     └──────────────────────────────────────────────────────────────┘
