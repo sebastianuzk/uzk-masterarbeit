@@ -26,9 +26,6 @@ httpx>=0.25.0               # Async HTTP-Client
 pytest>=7.0.0
 pytest-asyncio>=0.21.0      # Async-Tests
 
-# ARES Framework (Stanford RAG Evaluation)
-ares-ai
-
 # ============================================================================
 # WEB SCRAPER DEPENDENCIES
 # ============================================================================

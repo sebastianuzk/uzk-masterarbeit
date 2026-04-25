@@ -148,7 +148,7 @@ EVAL_IDS = None              # → alle Fragen aus Testset.CSV
 ### Vektordatenbank löschen
 
 ```powershell
-Remove-Item -Recurse -Force "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\data\vector_db"; Write-Host "✅ Vektordatenbank gelöscht"
+Remove-Item -Recurse -Force "data\vector_db"; Write-Host "✅ Vektordatenbank gelöscht"
 ```
 
 > Danach muss Schritt 3 erneut ausgeführt werden.
@@ -156,8 +156,8 @@ Remove-Item -Recurse -Force "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit
 ### Backup erstellen
 
 ```powershell
-Copy-Item -Path "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\data\vector_db" `
-          -Destination "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\backups\<backup-name>" `
+Copy-Item -Path "data\vector_db" `
+          -Destination "backups\<backup-name>" `
           -Recurse -Force
 Write-Host "Backup erstellt: <backup-name>"
 ```
@@ -165,9 +165,9 @@ Write-Host "Backup erstellt: <backup-name>"
 ### Backup wiederherstellen
 
 ```powershell
-Remove-Item -Recurse -Force "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\data\vector_db" -ErrorAction SilentlyContinue
-Copy-Item -Path "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\backups\<backup-name>" `
-          -Destination "d:\Uni-Köln\Masterarbeit\Software\uzk-masterarbeit\data\vector_db" `
+Remove-Item -Recurse -Force "data\vector_db" -ErrorAction SilentlyContinue
+Copy-Item -Path "backups\<backup-name>" `
+          -Destination "data\vector_db" `
           -Recurse -Force
 Write-Host "<backup-name> wiederhergestellt nach data/vector_db"
 ```

@@ -169,6 +169,7 @@ cython_debug/
 .env
 .env.local
 .env.*.local
+!.env.example
 
 # Project notes
 hyperparameter_documentation.md
