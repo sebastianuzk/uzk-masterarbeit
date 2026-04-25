@@ -152,6 +152,8 @@ Eine vollständige Beschreibung aller Parameter und Pipelines findet sich in **[
 
 Testset: `src/evaluation/data/Testset.CSV`. Metriken: MRR@5, Hit@5, Faithfulness, Context Recall u. a. via RAGAS + LangSmith.
 
+> **Voraussetzung:** Die Evaluation rekonstruiert die abgerufenen Dokument-URLs aus LangSmith-Traces. Dafür müssen `LANGSMITH_TRACING=true` und ein gültiger `LANGSMITH_API_KEY` in der `.env` gesetzt sein. Ohne aktives Tracing bleiben die RAG-Kontexte leer und die Metriken (MRR@5, Hit@5, Context Recall etc.) sind nicht aussagekräftig.
+
 ## Tests
 
 ```powershell
