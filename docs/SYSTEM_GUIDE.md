@@ -82,6 +82,9 @@ Liest `html_cache/` und `pdf_cache/` ein und schreibt alle Dokumente komprimiert
 Liest `content_database.db`, führt Preprocessing + Chunking + Embedding durch und schreibt alle Chunks in `data/vector_db/` (ChromaDB, Collection `wiso_documents`).  
 Falls `ENABLE_HYBRID_RETRIEVAL=true`: BM25 Sparse Index wird zusätzlich unter `data/sparse_index/wiso_documents/` erstellt.
 
+> **GPU-Nutzung:** Das Embedding-Modell (`SENTENCE_TRANSFORMER_MODEL`, Standard: `BAAI/bge-m3`) erkennt eine verfügbare NVIDIA-GPU automatisch (via CUDA). `pip install -r requirements.txt` installiert PyTorch mit **CUDA 12.4** – sofern eine kompatible GPU vorhanden ist, läuft Schritt 3 damit in wenigen Minuten statt 1–3 Stunden. Für andere CUDA-Versionen oder CPU-only-Betrieb: [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/).  
+> GPU-Status prüfen: `& ".\Masterarbeit\Scripts\python.exe" -c "import torch; print('CUDA verfügbar:', torch.cuda.is_available(), '|', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'kein GPU erkannt')"`
+
 ---
 
 ### 2. Chatbot starten
