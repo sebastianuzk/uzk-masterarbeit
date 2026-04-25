@@ -6,9 +6,12 @@ Autonomer RAG-basierter Chatbot-Agent für die WiSo-Fakultät der Universität z
 
 ## Voraussetzungen
 
-Python-Umgebung aktivieren:
+Python-Umgebung aktivieren (nach `python -m venv .venv`):
 ```powershell
-& ".\Masterarbeit\Scripts\Activate.ps1"
+# Windows
+.venv\Scripts\Activate.ps1
+# Linux / macOS
+# source .venv/bin/activate
 ```
 
 Ollama läuft lokal. `.env`-Datei im Projektstamm vorhanden (Vorlage: `.env.example`).
@@ -51,7 +54,7 @@ Die drei Schritte müssen **in dieser Reihenfolge** ausgeführt werden:
 > **Kann übersprungen werden**, wenn `data/html_cache/html_cache.db` und `data/pdf_cache/` bereits vorhanden sind. In diesem Fall direkt mit Schritt 2 fortfahren.
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.pipelines.crawler_scraper_pipeline
+python -m src.scraper.pipelines.crawler_scraper_pipeline
 ```
 
 Crawlt `wiso.uni-koeln.de` und legt die Ergebnisse im `data/`-Verzeichnis ab:
@@ -66,7 +69,7 @@ Crawlt `wiso.uni-koeln.de` und legt die Ergebnisse im `data/`-Verzeichnis ab:
 #### Schritt 2 – Import in die Content-Datenbank
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.tools.import_to_content_db
+python -m src.scraper.tools.import_to_content_db
 ```
 
 Liest `html_cache/` und `pdf_cache/` ein und schreibt alle Dokumente komprimiert in `data/content_database.db` (SQLite).
@@ -74,7 +77,7 @@ Liest `html_cache/` und `pdf_cache/` ein und schreibt alle Dokumente komprimiert
 #### Schritt 3 – Vektordatenbank aufbauen
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.run_production_scraper
+python -m src.scraper.run_production_scraper
 ```
 
 > **Hinweis:** Der Hinweis in `rag.env` gilt: **`ENABLE_SEMANTIC_CHUNKING`, `ENABLE_DEDUPLICATION` und `ENABLE_HYBRID_RETRIEVAL`** beeinflussen, wie der Corpus aufgebaut wird. Änderungen an diesen Flags erfordern nach dem Setzen ein **vollständiges Löschen von `data/vector_db/` (und ggf. `data/sparse_index/`) sowie ein erneutes Ausführen von Schritt 3**.
@@ -89,7 +92,7 @@ Falls `ENABLE_HYBRID_RETRIEVAL=true`: BM25 Sparse Index wird zusätzlich unter `
 Nach erfolgreichem Schritt 3:
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" -m streamlit run src/ui/streamlit_app.py
+python -m streamlit run src/ui/streamlit_app.py
 ```
 
 Die App ist unter `http://localhost:8501` erreichbar.
@@ -101,7 +104,7 @@ Die App ist unter `http://localhost:8501` erreichbar.
 #### Vollständige Evaluation
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" src/evaluation/ragas_evaluation.py
+python src/evaluation/ragas_evaluation.py
 ```
 
 Führt die RAGAS-Evaluation auf dem aktuellen RAG-Setup aus.
@@ -113,7 +116,7 @@ Führt die RAGAS-Evaluation auf dem aktuellen RAG-Setup aus.
 #### Selektive Evaluation (`ragas_selective_evaluation.py`)
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" src/evaluation/ragas_selective_evaluation.py
+python src/evaluation/ragas_selective_evaluation.py
 ```
 
 Ergänzt die Vollständige Evaluation um zwei zusätzliche Steuerungsmöglichkeiten, die direkt im Skript-Header konfiguriert werden:
@@ -142,7 +145,7 @@ EVAL_IDS = None              # → alle Fragen aus Testset.CSV
 ### Anzahl Chunks in der Vektordatenbank prüfen
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" -c "import chromadb; client = chromadb.PersistentClient(path='data/vector_db'); cols = client.list_collections(); print('Collections:', len(cols)); [print(c.name, c.count(), 'Chunks') for c in cols] if cols else print('Keine Collections/Chunks vorhanden')"
+python -c "import chromadb; client = chromadb.PersistentClient(path='data/vector_db'); cols = client.list_collections(); print('Collections:', len(cols)); [print(c.name, c.count(), 'Chunks') for c in cols] if cols else print('Keine Collections/Chunks vorhanden')"
 ```
 
 ### Vektordatenbank löschen

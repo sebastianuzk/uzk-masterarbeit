@@ -100,8 +100,11 @@ ollama pull llama3.1:8b
 
 ```powershell
 # Virtuelle Umgebung erstellen und aktivieren
-python -m venv Masterarbeit
-& ".\Masterarbeit\Scripts\Activate.ps1"
+python -m venv .venv
+# Windows:
+.venv\Scripts\Activate.ps1
+# Linux / macOS:
+# source .venv/bin/activate
 
 # Abhängigkeiten installieren
 pip install -r requirements.txt
@@ -111,19 +114,19 @@ pip install -r requirements.txt
 
 ```powershell
 # Schritt 1 – Crawler (überspringen, falls Cache vorhanden)
-& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.pipelines.crawler_scraper_pipeline
+python -m src.scraper.pipelines.crawler_scraper_pipeline
 
 # Schritt 2 – Cache in SQLite importieren
-& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.tools.import_to_content_db
+python -m src.scraper.tools.import_to_content_db
 
 # Schritt 3 – Vektordatenbank aufbauen
-& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.run_production_scraper
+python -m src.scraper.run_production_scraper
 ```
 
 ### Chatbot starten
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" -m streamlit run src/ui/streamlit_app.py
+python -m streamlit run src/ui/streamlit_app.py
 ```
 
 Öffnet [http://localhost:8501](http://localhost:8501) im Browser.
@@ -144,10 +147,10 @@ Eine vollständige Beschreibung aller Parameter und Pipelines findet sich in **[
 
 ```powershell
 # Vollständige Evaluation (alle Testfragen)
-& ".\Masterarbeit\Scripts\python.exe" src/evaluation/ragas_evaluation.py
+python src/evaluation/ragas_evaluation.py
 
 # Selektive Evaluation (bestimmte IDs / Checkpoint-Fortsetzung)
-& ".\Masterarbeit\Scripts\python.exe" src/evaluation/ragas_selective_evaluation.py
+python src/evaluation/ragas_selective_evaluation.py
 ```
 
 Testset: `src/evaluation/data/Testset.CSV`. Metriken: MRR@5, Hit@5, Faithfulness, Context Recall u. a. via RAGAS + LangSmith.
@@ -157,7 +160,7 @@ Testset: `src/evaluation/data/Testset.CSV`. Metriken: MRR@5, Hit@5, Faithfulness
 ## Tests
 
 ```powershell
-& ".\Masterarbeit\Scripts\python.exe" -m pytest tests/
+python -m pytest tests/
 ```
 
 ---
