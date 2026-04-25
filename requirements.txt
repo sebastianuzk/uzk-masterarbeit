@@ -77,3 +77,9 @@ pytest-playwright>=0.4.0
 # ============================================================================
 # Ollama muss separat installiert werden: https://ollama.ai
 # Nach Installation: ollama pull llama3.1:8b
+
+# PyTorch wird mit CUDA 12.4 installiert (NVIDIA GPU empfohlen).
+# Für andere CUDA-Versionen oder CPU-only: https://pytorch.org/get-started/locally/
+# Ohne GPU dauert Schritt 3 (Vektordatenbank aufbauen) je nach Hardware 1–3 Stunden.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch
