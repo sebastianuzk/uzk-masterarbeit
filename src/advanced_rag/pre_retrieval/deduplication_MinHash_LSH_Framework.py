@@ -12,9 +12,6 @@ Vorteile der Framework-Nutzung:
 - Umfangreiche Dokumentation und Community-Support
 - Unterstützung für verschiedene LSH-Varianten
 
-Vergleich zur Custom-Implementierung (deduplication_MinHash_LSH.py):
-- datasketch: Schneller durch C-optimierten Code
-- Custom: Volle Kontrolle, vollständig in Python
 """
 
 import logging

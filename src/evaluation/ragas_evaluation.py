@@ -39,10 +39,6 @@ except ImportError:
     BERT_SCORE_AVAILABLE = False
     print("⚠️ bert-score nicht installiert. Installiere mit: pip install bert-score")
 
-# Reproduzierbarkeit: Seeds werden aus config.settings geladen
-import random
-import numpy as np
-
 # Projekt-Root
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -81,21 +77,9 @@ from datetime import datetime
 
 
 EVAL_TIMESTAMPS = [
-    "20260403_175716",  
+    "YYYYMMDD_HHMMSS",  
     # ...
 ]
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # Aktueller Timestamp (wird in main() pro Iteration gesetzt)
@@ -118,28 +102,31 @@ def calculate_RR_at5(context_hint: str, retrieved_urls: list) -> float:
     
     context_hint_str = str(context_hint)
     
+    # Für file://-URLs: nur Dateiname vergleichen (maschinenunabhängig),
+    # da der absolute Pfadpräfix je nach Rechner unterschiedlich ist.
+    # Hintergrund: vorher wurden absolute Pfade genutzt, welche auf anderen Systemen so nicht korrekt funktionieren würden
+    # Jetzt wird der Filename am Ende des Pfades herangezogen
+    def normalize_url(u: str) -> str:
+        if u.startswith('file://'):
+            return Path(u.replace('file://', '')).name
+        return u
+    
+    context_hint_normalized = normalize_url(context_hint_str)
+    
     for i, url in enumerate(retrieved_urls):
         if url is None:
             continue
         url_str = str(url)
         
-        # Exakte Übereinstimmung
+        # Exakte Übereinstimmung (z.B. https://)
         if context_hint_str == url_str:
             return 1.0 / (i + 1)
-        '''
-        # Für Web-URLs: Prüfe ob context_hint in der URL enthalten ist
-        # z.B. https://wiso.uni-koeln.de/de/studium -> file://...html_cache/html/wiso.uni-koeln.de_de_studium...
-        if context_hint_str.startswith('https://'):
-            # Konvertiere https://wiso.uni-koeln.de/de/... zu wiso.uni-koeln.de_de_...
-            url_part = context_hint_str.replace('https://', '').replace('/', '_')
-            if url_part in url_str:
-                return 1.0 / (i + 1)
         
-        # Für file:// URLs: Direkter Vergleich
-        if context_hint_str.startswith('file://') and url_str.startswith('file://'):
-            if context_hint_str == url_str:
+        # Dateiname-Vergleich für file://-URLs (maschinenunabhängig)
+        if context_hint_str.startswith('file://') or url_str.startswith('file://'):
+            if context_hint_normalized == normalize_url(url_str):
                 return 1.0 / (i + 1)
-                '''
+
     
     # Nicht gefunden
     return 0.0
