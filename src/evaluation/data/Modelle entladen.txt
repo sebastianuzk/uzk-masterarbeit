@@ -1,1 +1,0 @@
-ollama ps | Select-Object -Skip 1 | ForEach-Object { ollama stop ($_ -split '\s+')[0] }; 

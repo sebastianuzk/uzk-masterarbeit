@@ -38,6 +38,7 @@ lxml>=4.9.0                 # Schneller XML/HTML-Parser (BeautifulSoup Backend)
 # Vector Database & Embeddings
 chromadb>=0.4.0             # Vector-Datenbank für RAG-System
 sentence-transformers>=2.2.0 # Lokale Embeddings (all-MiniLM-L6-v2, 384 dim)
+transformers<5.0.0          # Version 5.x verursacht Streamlit File-Watcher Fehler
 
 # Hybrid Retrieval (BM25 Sparse Index)
 rank_bm25>=0.2.2            # BM25 Implementierung für Sparse Retrieval
@@ -78,8 +79,9 @@ pytest-playwright>=0.4.0
 # Ollama muss separat installiert werden: https://ollama.ai
 # Nach Installation: ollama pull llama3.1:8b
 
-# PyTorch wird mit CUDA 12.4 installiert (NVIDIA GPU empfohlen).
+# PyTorch wird mit CUDA 12.6 installiert (NVIDIA GPU empfohlen).
 # Für andere CUDA-Versionen oder CPU-only: https://pytorch.org/get-started/locally/
 # Ohne GPU dauert Schritt 3 (Vektordatenbank aufbauen) je nach Hardware 1–3 Stunden.
---extra-index-url https://download.pytorch.org/whl/cu124
-torch
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch==2.6.0+cu126
+torchvision==0.21.0+cu126

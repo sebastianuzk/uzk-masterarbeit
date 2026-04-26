@@ -1,1 +1,1 @@
-& ".\Masterarbeit\Scripts\python.exe" -c "import chromadb; client = chromadb.PersistentClient(path='data/vector_db'); cols = client.list_collections(); print('Collections:', len(cols)); [print(c.name, c.count(), 'Chunks') for c in cols] if cols else print('Keine Collections/Chunks vorhanden')"
+python -c "import chromadb; client = chromadb.PersistentClient(path='data/vector_db'); cols = client.list_collections(); print('Collections:', len(cols)); [print(c.name, c.count(), 'Chunks') for c in cols] if cols else print('Keine Collections/Chunks vorhanden')"

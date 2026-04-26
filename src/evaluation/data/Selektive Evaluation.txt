@@ -1,1 +1,1 @@
-& ".\Masterarbeit\Scripts\python.exe" src/evaluation/ragas_selective_evaluation.py
+python src/evaluation/ragas_selective_evaluation.py

@@ -39,7 +39,30 @@ OPENAI_EVAL_MODEL=gpt-4.1-mini   # Cloud-Alternative
 RUN_EVALUATION_LOCAL=false        # true = lokales Modell (Ollama), false = OpenAI
 ```
 
+> **Wichtig – Evaluation:** Die Evaluation (lokal **und** Cloud) setzt ein konfiguriertes LangSmith-Tracing voraus. `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_TRACING=true` und `LANGSMITH_ENDPOINT` müssen in der `.env` gesetzt sein, damit Antworten und Metriken korrekt protokolliert werden.
+
 > **Credentials:** API-Schlüssel für LangSmith (`LANGSMITH_API_KEY`), OpenAI (`OPENAI_API_KEY`), Voyage (`VOYAGE_API_KEY`) und Cohere (`COHERE_API_KEY`) müssen ebenfalls gesetzt sein, sofern die jeweiligen Funktionen genutzt werden (Tracing, Cloud-Evaluation, ReRanking). Diese Werte sind personengebunden und **nicht** im Repository enthalten.
+
+### Optionale `.env`-Parameter für vollständige Funktionalität
+
+Für Evaluation (lokal oder Cloud), proprietäres ReRanking und LangSmith-Tracing müssen folgende Variablen in der `.env` gesetzt werden:
+
+```bash
+# OpenAI – Cloud-Evaluation (RAGAS mit GPT)
+OPENAI_API_KEY=<your-openai-api-key>
+
+# LangSmith – Tracing & Observability
+LANGSMITH_API_KEY=<your-langsmith-api-key>
+LANGSMITH_PROJECT=<your-project-name>
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+
+# ReRanking – einen der beiden Anbieter wählen:
+VOYAGE_API_KEY=<your-voyage-api-key>    # Voyage AI ReRanker
+COHERE_API_KEY=<your-cohere-api-key>    # Cohere ReRanker (Alternative)
+```
+
+> Ohne diese Keys laufen alle Kernfunktionen (Scraping, RAG, Chatbot) weiterhin – lediglich Tracing, Cloud-basierte Evaluation und proprietäres ReRanking sind nicht verfügbar.
 
 ---
 

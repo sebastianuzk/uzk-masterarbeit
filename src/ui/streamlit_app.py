@@ -1,6 +1,9 @@
 """
 Streamlit Web Interface für den Autonomen Chatbot-Agenten
 """
+import torch
+torch.classes.__path__ = []  # Fix: verhindert RuntimeError im Streamlit File-Watcher (PyTorch 2.4+)
+
 import streamlit as st
 import sys
 import os
