@@ -1,1 +1,1 @@
-& ".\Masterarbeit\Scripts\python.exe" -m src.scraper.run_production_scraper;
+python -m src.scraper.run_production_scraper

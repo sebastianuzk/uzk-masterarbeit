@@ -54,8 +54,9 @@ numpy>=1.24.0               # Numerische Berechnungen (Embeddings, MMR, BM25)
 datasketch>=1.6.0           # MinHash + LSH Near-Deduplication
 
 # Evaluation Framework
-ragas>=0.1.0                # RAG Evaluation Framework (RAGAS)
+ragas>=0.1.0,<1.0.0         # RAG Evaluation Framework (RAGAS) – <1.0.0 wegen breaking API-Änderungen (ragas.metrics.collections)
 langchain-huggingface>=0.0.3  # HuggingFace Embeddings für RAGAS
+bert-score>=0.3.13          # BERTScore für semantische Ähnlichkeitsbewertung
 
 # Excel-Export (Deduplication Reports)
 openpyxl>=3.1.0             # Excel-Dateien für Deduplication-Berichte

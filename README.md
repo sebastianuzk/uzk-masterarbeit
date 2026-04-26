@@ -2,6 +2,9 @@
 
 Autonomer RAG-basierter Chatbot-Agent für die WiSo-Fakultät der Universität zu Köln.
 
+> 📁 **Forschungsdaten (Google Drive):** [https://drive.google.com/drive/folders/1UGp18dGH4hGrYbxlVYk0hzvGh4PwAACN?usp=sharing](https://drive.google.com/drive/folders/1UGp18dGH4hGrYbxlVYk0hzvGh4PwAACN?usp=sharing)
+> Enthält: Rohdaten, Content-Database-Varianten (Experiment-Version + neue Version nach Reproduzierbarkeitscheck), Vektordatenbank-Snapshots sowie Sparse-Indizes.
+
 ---
 
 ## Voraussetzungen
