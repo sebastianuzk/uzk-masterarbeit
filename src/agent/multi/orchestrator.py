@@ -162,7 +162,7 @@ class OrchestratorAgent:
         setup_langsmith_tracing()
         
         # Shared LLM für alle Agenten (Ressourceneffizienz)
-        self.shared_llm = create_llm(verbose=True)
+        self.shared_llm = create_llm()
         
         # Spezialisierte Agenten initialisieren
         self.agents: Dict[str, BaseSpecializedAgent] = {}

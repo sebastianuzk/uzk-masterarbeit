@@ -35,12 +35,12 @@ class KLIPS2ChangePasswordTool(KLIPS2BaseTool):
                 try:
                     page.click("text=Kennwort ändern", timeout=5000)
                     page.wait_for_load_state("networkidle")
-                except:
+                except Exception:
                     # Fallback
                     page.click("text=Visitenkarte", timeout=5000)
                     try:
                         page.click("text=Passwort ändern", timeout=3000)
-                    except:
+                    except Exception:
                         pass
                 
                 # 2. Fill new password
@@ -56,7 +56,7 @@ class KLIPS2ChangePasswordTool(KLIPS2BaseTool):
                 try:
                     page.click("button:has-text('Speichern')", timeout=3000)
                     page.wait_for_load_state("networkidle")
-                except:
+                except Exception:
                     print("Could not find 'Speichern' button.")
                 
                 return f"""

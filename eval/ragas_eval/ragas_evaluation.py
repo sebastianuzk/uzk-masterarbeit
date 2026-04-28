@@ -32,7 +32,9 @@ from config.settings import (
     OLLAMA_EMBEDDING_MODEL,
     LANGSMITH_API_KEY,
     LANGSMITH_PROJECT,
-    RAGAS_JUDGE_MODEL
+    RAGAS_JUDGE_MODEL,
+    TEMPERATURE,
+    settings
 )
 from src.agent.react_agent import create_react_agent
 
@@ -129,7 +131,8 @@ def generate_chatbot_responses(
     model_name: str = None, 
     resume: bool = True,
     retry_questions: List[int] = None,
-    agent_type: str = "single"
+    agent_type: str = "single",
+    provider: str = "ollama"
 ) -> EvaluationDataset:
     """
     Generiert Chatbot-Antworten für alle Fragen und sammelt RAG-Kontexte.
@@ -253,7 +256,7 @@ def generate_chatbot_responses(
         print(f"   ✅ Antwort: {answer[:80]}...")
         
         # Warten damit LangSmith Trace vollständig ist
-        time.sleep(1)  # Reduziert von 3s auf 1s
+        time.sleep(5 if provider == "anthropic" else 1)  # Anthropic has stricter rate limits
         
         # RAG-Kontext aus LangSmith holen
         # WICHTIG: Wir müssen den LangGraph-Run finden, NICHT den self-reflection-Run!
@@ -310,9 +313,8 @@ def generate_chatbot_responses(
         
         if matching_run:
             trace_id = matching_run.trace_id
-            # Enable debug for first question to see what's happening
-            debug_enabled = (idx == start_idx)
-            contexts = get_rag_context_from_langsmith(langsmith_client, trace_id, debug=debug_enabled)
+            # Debug disabled for cleaner output
+            contexts = get_rag_context_from_langsmith(langsmith_client, trace_id, debug=False)
             print(f"   ✅ Run gefunden: {matching_run.name} (type: {matching_run.run_type})")
         else:
             print(f"   ⚠️ Kein passender Run gefunden für Session-ID {session_id[:8]}...")
@@ -419,10 +421,9 @@ def run_ragas_evaluation(
     # LLM konfigurieren basierend auf Provider
     if final_judge_provider == 'openai':
         from langchain_openai import ChatOpenAI
-        from config.settings import settings
         llm = ChatOpenAI(
             model=final_judge_model,
-            temperature=settings.TEMPERATURE,
+            temperature=TEMPERATURE,
             api_key=settings.OPENAI_API_KEY,
             max_retries=3
         )
@@ -431,7 +432,7 @@ def run_ragas_evaluation(
         llm = ChatOllama(
             model=final_judge_model,
             base_url=OLLAMA_BASE_URL,
-            temperature=settings.TEMPERATURE
+            temperature=TEMPERATURE
         )
     
     # Ollama Embeddings für answer_relevancy (später aktivieren)

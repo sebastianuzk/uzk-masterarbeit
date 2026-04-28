@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 class ReactAgent:
     """Autonomer React Agent mit LangGraph und Ollama oder OpenAI"""
     
-    def __init__(self):
+    def __init__(self, provider: str = None):
         # Validiere Einstellungen
         settings.validate()
         
@@ -37,6 +37,7 @@ class ReactAgent:
         
         # Initialisiere LLM (Ollama oder OpenAI basierend auf settings.LLM_PROVIDER)
         self.llm = create_llm()
+        self._provider = provider or settings.LLM_PROVIDER
         
         # Initialisiere Tools (einschließlich E-Mail-Tool)
         self.tools = self._create_tools()
@@ -53,8 +54,19 @@ class ReactAgent:
         # Konfiguriere Recursion Limit für Agent
         self.recursion_limit = get_recursion_limit("single")
         
-        # Speichere System-Prompt als SystemMessage für Memory
-        self.system_message = SystemMessage(content=system_prompt)
+        # Speichere System-Prompt als SystemMessage.
+        # For Anthropic: use a cached content block so the system prompt is only
+        # billed/processed once and reused across all turns (prompt caching).
+        if self._provider == "anthropic":
+            self.system_message = SystemMessage(content=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ])
+        else:
+            self.system_message = SystemMessage(content=system_prompt)
         
         # Memory für Konversationshistorie
         self.memory = []
@@ -344,6 +356,6 @@ Antworte in der Sprache des Nutzers."""
         except Exception as e:
             return []  # Bei Fehler keine Tool-Auswahl
 
-def create_react_agent() -> ReactAgent:
+def create_react_agent(provider: str = None) -> ReactAgent:
     """Factory-Funktion für den React Agent"""
-    return ReactAgent()
+    return ReactAgent(provider=provider)

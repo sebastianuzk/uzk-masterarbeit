@@ -326,21 +326,21 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 inp_locator = page.get_by_label(label_pattern, exact=False).first
                 if inp_locator.count() > 0:
                     inp = inp_locator
-            except:
+            except Exception:
                 pass
             
             # Strategy 2: Table row (common in KLIPS)
             if not inp or inp.count() == 0:
                 try:
                     inp = page.locator(f"//tr[td[contains(text(), '{label_pattern}')]]//input[@type='text']").first
-                except:
+                except Exception:
                     pass
             
             # Strategy 3: Look for input with placeholder or name containing the pattern
             if not inp or inp.count() == 0:
                 try:
                     inp = page.locator(f"input[type='text'][placeholder*='{label_pattern}' i]").first
-                except:
+                except Exception:
                     pass
             
             if inp and inp.count() > 0:
@@ -356,7 +356,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                             print(f"  '{description}' already filled: {current_val}")
                     else:
                         print(f"  Input for '{description}' not visible")
-                except:
+                except Exception:
                     print(f"  Could not interact with '{description}'")
             else:
                 print(f"  Input for '{description}' not found")
@@ -385,7 +385,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 try:
                     sel.select_option(label=value, timeout=2000)
                     print(f"Selected '{value}' for '{description}'")
-                except:
+                except Exception:
                     # Quick fuzzy match
                     options = sel.locator("option").all()
                     for opt in options:
@@ -500,7 +500,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                     print(f"Auto-selected '{text}' for '{description}'")
                     return text
             return None
-        except:
+        except Exception:
             return None
 
     def _click_next(self, page) -> bool:
@@ -509,7 +509,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             # Quick check for loading mask
             try:
                 page.wait_for_selector(".pageDisabled", state="hidden", timeout=1000)
-            except:
+            except Exception:
                 pass
 
             # Try ID first (faster)
@@ -622,7 +622,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                         if locator.count() > 0 and locator.is_visible():
                             delete_btn = locator
                             break
-                    except:
+                    except Exception:
                         continue
                 
                 if not delete_btn:
@@ -650,7 +650,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                                 confirm_btn.click()
                                 time.sleep(0.5)
                                 break
-                        except:
+                        except Exception:
                             continue
                     
                     page.wait_for_load_state("domcontentloaded")
@@ -1037,7 +1037,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                     print(f"  ✓ Selected '{text}' for {description}")
                     return True
             return False
-        except:
+        except Exception:
             return False
 
     def _fill_personal_data_tracked(self, page, birth_place, birth_country, nationality, gender) -> Tuple[List[str], List[Tuple[str, str]]]:
@@ -1226,7 +1226,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 try:
                     page.wait_for_selector("text=Bewerbung erfassen", timeout=10000)
                     page.click("text=Bewerbung erfassen")
-                except:
+                except Exception:
                     status.errors.append("Button 'Bewerbung erfassen' nicht gefunden")
                     return status.to_chatbot_response(False) + "\n\n❌ Button 'Bewerbung erfassen' nicht gefunden. Möglicherweise gibt es bereits eine laufende Bewerbung."
                 
@@ -1251,7 +1251,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 t0 = time.time()
                 try:
                     page.wait_for_selector("#idStStudArtNr", timeout=10000)
-                except:
+                except Exception:
                     status.errors.append("Auswahlfeld für Abschlussart nicht geladen")
                     return status.to_chatbot_response(False) + "\n\n❌ Auswahlfeld für Abschlussart nicht geladen."
 
@@ -1272,7 +1272,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                 t0 = time.time()
                 try:
                     page.wait_for_selector("#idBwStsCfgNr", timeout=5000)
-                except:
+                except Exception:
                     status.errors.append("Auswahlfeld für Studiengang nicht geladen")
                     return status.to_chatbot_response(False) + "\n\n❌ Auswahlfeld für Studiengang nicht geladen."
 
@@ -1330,7 +1330,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
                     try:
                         page.screenshot(path="debug_studiengangsauswahl.png")
                         print("📸 Screenshot saved to debug_studiengangsauswahl.png")
-                    except:
+                    except Exception:
                         pass
                     status.errors.append("Pflichtfelder in der Studiengangsauswahl fehlen möglicherweise")
                     return status.to_chatbot_response(False) + "\n\n❌ Fehler beim Klicken auf 'Weiter' (nach Studiengangswahl). Pflichtfelder fehlen möglicherweise."

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
+from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
@@ -51,11 +52,11 @@ def create_llm(
     temperature: Optional[float] = None,
     timeout: Optional[int] = None,
     json_mode: bool = False,
-) -> Union[ChatOllama, ChatOpenAI]:
+) -> Union[ChatOllama, ChatOpenAI, ChatAnthropic]:
     """
     Create an LLM instance based on the provider.
     
-    Supports both Ollama (local) and OpenAI (API) providers with
+    Supports Ollama (local), OpenAI and Anthropic providers with
     consistent configuration handling.
     
     Args:
@@ -66,10 +67,10 @@ def create_llm(
         json_mode: If True, configure LLM for JSON output (Ollama only)
         
     Returns:
-        Configured LangChain Chat model (ChatOllama or ChatOpenAI)
+        Configured LangChain Chat model (ChatOllama, ChatOpenAI or ChatAnthropic)
         
     Raises:
-        ValueError: If provider is unknown or OpenAI key is missing
+        ValueError: If provider is unknown or required API key is missing
     """
     _provider = provider or getattr(settings, 'LLM_PROVIDER', 'ollama')
     _temperature = temperature if temperature is not None else settings.TEMPERATURE
@@ -83,9 +84,9 @@ def create_llm(
         
         openai_kwargs = {
             "model": _model,
-            "temperature": _temperature,
             "timeout": _timeout,
             "api_key": settings.OPENAI_API_KEY,
+            "model_kwargs": {"temperature": _temperature},
         }
         
         if settings.OPENAI_BASE_URL:
@@ -93,6 +94,20 @@ def create_llm(
         
         logger.info(f"Creating ChatOpenAI with model: {_model} (temperature={_temperature})")
         return ChatOpenAI(**openai_kwargs)
+    
+    elif _provider == "anthropic":
+        if not settings.ANTHROPIC_API_KEY:
+            raise ValueError("ANTHROPIC_API_KEY is required for Anthropic provider")
+        
+        anthropic_kwargs = {
+            "model": model or getattr(settings, 'ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+            "temperature": _temperature,
+            "timeout": _timeout,
+            "api_key": settings.ANTHROPIC_API_KEY,
+        }
+        
+        logger.info(f"Creating ChatAnthropic with model: {anthropic_kwargs['model']} (temperature={_temperature})")
+        return ChatAnthropic(**anthropic_kwargs)
     
     else:  # Ollama (default)
         _model = model or settings.OLLAMA_MODEL
@@ -105,13 +120,14 @@ def create_llm(
             "num_ctx": ctx_size,
             "timeout": _timeout,
             "keep_alive": settings.OLLAMA_KEEP_ALIVE,
+            "seed": 42,
         }
         
         # JSON mode for structured output
         if json_mode:
             ollama_kwargs["format"] = "json"
         
-        logger.info(f"Creating ChatOllama with model: {_model} (ctx_size={ctx_size}, temperature={_temperature})")
+        logger.info(f"Creating ChatOllama with model: {_model} (ctx_size={ctx_size}, temperature={_temperature}, seed=42)")
         return ChatOllama(**ollama_kwargs)
 
 

@@ -38,7 +38,7 @@ class KLIPS2ChangeAddressTool(KLIPS2BaseTool):
                 try:
                     page.click("text=Meine Adressen", timeout=5000)
                     page.wait_for_load_state("networkidle")
-                except:
+                except Exception:
                     # Fallback to old "Visitenkarte" if layout differs
                     page.click("text=Visitenkarte", timeout=5000)
                 
@@ -75,7 +75,7 @@ class KLIPS2ChangeAddressTool(KLIPS2BaseTool):
                     # Or just select by label if Playwright supports it
                     try:
                         page.select_option("select[name='pSLand']", label=country)
-                    except:
+                    except Exception:
                         # Fallback if country not found or different format
                         print(f"Could not select country '{country}'")
 
@@ -89,7 +89,7 @@ class KLIPS2ChangeAddressTool(KLIPS2BaseTool):
                 try:
                     page.click("text=Speichern und Schließen", timeout=3000)
                     page.wait_for_load_state("networkidle")
-                except:
+                except Exception:
                     print("Could not find 'Speichern und Schließen' button.")
                 
                 return f"""

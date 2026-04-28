@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-Haupteinstiegspunkt für den Autonomen Chatbot-Agenten.
+Main entry point for the Autonomous Chatbot Agent.
 
-Unterstützt zwei Agent-Modi:
-- Single-Agent: Ursprünglicher ReactAgent mit allen Tools
-- Multi-Agent: Orchestriertes System mit spezialisierten Agenten
+Supports two agent modes:
+- Single-Agent: Original ReactAgent with all tools
+- Multi-Agent: Orchestrated system with specialized agents
 
-Verwendung:
-    # Single-Agent Modus (Standard)
+Usage:
+    # Single-Agent mode (default)
     python main.py
     python main.py --agent-mode single
     
-    # Multi-Agent Modus
+    # Multi-Agent mode
     python main.py --agent-mode multi
     
-    # Streamlit UI starten
+    # Start Streamlit UI
     python main.py --ui
     python main.py --ui --agent-mode multi
 """
@@ -25,7 +25,7 @@ import traceback
 from pathlib import Path
 from typing import NoReturn
 
-# Projekt-Root zum Pfad hinzufügen
+# Add project root to path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
@@ -35,16 +35,16 @@ logger = get_logger(__name__)
 
 
 def parse_arguments() -> argparse.Namespace:
-    """Parse Kommandozeilenargumente."""
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Autonomer Chatbot-Agent für KLIPS 2.0",
+        description="Autonomous Chatbot Agent for KLIPS 2.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Beispiele:
-    python main.py                        # CLI mit Single-Agent
-    python main.py --agent-mode multi     # CLI mit Multi-Agent
-    python main.py --ui                   # Streamlit UI mit Single-Agent
-    python main.py --ui --agent-mode multi  # Streamlit UI mit Multi-Agent
+Examples:
+    python main.py                        # CLI with Single-Agent
+    python main.py --agent-mode multi     # CLI with Multi-Agent
+    python main.py --ui                   # Streamlit UI with Single-Agent
+    python main.py --ui --agent-mode multi  # Streamlit UI with Multi-Agent
         """
     )
     
@@ -53,19 +53,19 @@ Beispiele:
         type=str,
         choices=["single", "multi", "confirmation", "constrained"],
         default="single",
-        help="Agent-Modus: 'single' für ReactAgent, 'multi' für Multi-Agent-System, 'confirmation' für ConfirmationAgent, 'constrained' für ConstrainedAgent (default: single)"
+        help="Agent mode: 'single' for ReactAgent, 'multi' for Multi-Agent system, 'confirmation' for ConfirmationAgent, 'constrained' for ConstrainedAgent (default: single)"
     )
     
     parser.add_argument(
         "--ui",
         action="store_true",
-        help="Starte Streamlit Web-Interface statt CLI"
+        help="Start Streamlit web interface instead of CLI"
     )
     
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Aktiviere Debug-Ausgaben"
+        help="Enable debug output"
     )
     
     return parser.parse_args()
@@ -73,90 +73,90 @@ Beispiele:
 
 def run_cli(agent_mode: str, debug: bool = False) -> None:
     """
-    Starte den Agenten im CLI-Modus.
+    Start the agent in CLI mode.
     
     Args:
-        agent_mode: "single" oder "multi"
-        debug: Aktiviere Debug-Ausgaben
+        agent_mode: "single" or "multi"
+        debug: Enable debug output
     """
     from src.agent import create_agent
     
     print("=" * 60)
-    print("🤖 Autonomer Chatbot-Agent für KLIPS 2.0")
+    print("🤖 Autonomous Chatbot Agent for KLIPS 2.0")
     print("=" * 60)
     print()
     
-    # Agent erstellen
-    logger.info(f"Initialisiere Agent im {agent_mode.upper()}-Modus...")
-    print(f"Initialisiere Agent im {agent_mode.upper()}-Modus...")
+    # Create agent
+    logger.info(f"Initializing agent in {agent_mode.upper()} mode...")
+    print(f"Initializing agent in {agent_mode.upper()} mode...")
     agent = create_agent(mode=agent_mode)
     print()
     
-    # Verfügbare Tools anzeigen
-    print("📦 Verfügbare Tools:")
+    # Show available tools
+    print("📦 Available tools:")
     for tool in agent.get_available_tools():
         print(f"   • {tool}")
     print()
     
-    # Multi-Agent: Verfügbare Agenten anzeigen
+    # Multi-Agent: show available agents
     if agent_mode == "multi" and hasattr(agent, 'get_available_agents'):
-        print("🎭 Verfügbare Agenten:")
+        print("🎭 Available agents:")
         for agent_name in agent.get_available_agents():
             print(f"   • {agent_name}")
         print()
     
     print("=" * 60)
-    print("Geben Sie Ihre Frage ein (oder 'quit'/'exit' zum Beenden)")
-    print("Geben Sie 'clear' ein, um den Chatverlauf zu löschen")
+    print("Enter your question (or 'quit'/'exit' to quit)")
+    print("Enter 'clear' to clear the chat history")
     print("=" * 60)
     print()
     
-    # Chat-Loop
+    # Chat loop
     while True:
         try:
-            user_input = input("👤 Sie: ").strip()
+            user_input = input("👤 You: ").strip()
             
             if not user_input:
                 continue
             
             if user_input.lower() in ["quit", "exit", "q"]:
-                print("\n👋 Auf Wiedersehen!")
+                print("\n👋 Goodbye!")
                 break
             
             if user_input.lower() == "clear":
                 agent.clear_memory()
-                print("🗑️ Chatverlauf gelöscht.\n")
+                print("🗑️ Chat history cleared.\n")
                 continue
             
             if user_input.lower() == "status":
                 memory_info = agent.get_memory_summary()
                 print(f"\n📊 Status:")
-                print(f"   Nachrichten: {memory_info['total_messages']}")
-                print(f"   Benutzer: {memory_info['human_messages']}")
+                print(f"   Messages: {memory_info['total_messages']}")
+                print(f"   User: {memory_info['human_messages']}")
                 print(f"   AI: {memory_info['ai_messages']}\n")
                 continue
             
-            # Anfrage an Agent senden
-            print("\n🤔 Agent denkt nach...\n")
+            # Send request to agent
+            print("\n🤔 Agent is thinking...\n")
             response = agent.chat(user_input)
             print(f"🤖 Agent: {response}\n")
             
         except KeyboardInterrupt:
-            print("\n\n👋 Auf Wiedersehen!")
+            print("\n\n👋 Goodbye!")
             break
         except Exception as e:
-            logger.error(f"Fehler während der Ausführung: {e}", exc_info=debug)
-            print(f"\n❌ Fehler: {e}\n")
+            logger.error(f"Error during execution: {e}", exc_info=debug)
+            print(f"\n❌ Error: {e}\n")
             if debug:
                 traceback.print_exc()
 
 
 def run_streamlit(agent_mode: str) -> NoReturn:
     """
-    Starte Streamlit Web-Interface.
+    Start the Streamlit web interface.
     
     Args:
-        agent_mode: "single" oder "multi"
+        agent_mode: "single" or "multi"
     """
     import subprocess
     
@@ -169,17 +169,17 @@ def run_streamlit(agent_mode: str) -> NoReturn:
         f"--agent-mode={agent_mode}"
     ]
     
-    logger.info(f"Starte Streamlit UI im {agent_mode.upper()}-Modus...")
-    print(f"🚀 Starte Streamlit UI im {agent_mode.upper()}-Modus...")
+    logger.info(f"Starting Streamlit UI in {agent_mode.upper()} mode...")
+    print(f"🚀 Starting Streamlit UI in {agent_mode.upper()} mode...")
     subprocess.run(cmd)
     sys.exit(0)
 
 
 def main() -> None:
-    """Hauptfunktion."""
+    """Main function."""
     args = parse_arguments()
     
-    # Logging einrichten
+    # Set up logging
     log_level = "DEBUG" if args.debug else "INFO"
     setup_logging(level=log_level)
     

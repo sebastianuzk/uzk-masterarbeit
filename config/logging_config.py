@@ -1,5 +1,5 @@
 """
-Zentralisierte Logging-Konfiguration für den Autonomen Chatbot-Agenten
+Centralized logging configuration for the Autonomous Chatbot Agent
 """
 import logging
 import sys
@@ -8,34 +8,34 @@ from typing import Optional
 
 def setup_logging(level: Optional[str] = None, log_file: Optional[str] = None) -> None:
     """
-    Konfiguriert das Logging für die gesamte Anwendung.
+    Configure logging for the entire application.
     
     Args:
-        level: Log-Level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        log_file: Optional - Pfad zur Log-Datei
+        level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_file: Optional path to a log file
     """
     log_level = getattr(logging, level.upper() if level else "INFO")
     
-    # Log-Format
+    # Log format
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     date_format = "%Y-%m-%d %H:%M:%S"
     
-    # Handler erstellen
+    # Create handlers
     handlers = [logging.StreamHandler(sys.stdout)]
     
     if log_file:
         handlers.append(logging.FileHandler(log_file))
     
-    # Logging konfigurieren
+    # Configure logging
     logging.basicConfig(
         level=log_level,
         format=log_format,
         datefmt=date_format,
         handlers=handlers,
-        force=True  # Überschreibt vorhandene Konfiguration
+        force=True  # Overrides existing configuration
     )
     
-    # Unterdrücke zu verbose Logs von externen Bibliotheken
+    # Suppress overly verbose logs from external libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("selenium").setLevel(logging.WARNING)
@@ -45,12 +45,12 @@ def setup_logging(level: Optional[str] = None, log_file: Optional[str] = None) -
 
 def get_logger(name: str) -> logging.Logger:
     """
-    Gibt einen Logger mit dem angegebenen Namen zurück.
+    Return a logger with the given name.
     
     Args:
-        name: Name des Loggers (üblicherweise __name__)
+        name: Logger name (typically __name__)
     
     Returns:
-        Logger-Instanz
+        Logger instance
     """
     return logging.getLogger(name)

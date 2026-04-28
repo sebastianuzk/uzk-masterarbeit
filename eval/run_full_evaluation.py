@@ -55,7 +55,7 @@ logger = get_logger(__name__)
 # ============================================================================
 
 # Verfügbare LLM-Provider
-LLM_PROVIDERS = ["ollama", "openai"]
+LLM_PROVIDERS = ["ollama", "openai", "anthropic"]
 
 # Verfügbare Modelle: zentral definiert in config/settings.py
 from config.settings import AVAILABLE_MODELS
@@ -797,10 +797,13 @@ def set_model_in_settings(model: str, provider: str = "ollama"):
     """
     os.environ["LLM_PROVIDER"] = provider
     settings.LLM_PROVIDER = provider
-    
+
     if provider == "openai":
         os.environ["OPENAI_MODEL"] = model
         settings.OPENAI_MODEL = model
+    elif provider == "anthropic":
+        os.environ["ANTHROPIC_MODEL"] = model
+        settings.ANTHROPIC_MODEL = model
     else:
         os.environ["OLLAMA_MODEL"] = model
         settings.OLLAMA_MODEL = model
@@ -821,6 +824,10 @@ def get_provider_for_model(model: str) -> str:
     # Heuristik: GPT-Modelle sind OpenAI
     if model.startswith("gpt-"):
         return "openai"
+    
+    # Heuristik: Claude-Modelle sind Anthropic
+    if model.startswith("claude-"):
+        return "anthropic"
     
     # Default: Ollama
     return "ollama"
@@ -884,7 +891,7 @@ def run_tool_evaluation(
     
     if agent_type == "single":
         from src.agent.react_agent import create_react_agent
-        agent = create_react_agent()
+        agent = create_react_agent(provider=provider)
     elif agent_type == "multi":
         from src.agent.multi.multi_agent_system import MultiAgentSystem
         # Force LLM routing for fair evaluation across all models
@@ -980,7 +987,11 @@ def run_tool_evaluation(
             
             status = "✓" if result.exact_match else "✗"
             print(f"{status} (F1={result.tool_f1:.2f}, {result.latency_ms:.0f}ms)", end="")
-            
+
+            # Rate limit delay for Anthropic
+            if provider == "anthropic":
+                time.sleep(5)
+
             # Checkpoint nach jedem Szenario speichern
             checkpoint_data = {
                 'model_name': model,
@@ -1104,6 +1115,14 @@ def run_rag_evaluation(
     print("📚 RAGAS-EVALUATION")
     print("=" * 80)
     
+    # Display judge configuration prominently
+    judge_display = judge_model if judge_model else "qwen2.5:7b (default)"
+    provider_display = judge_provider if judge_provider else "auto-detect"
+    print(f"   🎯 RAGAS Judge:  {judge_display}")
+    print(f"   📡 Judge Provider: {provider_display}")
+    print(f"   ⚡ Workers:      {judge_workers}")
+    print()
+    
     start_time = time.time()
     
     # Setze Modell und Provider
@@ -1135,7 +1154,7 @@ def run_rag_evaluation(
     
     if agent_type == "single":
         from src.agent.react_agent import create_react_agent
-        agent = create_react_agent()
+        agent = create_react_agent(provider=provider)
     elif agent_type == "multi":
         from src.agent.multi.multi_agent_system import MultiAgentSystem
         # Force LLM routing for fair evaluation across all models
@@ -1155,7 +1174,11 @@ def run_rag_evaluation(
     if LANGSMITH_API_KEY:
         langsmith_client = Client()
         print(f"   ✅ LangSmith verbunden: {LANGSMITH_PROJECT}")
-    
+
+    # Log prompt caching status for Anthropic
+    if provider == "anthropic":
+        print("   ✅ Anthropic prompt caching aktiviert für System-Prompt")
+
     # Testset laden
     print("\n📂 Lade Testset...")
     testset_path = PROJECT_ROOT / "eval" / "ragas_eval" / "data" / "Testset.CSV"
@@ -1167,7 +1190,7 @@ def run_rag_evaluation(
     
     # Antworten generieren
     print(f"\n🚀 Generiere Chatbot-Antworten ({len(test_df)} Fragen)...")
-    dataset = generate_chatbot_responses(test_df, agent, langsmith_client, model_name=model, resume=resume)
+    dataset = generate_chatbot_responses(test_df, agent, langsmith_client, model_name=model, resume=resume, provider=provider)
     
     # RAGAS-Evaluation
     print("\n📊 Führe RAGAS-Evaluation durch...")
@@ -1598,7 +1621,7 @@ Beispiele:
         type=str,
         choices=LLM_PROVIDERS,
         default=None,
-        help="LLM-Provider: 'ollama' (lokal) oder 'openai' (API). Wenn nicht angegeben, wird automatisch ermittelt."
+        help="LLM-Provider: 'ollama' (lokal), 'openai' oder 'anthropic' (API). Wenn nicht angegeben, wird automatisch ermittelt."
     )
     
     parser.add_argument(

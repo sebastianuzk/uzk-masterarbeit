@@ -163,7 +163,7 @@ class ConfirmationAgent:
         setup_langsmith_tracing()
         
         # LLM initialisieren mit zentraler Factory
-        self.llm = create_llm(verbose=True)
+        self.llm = create_llm()
         
         logger.info(f"🔒 Initialisiere Confirmation Agent mit Modell: {settings.OLLAMA_MODEL}")
         

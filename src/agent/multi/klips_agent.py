@@ -146,13 +146,13 @@ class KlipsAgent(BaseSpecializedAgent):
             return []
         
         tool_creators = [
-            ("KLIPS2-Registrierung", create_klips2_register_tool),
-            ("KLIPS2-Bewerbung", create_klips2_apply_tool),
-            ("KLIPS2-Passwort", create_klips2_change_password_tool),
-            ("KLIPS2-Kursdetails", create_klips2_get_course_details_tool),
-            ("KLIPS2-Adresse", create_klips2_change_address_tool),
+            {"name": "KLIPS2-Registrierung", "factory": create_klips2_register_tool},
+            {"name": "KLIPS2-Bewerbung", "factory": create_klips2_apply_tool},
+            {"name": "KLIPS2-Passwort", "factory": create_klips2_change_password_tool},
+            {"name": "KLIPS2-Kursdetails", "factory": create_klips2_get_course_details_tool},
+            {"name": "KLIPS2-Adresse", "factory": create_klips2_change_address_tool},
         ]
-        
+
         return load_tools_batch(tool_creators)
     
     def _get_system_prompt(self) -> str:

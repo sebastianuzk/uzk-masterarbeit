@@ -260,7 +260,7 @@ class UniversityRAGTool(BaseTool):
             content = doc.get('page_content', '')
             metadata = doc.get('metadata', {})
             
-            response_parts.append(f"\n{i}. {content[:500]}...")
+            response_parts.append(f"\n{i}. {content}")
             
             # Füge Quelle hinzu wenn vorhanden
             if 'source' in metadata:

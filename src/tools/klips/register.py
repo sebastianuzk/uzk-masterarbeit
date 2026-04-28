@@ -393,6 +393,9 @@ Oder kontaktieren Sie den ITCC-Helpdesk: https://uni.koeln/MQPZL
         
         except Exception as e:
             return f"❌ Unerwarteter Fehler bei der Registrierung: {str(e)}\n\nBitte kontaktieren Sie den Support."
+        
+        finally:
+            session.close()
     
     async def _arun(self, **kwargs) -> str:
         """Asynchrone Ausführung (nicht implementiert)"""

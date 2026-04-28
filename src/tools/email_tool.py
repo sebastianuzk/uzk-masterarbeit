@@ -10,7 +10,10 @@ from typing import Any, Dict, Optional
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
+from config.logging_config import get_logger
 from config.settings import settings
+
+logger = get_logger(__name__)
 
 class EmailInput(BaseModel):
     """Input für das E-Mail-Tool"""

@@ -556,7 +556,12 @@ WICHTIG:
             tool_trigger_sections.append('''**E-MAIL (Tool aufrufen):**
 - "Sende eine E-Mail" → send_email
 - "Schicke eine Mail" → send_email
-- "Verfasse eine E-Mail" → send_email''')
+- "Verfasse eine E-Mail" → send_email
+- "Schreibe eine E-Mail" → send_email
+- "Sende eine Nachricht" → send_email
+- "E-Mail versenden" → send_email
+- "send an email" / "send email" → send_email
+- "Schicke eine Nachfolge-E-Mail" → send_email''')
         
         tool_trigger_text = "\n\n".join(tool_trigger_sections) if tool_trigger_sections else "Keine Tool-spezifischen Trigger definiert."
         
@@ -638,10 +643,11 @@ HZB-DATEN (hzb_date, hzb_type, hzb_name, hzb_grade, hzb_school, hzb_place):
   
   WICHTIG: hzb_name = Bezeichnung des Zeugnisses (z.B. "Abitur Zeugnis", "Fachhochschulreife")
 
-EMAIL:
+EMAIL (nur für klips2_register - die Registrierungs-E-Mail-Adresse des Nutzers):
   - MUSS @ enthalten: "max@test.de" ✓
   - Fake-Emails ABLEHNEN: "noemail@nodomain.com", "keine-email@test.de" ✗
   - Phrase "E-Mail: wird nachgereicht" → insufficient_data
+  HINWEIS: Diese Regel gilt NUR für den klips2_register-Parameter 'email', NICHT für send_email!
 
 DATUM:
   - "Geburtsdatum: 15.03.1999" ✓
@@ -1237,12 +1243,73 @@ Antworte direkt und natürlich:"""
             if error or not decision_result:
                 return []  # Keine Tool-Auswahl möglich
             
-            # Check for insufficient data (NEU!)
+            # Check for insufficient data: retry once with explicit hint
             if decision_result.action == "insufficient_data":
-                return []  # Fehlende Daten → kein Tool-Call
+                identified_tool = (decision_result.tool_names or [None])[0]
+                # No-required-fields tools (e.g. send_email) should never be insufficient_data
+                no_required = {
+                    "send_email", "university_knowledge_search", "duckduckgo_search",
+                    "web_scraper", "klips2_get_course_details",
+                }
+                if identified_tool in no_required:
+                    missing = decision_result.missing_fields or []
+                    retry_hint = (
+                        f"Deine vorherige Entscheidung war 'insufficient_data' mit fehlenden Feldern {missing}. "
+                        f"ABER: Das Tool '{identified_tool}' hat PFLICHT: keine – es kann IMMER aufgerufen werden. "
+                        f"Bitte entscheide erneut. Antworte nur im JSON-Format."
+                    )
+                    retry_decision_msgs = [
+                        SystemMessage(content=decision_prompt),
+                        HumanMessage(content=message),
+                        AIMessage(content=decision_response.content),
+                        HumanMessage(content=retry_hint),
+                    ]
+                    retry_decision_response = self.llm_json.invoke(retry_decision_msgs)
+                    retry_decision_result, retry_err = self._parse_and_validate(
+                        retry_decision_response.content, ToolDecision
+                    )
+                    if not retry_err and retry_decision_result and retry_decision_result.action == "tool":
+                        decision_result = retry_decision_result
+                    else:
+                        return []  # Still wrong after retry
+                else:
+                    return []  # Fehlende Daten → kein Tool-Call
             
+            # Also retry if model said 'respond' but message clearly contains email keywords
+            # (sub-second failures indicate model skipped the tool entirely)
             if decision_result.action == "respond":
-                return []  # Direkte Antwort, kein Tool
+                available_tool_names = {tool.name for tool in self.tools}
+                email_keywords = (
+                    "send_email" in available_tool_names and any(
+                        kw in message.lower() for kw in [
+                            "e-mail", "email", "mail", "sende", "schicke", "schreibe",
+                            "verfasse", "nachricht", "send", "write",
+                        ]
+                    )
+                )
+                if email_keywords:
+                    retry_hint = (
+                        "Deine vorherige Entscheidung war 'respond', aber die Nachricht enthält "
+                        "eindeutige E-Mail-Signalwörter. Das Tool 'send_email' hat PFLICHT: keine "
+                        "und kann immer aufgerufen werden. Bitte entscheide erneut: "
+                        "action='tool', tool_names=['send_email']. Antworte nur im JSON-Format."
+                    )
+                    retry_decision_msgs = [
+                        SystemMessage(content=decision_prompt),
+                        HumanMessage(content=message),
+                        AIMessage(content=decision_response.content),
+                        HumanMessage(content=retry_hint),
+                    ]
+                    retry_decision_response = self.llm_json.invoke(retry_decision_msgs)
+                    retry_decision_result, retry_err = self._parse_and_validate(
+                        retry_decision_response.content, ToolDecision
+                    )
+                    if not retry_err and retry_decision_result and retry_decision_result.action == "tool":
+                        decision_result = retry_decision_result
+                    else:
+                        return []  # Still wrong after retry
+                else:
+                    return []  # Direkte Antwort, kein Tool
             
             # Schritt 2: Tool-Argumente mit Schema extrahieren (Multi-Tool Support)
             tool_names = decision_result.tool_names

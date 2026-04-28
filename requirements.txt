@@ -8,11 +8,16 @@ langchain-community>=0.0.13
 langchain-core>=0.1.0
 langchain-ollama>=0.1.0
 langchain-openai>=0.1.0           # OpenAI API Support
+langchain-anthropic>=0.1.0        # Anthropic Claude Support
 openai>=1.0.0                     # OpenAI Python SDK for model validation
 
 # Configuration & Environment
 langsmith>=0.1.0
 python-dotenv>=1.0.0
+
+# Data Processing
+pandas>=2.0.0               # Data manipulation and CSV handling
+pydantic>=2.0.0             # Data validation and settings management
 
 # UI Framework
 streamlit>=1.29.0
@@ -27,8 +32,9 @@ httpx>=0.25.0               # Async HTTP-Client
 pytest>=7.0.0
 pytest-asyncio>=0.21.0      # Async-Tests
 
-# ARES Framework (Stanford RAG Evaluation)
-ares-ai
+
+# RAGAS Framework (RAG Assessment and Evaluation)
+ragas>=0.1.0                # RAG-Evaluationsframework mit LLM-as-Judge
 
 # ============================================================================
 # WEB SCRAPER DEPENDENCIES
