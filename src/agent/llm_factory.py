@@ -86,14 +86,15 @@ def create_llm(
             "model": _model,
             "timeout": _timeout,
             "api_key": settings.OPENAI_API_KEY,
-            "model_kwargs": {"temperature": _temperature},
         }
-        
+
         if settings.OPENAI_BASE_URL:
             openai_kwargs["base_url"] = settings.OPENAI_BASE_URL
-        
+
+        llm = ChatOpenAI(**openai_kwargs)
+        llm.model_kwargs["temperature"] = _temperature
         logger.info(f"Creating ChatOpenAI with model: {_model} (temperature={_temperature})")
-        return ChatOpenAI(**openai_kwargs)
+        return llm
     
     elif _provider == "anthropic":
         if not settings.ANTHROPIC_API_KEY:
