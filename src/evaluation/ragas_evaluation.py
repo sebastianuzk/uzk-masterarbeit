@@ -73,13 +73,14 @@ np.random.seed(RANDOM_SEED)
 
 # Timestamps für Batch-Evaluation (Array wird in main() iteriert)
 from datetime import datetime
-#EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
+EVAL_TIMESTAMPS = [datetime.now().strftime("%Y%m%d_%H%M%S")]  # Für neue Evaluation
 
-
+'''
 EVAL_TIMESTAMPS = [
     "YYYYMMDD_HHMMSS",  
     # ...
 ]
+'''
 
 
 # Aktueller Timestamp (wird in main() pro Iteration gesetzt)
@@ -189,22 +190,6 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str) -> tuple:
         
         # Bei mehreren Retriever-Runs: Nimm den mit den WENIGSTEN Dokumenten
         # Das ist der finale Run (z.B. _advanced_retrieve mit Top-K nach ReRanking)
-        # Bei gleichem Count: Nimm den letzten (zeitlich neuesten)
-        #
-        # VEREINFACHENDE ANNAHME (methodische Heuristik):
-        # In Konfigurationen mit fortgeschrittenem Retrieval (z.B. MMR, ReRanking) erscheinen
-        # typischerweise zwei Retriever-Runs im Trace: _naive_retrieve (immer 40 Dokumente)
-        # und _advanced_retrieve (immer 5 Dokumente nach Filterung/ReRanking). Die Auswahl
-        # des Runs mit min(doc_count) liefert damit zuverlässig den finalen, vom LLM genutzten
-        # Kontext. Diese Annahme wurde anhand einer händischen Stichprobenprüfung aller
-        # 8 Retrieval-Konfigurationen validiert — in allen geprüften Fällen war der zugeordnete
-        # Kontext korrekt. Ein harter algorithmischer Garant ist dies dennoch nicht.
-        # Theoretisch könnten mehrere Tool-Calls innerhalb einer Anfrage auftreten; dies wurde
-        # vereinfachend als vernachlässigbar angenommen, da (a) es die Zuordnung von
-        # Eval-Kontext zu LLM-Kontext mehrdeutig machen würde, (b) Metriken wie Hit@5 und
-        # MRR@5 bei mehreren parallelen Retrievals per Definition nicht eindeutig anwendbar
-        # wären, und (c) das Systemdesign darauf ausgelegt ist, genau einen Retrieval-Aufruf
-        # pro Anfrage auszulösen.
         final_run = min(retriever_runs, key=lambda x: x['doc_count'])
         
         contexts = []

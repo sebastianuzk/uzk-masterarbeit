@@ -1,1 +1,1 @@
-Copy-Item -Path "data\vector_db" -Destination "backups\vector_db_fully_advanced" -Recurse -Force; Write-Host "Backup erstellt: backups\vector_db_fully_advanced"
+Copy-Item -Path "data\vector_db" -Destination "backups\naive_protability" -Recurse -Force; Write-Host "Backup erstellt: backups\naive_protability"
