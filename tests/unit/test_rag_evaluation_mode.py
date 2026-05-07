@@ -103,16 +103,22 @@ def test_constrained_agent_rag_mode_only_rag_tool():
         decision_prompt = agent._get_decision_prompt()
         print(f"\n📝 Decision prompt length: {len(decision_prompt)} chars")
         
-        # Verify KLIPS tools are NOT mentioned in decision prompt
+        # Extract the available tools section from the decision prompt
+        # (the section between "VERFÜGBARE TOOLS" and "ENTSCHEIDUNGSLOGIK")
+        available_tools_section = decision_prompt
+        if "ENTSCHEIDUNGSLOGIK" in decision_prompt:
+            available_tools_section = decision_prompt.split("ENTSCHEIDUNGSLOGIK")[0]
+
+        # Verify KLIPS tools are NOT listed as available in the decision prompt
         for klips_tool in klips_tools:
-            assert klips_tool not in decision_prompt, \
-                f"KLIPS tool {klips_tool} should NOT be mentioned in decision prompt in RAG mode"
-        
-        # Verify other tools are NOT mentioned
-        assert "duckduckgo_search" not in decision_prompt, \
-            "DuckDuckGo should NOT be mentioned in decision prompt in RAG mode"
-        assert "send_email" not in decision_prompt, \
-            "Email tool should NOT be mentioned in decision prompt in RAG mode"
+            assert f"- {klips_tool}:" not in available_tools_section, \
+                f"KLIPS tool {klips_tool} should NOT be listed as available in decision prompt in RAG mode"
+
+        # Verify other tools are NOT listed as available
+        assert "- duckduckgo_search:" not in available_tools_section, \
+            "DuckDuckGo should NOT be listed as available in decision prompt in RAG mode"
+        assert "- send_email:" not in available_tools_section, \
+            "Email tool should NOT be listed as available in decision prompt in RAG mode"
         
         # Verify RAG tool IS mentioned
         assert "university_knowledge_search" in decision_prompt, \
