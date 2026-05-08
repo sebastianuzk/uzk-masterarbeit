@@ -57,8 +57,8 @@ class KnowledgeAgent(BaseSpecializedAgent):
         """Erstelle alle Wissens-Tools."""
         tools = []
         
-        # RAG-Tool für Universitäts-Wissensdatenbank (immer geladen)
-        rag_tool = load_tool_safely(create_university_rag_tool, "Universitäts-RAG")
+        # RAG-Tool für Universitäts-Wissensdatenbank
+        rag_tool = load_tool_safely(create_university_rag_tool, "Universitäts-RAG") if settings.ENABLE_RAG_TOOL else None
         if rag_tool:
             tools.append(rag_tool)
         
@@ -159,6 +159,6 @@ class KnowledgeAgent(BaseSpecializedAgent):
             prompt += "\n\n## BEISPIELE\n\n"
             prompt += "\n".join(examples)
         
-        prompt += "\n\n## SPRACHANPASSUNG\nAntworte in der Sprache des Nutzers."
+        prompt += "\n\n## SPRACHANPASSUNG\nPreserve all characters exactly as they appear in the user message, including umlauts: ä ö ü Ä Ö Ü ß\n\nAntworte in der Sprache des Nutzers."
         
         return prompt

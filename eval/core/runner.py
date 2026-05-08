@@ -37,6 +37,7 @@ from eval.core.evaluation import (
     EvaluationResult,
     ArgumentMatchMode,
     evaluate_tool_run,
+    _values_match,
 )
 
 
@@ -197,23 +198,10 @@ def calculate_argument_accuracy(expected_args: dict, actual_args: dict,
             
             if actual_value is None:
                 missing[tool][arg_name] = expected_value
-            elif match_mode == ArgumentMatchMode.EXACT:
-                if actual_value == expected_value:
-                    correct[tool][arg_name] = actual_value
-                else:
-                    missing[tool][arg_name] = expected_value
-            elif match_mode == ArgumentMatchMode.NORMALIZED:
-                if str(actual_value).lower().strip() == str(expected_value).lower().strip():
-                    correct[tool][arg_name] = actual_value
-                else:
-                    missing[tool][arg_name] = expected_value
-            else:  # SEMANTIC - more lenient matching
-                # For semantic, we consider it correct if there's reasonable overlap
-                if str(expected_value).lower() in str(actual_value).lower() or \
-                   str(actual_value).lower() in str(expected_value).lower():
-                    correct[tool][arg_name] = actual_value
-                else:
-                    missing[tool][arg_name] = expected_value
+            elif _values_match(expected_value, actual_value, match_mode):
+                correct[tool][arg_name] = actual_value
+            else:
+                missing[tool][arg_name] = expected_value
     
     total_args = sum(len(args) for args in expected_args.values())
     correct_count = sum(len(args) for args in correct.values())
@@ -299,14 +287,17 @@ def evaluate_scenario(
 
 def aggregate_results(results: list[ScenarioResult]) -> AggregatedMetrics:
     """Aggregate individual results into summary metrics."""
+    import math
     import statistics
-    
+
     if not results:
+        # Use NaN to make "no scenarios ran" distinguishable from "all scored 0".
+        nan = float("nan")
         return AggregatedMetrics(
             total_scenarios=0,
-            mean_precision=0, mean_recall=0, mean_f1=0,
-            mean_argument_accuracy=0, exact_match_rate=0,
-            std_precision=0, std_recall=0, std_f1=0,
+            mean_precision=nan, mean_recall=nan, mean_f1=nan,
+            mean_argument_accuracy=nan, exact_match_rate=nan,
+            std_precision=nan, std_recall=nan, std_f1=nan,
             metrics_by_difficulty={}, metrics_by_tool={}, metrics_by_category={},
             total_errors=0, forbidden_tool_violations=0,
             missing_tool_count=0, extra_tool_count=0
@@ -927,12 +918,42 @@ def _parse_scenario_from_method(
             if forbidden_match:
                 forbidden_str = forbidden_match.group(1)
                 forbidden_tools = set(re.findall(r'["\'](\w+)["\']', forbidden_str))
-            
+
+            # Extrahiere required_arguments (verschachteltes Dict) via Klammer-Zählung
+            required_arguments = {}
+            req_args_match = re.search(r'required_arguments\s*=\s*\{', gold_content)
+            if req_args_match:
+                brace_start = req_args_match.end() - 1
+                depth = 0
+                brace_end = brace_start
+                for i, ch in enumerate(gold_content[brace_start:], brace_start):
+                    if ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                        if depth == 0:
+                            brace_end = i + 1
+                            break
+                try:
+                    required_arguments = ast.literal_eval(gold_content[brace_start:brace_end])
+                except Exception:
+                    pass
+
+            # Extrahiere argument_match_mode
+            mode_match = re.search(r'argument_match_mode\s*=\s*ArgumentMatchMode\.(\w+)', gold_content)
+            argument_match_mode = ArgumentMatchMode.NORMALIZED
+            if mode_match:
+                try:
+                    argument_match_mode = ArgumentMatchMode[mode_match.group(1)]
+                except KeyError:
+                    pass
+
             # Erstelle GoldStandard - negative Tests haben required_tools=[] aber forbidden_tools
             gold_standard = GoldStandard(
                 required_tools=required_tools,
                 forbidden_tools=forbidden_tools,
-                argument_match_mode=ArgumentMatchMode.NORMALIZED
+                required_arguments=required_arguments,
+                argument_match_mode=argument_match_mode,
             )
         else:
             # Fallback: leerer GoldStandard mit Tool aus Dateiname

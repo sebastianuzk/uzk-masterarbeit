@@ -889,6 +889,8 @@ def run_tool_evaluation(
     # Agent erstellen
     print(f"\n🤖 Initialisiere {agent_type}-Agent mit {model}...")
     
+    settings.ENABLE_RAG_TOOL = False  # RAG not part of tool evaluation
+    
     if agent_type == "single":
         from src.agent.react_agent import create_react_agent
         agent = create_react_agent(provider=provider)

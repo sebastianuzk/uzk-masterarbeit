@@ -236,6 +236,10 @@ def _values_match(expected: Any, actual: Any, mode: ArgumentMatchMode) -> bool:
     if expected is None or actual is None:
         return False
     
+    # Wildcard: "*" matches any non-empty value
+    if expected == "*":
+        return actual is not None and str(actual).strip() != ""
+    
     # Handle exact mode
     if mode == ArgumentMatchMode.EXACT:
         return expected == actual
@@ -261,7 +265,67 @@ def _values_match(expected: Any, actual: Any, mode: ArgumentMatchMode) -> bool:
         # Try date normalization
         if _normalize_date(exp_str) == _normalize_date(act_str):
             return True
-        
+
+        # Decimal separator equivalence: "1.5" == "1,5" (German vs English locale)
+        def _normalize_decimal(s: str) -> str:
+            # Only swap if it looks like a decimal number (digits, one separator, digits)
+            import re as _re
+            if _re.fullmatch(r'\d+[.,]\d+', s.strip()):
+                return s.strip().replace(',', '.')
+            return s
+        if _normalize_decimal(exp_str) == _normalize_decimal(act_str):
+            return True
+
+        # Language name equivalence: English/Englisch, German/Deutsch
+        _LANGUAGE_VARIANTS = {
+            "english": {"english", "englisch"},
+            "deutsch": {"deutsch", "german"},
+        }
+        exp_lower = exp_str.strip().lower()
+        act_lower = act_str.strip().lower()
+        for variants in _LANGUAGE_VARIANTS.values():
+            if exp_lower in variants and act_lower in variants:
+                return True
+
+        # Nationality equivalence: adjective form ↔ country name
+        # e.g. "deutsch" / "Deutschland" / "german" / "Germany"
+        _NATIONALITY_VARIANTS = {
+            "de": {"deutsch", "deutsche", "deutschen", "deutschland", "german", "germany"},
+            "at": {"österreichisch", "österreich", "oesterreich", "austrian", "austria"},
+            "ch": {"schweizerisch", "schweizer", "schweiz", "swiss", "switzerland"},
+            "us": {"amerikanisch", "usa", "united states", "american"},
+            "gb": {"britisch", "großbritannien", "british", "great britain", "uk"},
+            "fr": {"französisch", "frankreich", "french", "france"},
+        }
+        for variants in _NATIONALITY_VARIANTS.values():
+            if exp_lower in variants and act_lower in variants:
+                return True
+
+        # Education qualification equivalence
+        # e.g. "Abitur" == "Allgemeine Hochschulreife"
+        _EDUCATION_VARIANTS = {
+            "ahr": {"abitur", "allgemeine hochschulreife", "allg. hochschulreife"},
+            "fachabitur": {"fachabitur", "fachhochschulreife", "fachgebundene hochschulreife"},
+        }
+        for variants in _EDUCATION_VARIANTS.values():
+            if exp_lower in variants and act_lower in variants:
+                return True
+
+        # Study program abbreviation equivalence
+        # e.g. "BWL" == "Betriebswirtschaftslehre"
+        _PROGRAM_VARIANTS = {
+            "bwl": {"bwl", "betriebswirtschaftslehre", "betriebswirtschaft"},
+        }
+        for variants in _PROGRAM_VARIANTS.values():
+            if exp_lower in variants and act_lower in variants:
+                return True
+
+        # Word-boundary containment: handles merged school+place ("Gymnasium Berlin" ↔ "Berlin")
+        # and program+degree suffix ("Maschinenbau Bachelor" ↔ "Maschinenbau")
+        if (act_lower.startswith(exp_lower + " ") or act_lower.endswith(" " + exp_lower)
+                or exp_lower.startswith(act_lower + " ") or exp_lower.endswith(" " + act_lower)):
+            return True
+
         return False
     
     return expected == actual
@@ -305,10 +369,14 @@ def evaluate_tool_run(
     
     # --- Check 1: No tool called at all ---
     if not tool_calls:
-        result.success = False
-        result.failure_reasons.append("No tool was called")
-        result.missing_tools = list(gold_standard.required_tools)
-        return result
+        # For forbidden-tools-only scenarios (no required tools), no call = correct behaviour
+        if not gold_standard.required_tools:
+            pass  # fall through to check 2 (forbidden tools)
+        else:
+            result.success = False
+            result.failure_reasons.append("No tool was called")
+            result.missing_tools = list(gold_standard.required_tools)
+            return result
     
     # --- Check 2: Forbidden tools ---
     forbidden_called = called_tools_set & gold_standard.forbidden_tools

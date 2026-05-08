@@ -17,6 +17,15 @@ class TestKLIPS2ApplyTool(unittest.TestCase):
         self.study_program = "Rechtswissenschaften"
         self.semester = "Wintersemester 2024/25"
         self.degree_type = "Bachelor"
+        # Fields now required by the upfront validation in _run()
+        self.nationality = "Deutschland"
+        self.study_form = "Erststudium"
+        self.birth_place = "Köln"
+        self.gender = "männlich"
+        self.hzb_date = "01.06.2019"
+        self.hzb_type = "Allgemeine Hochschulreife"
+        self.hzb_grade = "2.0"
+        self.hzb_place = "Köln"
 
     @patch('src.tools.klips.apply.KLIPSBrowserSession')
     def test_successful_application_flow(self, MockSession):
@@ -84,7 +93,15 @@ class TestKLIPS2ApplyTool(unittest.TestCase):
             password=self.password,
             study_program=self.study_program,
             semester=self.semester,
-            degree_type=self.degree_type
+            degree_type=self.degree_type,
+            nationality=self.nationality,
+            study_form=self.study_form,
+            birth_place=self.birth_place,
+            gender=self.gender,
+            hzb_date=self.hzb_date,
+            hzb_type=self.hzb_type,
+            hzb_grade=self.hzb_grade,
+            hzb_place=self.hzb_place,
         )
         
         # Assertions
@@ -108,7 +125,15 @@ class TestKLIPS2ApplyTool(unittest.TestCase):
             password=self.password,
             study_program=self.study_program,
             semester=self.semester,
-            degree_type=self.degree_type
+            degree_type=self.degree_type,
+            nationality=self.nationality,
+            study_form=self.study_form,
+            birth_place=self.birth_place,
+            gender=self.gender,
+            hzb_date=self.hzb_date,
+            hzb_type=self.hzb_type,
+            hzb_grade=self.hzb_grade,
+            hzb_place=self.hzb_place,
         )
         
         self.assertIn("Login fehlgeschlagen", result)
@@ -134,7 +159,15 @@ class TestKLIPS2ApplyTool(unittest.TestCase):
             password=self.password,
             study_program=self.study_program,
             semester="NonExistentSemester",
-            degree_type=self.degree_type
+            degree_type=self.degree_type,
+            nationality=self.nationality,
+            study_form=self.study_form,
+            birth_place=self.birth_place,
+            gender=self.gender,
+            hzb_date=self.hzb_date,
+            hzb_type=self.hzb_type,
+            hzb_grade=self.hzb_grade,
+            hzb_place=self.hzb_place,
         )
         
         self.assertIn("Semester 'NonExistentSemester' nicht gefunden", result)
@@ -191,7 +224,18 @@ class TestKLIPS2ApplyTool(unittest.TestCase):
             semester=self.semester,
             degree_type=self.degree_type,
             entry_semester="1",
-            study_form="Zweitstudium"
+            study_form="Zweitstudium",
+            nationality=self.nationality,
+            birth_place=self.birth_place,
+            gender=self.gender,
+            hzb_date=self.hzb_date,
+            hzb_type=self.hzb_type,
+            hzb_grade=self.hzb_grade,
+            hzb_place=self.hzb_place,
+            # Zweitstudium requires these too
+            prev_uni="Universität Bonn",
+            prev_program="Informatik",
+            prev_semesters="4",
         )
         
         # Verify that select_option was called enough times (Semester, Degree, Program, Entry Sem, Study Form)
@@ -278,9 +322,14 @@ class TestKLIPS2ApplyTool(unittest.TestCase):
             study_program=self.study_program,
             semester=self.semester,
             degree_type=self.degree_type,
+            nationality=self.nationality,
+            study_form=self.study_form,
+            birth_place=self.birth_place,
+            gender=self.gender,
             hzb_date="01.01.2020",
+            hzb_type=self.hzb_type,
             hzb_grade="1.0",
-            hzb_place="Köln"
+            hzb_place="Köln",
         )
         
         # Verify the tool ran without critical errors and got to later tabs
@@ -397,8 +446,15 @@ class TestKLIPS2ApplyTool(unittest.TestCase):
             study_program=self.study_program,
             semester=self.semester,
             degree_type=self.degree_type,
+            nationality=self.nationality,
+            study_form=self.study_form,
             birth_place="Köln",
-            street="Universitätsstraße 1"
+            gender=self.gender,
+            hzb_date=self.hzb_date,
+            hzb_type=self.hzb_type,
+            hzb_grade=self.hzb_grade,
+            hzb_place=self.hzb_place,
+            street="Universitätsstraße 1",
         )
         
         # Verify inputs were filled

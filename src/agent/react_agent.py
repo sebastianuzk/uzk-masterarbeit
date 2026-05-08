@@ -212,12 +212,12 @@ Antworte in der Sprache des Nutzers."""
             if tool:
                 tools.append(tool)
         
-        # RAG-Tool für Universitäts-Wissensdatenbank immer hinzufügen
+        # RAG-Tool für Universitäts-Wissensdatenbank
         rag_tool = load_tool_safely(
             create_university_rag_tool, 
             "Universitäts-RAG-Tool",
             fallback_message="Universitäts-spezifische Anfragen funktionieren möglicherweise nicht optimal"
-        )
+        ) if settings.ENABLE_RAG_TOOL else None
         if rag_tool:
             tools.append(rag_tool)
         

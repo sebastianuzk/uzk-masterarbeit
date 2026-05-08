@@ -27,6 +27,7 @@ class MultiAgentSystem:
             force_llm_routing: Wenn True, keine Keyword-Vorfilterung (für Evaluation-Konsistenz)
         """
         self.orchestrator = OrchestratorAgent(force_llm_routing=force_llm_routing)
+        self.conversation_trace: List[Dict[str, Any]] = []
     
     def chat(self, message: str, session_id: str = None) -> str:
         """
@@ -90,21 +91,39 @@ class MultiAgentSystem:
         """
         return self.orchestrator.get_agent_info()
     
-    def get_tool_selection(self, message: str) -> List[Dict[str, Any]]:
+    def get_tool_selection(self, message: str, enable_trace: bool = False) -> List[Dict[str, Any]]:
         """
         Ermittle Tool-Auswahl ohne Ausführung (für Evaluierung).
-        
+
         Diese Methode führt das Routing durch und fragt den spezialisierten
         Agenten welche Tools er auswählen würde, ohne sie auszuführen.
-        
+
         Args:
             message: Die Nutzeranfrage
-            
+            enable_trace: Wenn True, wird Routing-Trace in conversation_trace gespeichert
+
         Returns:
             Liste der ausgewählten Tool-Calls
         """
+        from datetime import datetime
+        if enable_trace:
+            self.conversation_trace = []
+
         agent_name, tool_calls = self.orchestrator.get_tool_selection(message)
+
+        if enable_trace:
+            self.conversation_trace.append({
+                "step": "routing",
+                "routed_to": agent_name,
+                "tool_calls_proposed": [{"name": tc.get("name", ""), "args": tc.get("args", {})} for tc in tool_calls],
+                "timestamp": datetime.now().isoformat(),
+            })
+
         return tool_calls  # Nur Tool-Calls zurückgeben, nicht das Tuple!
+
+    def clear_conversation_trace(self):
+        """Lösche den Conversation-Trace."""
+        self.conversation_trace = []
 
 
 def create_multi_agent_system() -> MultiAgentSystem:

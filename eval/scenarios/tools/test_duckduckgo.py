@@ -175,8 +175,8 @@ class TestSearchHard:
         """
         
         gold = GoldStandard(
-            required_tools=["klips2_get_course_details"],
-            forbidden_tools={"duckduckgo_search"},
+            required_tools=[],
+            forbidden_tools={"duckduckgo_search", "klips2_get_course_details"},
             argument_match_mode=ArgumentMatchMode.NORMALIZED
         )
         

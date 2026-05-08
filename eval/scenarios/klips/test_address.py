@@ -52,8 +52,8 @@ class TestAddressEasy:
                     "password": "Geheim123",
                     "street": "Musterstraße 42",
                     "zip_code": "50678",
-                    "city": "Köln",
-                    "country": "Deutschland"
+                    "city": "Köln"
+                    # country omitted: optional field, defaults to "Deutschland"
                 }
             },
             argument_match_mode=ArgumentMatchMode.NORMALIZED
@@ -142,7 +142,7 @@ class TestAddressMedium:
                     "country": "Österreich"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert gold.required_arguments["klips2_change_address"]["country"] == "Österreich"

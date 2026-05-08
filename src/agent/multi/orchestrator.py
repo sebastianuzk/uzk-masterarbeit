@@ -372,20 +372,6 @@ WICHTIG: Gib NUR das JSON zurück, keinen anderen Text!"""
                     fallback_agent="Wissens-Agent"
                 )
         
-        # Email-Keywords - erweitert
-        email_keywords = [
-            "e-mail send", "email send", "mail schick", "mail schreib", 
-            "sende eine e-mail", "sende eine mail", "send email", "write email"
-        ]
-        for keyword in email_keywords:
-            if keyword in msg_lower:
-                return RoutingDecision(
-                    agent_name="Email-Agent",
-                    confidence=base_confidence,
-                    reasoning=f"Keyword-Match: '{keyword}' ({self.routing_strategy})",
-                    fallback_agent="Wissens-Agent"
-                )
-        
         # Kein eindeutiger Match - LLM-Routing benötigt
         return None
     
@@ -652,13 +638,20 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
                     
                     # Aggregiere Ergebnisse
                     if len(step_results) == 1:
-                        return step_results[0]
+                        response = step_results[0]
+                    else:
+                        response = "Multi-Step-Ergebnis:\n\n" + "\n\n".join([
+                            f"**Schritt {i}:**\n{result}"
+                            for i, result in enumerate(step_results, 1)
+                        ])
                     
-                    final_result = "\n\n".join([
-                        f"**Schritt {i}:**\n{result}" 
-                        for i, result in enumerate(step_results, 1)
-                    ])
-                    return f"Multi-Step-Ergebnis:\n\n{final_result}"
+                    # Memory aktualisieren (wie im Single-Step-Pfad)
+                    self.memory.append(HumanMessage(content=message))
+                    self.memory.append(AIMessage(content=response))
+                    if len(self.memory) > self._max_memory_size:
+                        self.memory = self.memory[-self._max_memory_size:]
+                    
+                    return response
             
             # Single-Step: Normaler Ablauf
             # 1. Routing-Entscheidung treffen

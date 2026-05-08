@@ -116,14 +116,14 @@ class TestNegative:
 
     def test_negative_02_general_question(self):
         """
-        RAG: General university knowledge question (uses RAG tool).
+        NEGATIVE: General university knowledge question.
         """
         user_prompt = """
         Was ist der Unterschied zwischen Bachelor und Master Information System an der Universitat zu Köln?
         """
         
         gold = GoldStandard(
-            required_tools=["university_knowledge_search"],
+            required_tools=[],
             forbidden_tools={"klips2_register", "klips2_apply_study",
                           "duckduckgo_search"},
             argument_match_mode=ArgumentMatchMode.NORMALIZED

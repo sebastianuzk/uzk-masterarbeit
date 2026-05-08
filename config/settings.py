@@ -185,6 +185,7 @@ class Settings:
     ENABLE_DUCKDUCKGO = True
     ENABLE_EMAIL = True
     ENABLE_KLIPS = True
+    ENABLE_RAG_TOOL = True  # university_knowledge_search; disable for tool-routing evaluation
     
     # E-Mail-Konfiguration
     SMTP_SERVER = os.getenv("SMTP_SERVER")

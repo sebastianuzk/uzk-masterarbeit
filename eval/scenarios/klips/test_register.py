@@ -62,7 +62,7 @@ class TestRegisterEasy:
                     "staatsangehoerigkeit": "Deutschland"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert gold.required_tools == ["klips2_register"]
@@ -93,7 +93,7 @@ class TestRegisterEasy:
                     "staatsangehoerigkeit": "deutsch"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert gold.required_tools == ["klips2_register"]
@@ -119,14 +119,14 @@ class TestRegisterEasy:
                 "klips2_register": {
                     "vorname": "John",
                     "nachname": "Smith",
-                    "geschlecht": "male",
+                    "geschlecht": "männlich",
                     "geburtsdatum": "10.05.1998",
                     "email": "john.smith@outlook.com",
                     "staatsangehoerigkeit": "United States",
                     "sprache": "English"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert "sprache" in gold.required_arguments["klips2_register"]
@@ -157,7 +157,7 @@ class TestRegisterMedium:
                     "staatsangehoerigkeit": "deutsch"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert gold.required_tools == ["klips2_register"]
@@ -188,7 +188,7 @@ class TestRegisterMedium:
                     "staatsangehoerigkeit": "Österreich"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert "geburtsname" in gold.required_arguments["klips2_register"]
@@ -216,7 +216,7 @@ class TestRegisterMedium:
                     "staatsangehoerigkeit": "deutsch"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert gold.required_arguments["klips2_register"]["geschlecht"] == "divers"
@@ -245,7 +245,7 @@ class TestRegisterMedium:
                     "email": "francois@mail.de"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert gold.required_tools == ["klips2_register"]
@@ -299,12 +299,12 @@ class TestRegisterMedium:
                 "klips2_register": {
                     "vorname": "Sarah",
                     "nachname": "Johnson",
-                    "geschlecht": "female",
+                    "geschlecht": "weiblich",
                     "email": "sarah.j@university.edu",
                     "sprache": "English"
                 }
             },
-            argument_match_mode=ArgumentMatchMode.NORMALIZED
+            argument_match_mode=ArgumentMatchMode.SEMANTIC
         )
         
         assert gold.required_arguments["klips2_register"]["sprache"] == "English"

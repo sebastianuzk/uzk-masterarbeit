@@ -20,6 +20,7 @@ Kritische Tools, die Bestätigung erfordern:
 
 import re
 import json
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -29,8 +30,9 @@ from langgraph.prebuilt import create_react_agent as create_langgraph_agent
 from config.logging_config import get_logger
 from config.settings import settings
 from src.agent.agent_config import setup_langsmith_tracing, get_recursion_limit
-from src.agent.llm_factory import create_llm
+from src.agent.llm_factory import create_llm, create_json_llm
 from src.agent.tool_loader import load_tool_safely, load_tools_batch, load_klips_tools
+from src.agent.tool_specs import TOOL_SPECS
 from src.tools.duckduckgo_tool import create_duckduckgo_tool
 from src.tools.email_tool import create_email_tool
 from src.tools.klips import (
@@ -49,102 +51,12 @@ logger = get_logger(__name__)
 
 
 # Tools die eine Bestätigung vor der Ausführung erfordern
-CRITICAL_TOOLS = {
-    "klips2_register": {
-        "description": "KLIPS2-Account erstellen",
-        "required_params": ["vorname", "nachname", "geschlecht", "geburtsdatum", "email", "staatsangehoerigkeit"],
-        "optional_params": ["geburtsname", "sprache"],
-        "fields": {
-            "vorname": {"required": True, "desc": "Vorname der Person"},
-            "nachname": {"required": True, "desc": "Nachname der Person"},
-            "geschlecht": {"required": True, "desc": "männlich, weiblich oder divers"},
-            "geburtsdatum": {"required": True, "desc": "Geburtsdatum im Format TT.MM.JJJJ"},
-            "email": {"required": True, "desc": "E-Mail-Adresse mit @"},
-            "staatsangehoerigkeit": {"required": True, "desc": "Staatsangehörigkeit"},
-            "geburtsname": {"required": False, "desc": "Geburtsname falls abweichend"},
-            "sprache": {"required": False, "desc": "Deutsch oder Englisch"}
-        },
-        "validations": {
-            "email": r"^[^@]+@[^@]+\.[^@]+$",
-            "geburtsdatum": r"^\d{2}\.\d{2}\.\d{4}$"
-        }
-    },
-    "klips2_apply_study": {
-        "description": "Studienbewerbung einreichen",
-        "required_params": ["username", "password", "semester", "degree_type", "study_program", 
-                           "study_form", "gender", "birth_place", "nationality", "hzb_date", "hzb_type", 
-                           "hzb_grade", "hzb_place"],
-        "optional_params": ["entry_semester", "birth_country", "hzb_name", "hzb_school", "hzb_country",
-                           "street", "zip_code", "city", "country", "phone",
-                           "prev_uni", "prev_program", "prev_degree", "prev_semesters"],
-        "fields": {
-            "username": {"required": True, "desc": "KLIPS2-Benutzername"},
-            "password": {"required": True, "desc": "KLIPS2-Passwort"},
-            "semester": {"required": True, "desc": "Zielsemester (z.B. Wintersemester 2024/25 oder WS 2024/25)"},
-            "degree_type": {"required": True, "desc": "Bachelor, Master oder Promotionsstudium"},
-            "study_program": {"required": True, "desc": "Name des Studiengangs"},
-            "gender": {"required": True, "desc": "Geschlecht (männlich/weiblich/divers)"},
-            "birth_place": {"required": True, "desc": "Geburtsort"},
-            "nationality": {"required": True, "desc": "Staatsangehörigkeit"},
-            "hzb_date": {"required": True, "desc": "Datum der HZB (TT.MM.JJJJ, z.B. 15.06.2018)"},
-            "hzb_type": {"required": True, "desc": "Art der HZB (z.B. Allgemeine Hochschulreife, Fachhochschulreife)"},
-            "hzb_name": {"required": False, "desc": "Bezeichnung des Zeugnisses (Standard: Abitur)"},
-            "hzb_grade": {"required": True, "desc": "Note der HZB (z.B. 2,3 oder 2.3)"},
-            "hzb_school": {"required": False, "desc": "Name der Schule (Standard: Gymnasium)"},
-            "hzb_place": {"required": True, "desc": "Ort/Kreis der HZB"},
-            "study_form": {"required": True, "desc": "Erststudium oder Zweitstudium"},
-            "entry_semester": {"required": False, "desc": "Fachsemester (Standard: 1)"},
-            "birth_country": {"required": False, "desc": "Geburtsland (Standard: Deutschland)"},
-            "hzb_country": {"required": False, "desc": "Land der HZB (Standard: Deutschland)"},
-            "street": {"required": False, "desc": "Straße und Hausnummer"},
-            "zip_code": {"required": False, "desc": "Postleitzahl"},
-            "city": {"required": False, "desc": "Stadt"},
-            "country": {"required": False, "desc": "Land (Standard: Deutschland)"},
-            "phone": {"required": False, "desc": "Telefonnummer"},
-            "prev_uni": {"required": False, "desc": "Vorherige Hochschule (PFLICHT wenn study_form=Zweitstudium)"},
-            "prev_program": {"required": False, "desc": "Vorheriger Studiengang (PFLICHT wenn study_form=Zweitstudium)"},
-            "prev_degree": {"required": False, "desc": "Angestrebter/erreichter Abschluss (optional bei Zweitstudium)"},
-            "prev_semesters": {"required": False, "desc": "Anzahl Semester an vorheriger Hochschule (PFLICHT wenn study_form=Zweitstudium)"}
-        },
-        "validations": {}
-    },
-    "klips2_change_password": {
-        "description": "KLIPS2-Passwort ändern",
-        "required_params": ["username", "password", "new_password"],
-        "optional_params": [],
-        "fields": {
-            "username": {"required": True, "desc": "KLIPS2-Benutzername"},
-            "password": {"required": True, "desc": "Aktuelles Passwort"},
-            "new_password": {"required": True, "desc": "Neues Passwort"}
-        },
-        "validations": {}
-    },
-    "klips2_change_address": {
-        "description": "KLIPS2-Adresse ändern",
-        "required_params": ["username", "password", "street", "zip_code", "city"],
-        "optional_params": ["country"],
-        "fields": {
-            "username": {"required": True, "desc": "KLIPS2-Benutzername"},
-            "password": {"required": True, "desc": "KLIPS2-Passwort"},
-            "street": {"required": True, "desc": "Straße und Hausnummer"},
-            "zip_code": {"required": True, "desc": "Postleitzahl"},
-            "city": {"required": True, "desc": "Stadt (MUSS explizit genannt sein!)"},
-            "country": {"required": False, "desc": "Land (Standard: Deutschland)"}
-        },
-        "validations": {
-            "zip_code": r"^[A-Za-z0-9 -]{2,10}$"
-        }
-    },
-    "send_email": {
-        "description": "E-Mail senden",
-        "required_params": ["subject", "body"],
-        "optional_params": [],
-        "fields": {
-            "subject": {"required": True, "desc": "Betreff der E-Mail"},
-            "body": {"required": True, "desc": "Text der E-Mail"}
-        },
-        "validations": {}
-    }
+CRITICAL_TOOL_NAMES = {
+    "klips2_register",
+    "klips2_apply_study",
+    "klips2_change_password",
+    "klips2_change_address",
+    "send_email",
 }
 
 
@@ -169,7 +81,11 @@ class ConfirmationAgent:
         
         # LLM initialisieren mit zentraler Factory
         self.llm = create_llm()
-        
+        # Separater LLM mit JSON-Modus für strukturierte Validierungs-/Reflexions-Antworten.
+        # Wichtig: format="json" als invoke()-Kwarg wird von ChatOllama nicht zuverlässig
+        # übernommen und von ChatOpenAI/ChatAnthropic stillschweigend ignoriert.
+        self.llm_json = create_json_llm()
+
         logger.info(f"🔒 Initialisiere Confirmation Agent mit Modell: {settings.OLLAMA_MODEL}")
         
         # Tools initialisieren
@@ -199,6 +115,7 @@ class ConfirmationAgent:
         self.confirmation_count = 0
         self.confirmed_count = 0
         self.rejected_count = 0
+        self.conversation_trace: List[Dict[str, Any]] = []
     
     def _create_tools(self) -> List[BaseTool]:
         """Erstelle Liste der verfügbaren Tools."""
@@ -216,7 +133,7 @@ class ConfirmationAgent:
             if ddg_tool:
                 tools.append(ddg_tool)
         
-        rag_tool = load_tool_safely(create_university_rag_tool, "Universitäts-RAG")
+        rag_tool = load_tool_safely(create_university_rag_tool, "Universitäts-RAG") if settings.ENABLE_RAG_TOOL else None
         if rag_tool:
             tools.append(rag_tool)
         
@@ -236,7 +153,7 @@ class ConfirmationAgent:
         wrapped = []
         
         for tool in self.tools:
-            if tool.name in CRITICAL_TOOLS:
+            if tool.name in CRITICAL_TOOL_NAMES:
                 # Kritische Tools mit Confirmation-Wrapper
                 wrapped.append(self._wrap_critical_tool(tool))
             else:
@@ -249,7 +166,7 @@ class ConfirmationAgent:
         """Wrappe ein kritisches Tool mit Bestätigungslogik."""
         from langchain_core.tools import StructuredTool
         
-        tool_config = CRITICAL_TOOLS[original_tool.name]
+        tool_spec = TOOL_SPECS.get(original_tool.name, {})
         agent_ref = self  # Referenz auf Agent für den Wrapper
         
         def confirmation_wrapper(**kwargs) -> str:
@@ -297,7 +214,7 @@ class ConfirmationAgent:
                 logger.warning(f"❌ Tool '{tool_name}' abgelehnt: {validation_result['reason']}")
                 
                 return (
-                    f"⚠️ Validierung fehlgeschlagen für {tool_config['description']}:\n"
+                    f"⚠️ Validierung fehlgeschlagen für {tool_spec.get('description', tool_name)}:\n"
                     f"{validation_result['reason']}\n\n"
                     "Bitte ergänze die fehlenden Informationen."
                 )
@@ -311,7 +228,9 @@ class ConfirmationAgent:
             return_direct=False
         )
     
-    def _validate_tool_call(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_tool_call(
+        self, tool_name: str, args: Dict[str, Any], user_message: str = ""
+    ) -> Dict[str, Any]:
         """
         LLM-basierte Validierung eines Tool-Aufrufs (Self-Critique).
         
@@ -327,56 +246,60 @@ class ConfirmationAgent:
             - confirmed: bool - Ob die Validierung erfolgreich war
             - reason: str - Begründung der LLM-Entscheidung
         """
-        config = CRITICAL_TOOLS.get(tool_name, {})
-        tool_description = config.get("description", tool_name)
-        fields = config.get("fields", {})
+        spec = TOOL_SPECS.get(tool_name, {})
+        tool_description = spec.get("description", tool_name)
         
         # Formatiere Argumente für LLM-Bewertung
         args_formatted = json.dumps(args, indent=2, ensure_ascii=False)
         
-        # Formatiere ALLE Tools mit ihren Feldern (Kontext für LLM)
+        # Formatiere ALLE kritischen Tools mit ihren Feldern (Kontext für LLM)
         all_tools_formatted = []
-        for t_name, t_config in CRITICAL_TOOLS.items():
-            t_desc = t_config.get("description", t_name)
-            t_fields = t_config.get("fields", {})
+        for t_name in CRITICAL_TOOL_NAMES:
+            t_spec = TOOL_SPECS.get(t_name, {})
+            t_desc = t_spec.get("description", t_name)
             
-            req_fields = []
-            opt_fields = []
-            for fname, finfo in t_fields.items():
-                if finfo["required"]:
-                    req_fields.append(f'      "{fname}": <{finfo["desc"]}>')
-                else:
-                    opt_fields.append(f'      "{fname}": <{finfo["desc"]}>')
+            req_fields = [f'      "{fname}": <{desc}>'
+                          for fname, desc in t_spec.get("required_params", {}).items()]
+            opt_fields = [f'      "{fname}": <{desc}>'
+                          for fname, desc in t_spec.get("optional_params", {}).items()]
             
             tool_str = f"  • {t_name} - {t_desc}"
             if req_fields:
-                tool_str += f"\n    PFLICHT:\n" + "\n".join(req_fields)
+                tool_str += "\n    PFLICHT:\n" + "\n".join(req_fields)
             if opt_fields:
-                tool_str += f"\n    OPTIONAL:\n" + "\n".join(opt_fields)
+                tool_str += "\n    OPTIONAL:\n" + "\n".join(opt_fields)
             
             all_tools_formatted.append(tool_str)
         
         all_tools_str = "\n\n".join(all_tools_formatted)
         
         # Separate Felder für das AKTUELLE Tool (zur Hervorhebung)
-        required_fields = []
-        optional_fields = []
-        for field_name, field_info in fields.items():
-            desc = field_info["desc"]
-            if field_info["required"]:
-                required_fields.append(f'    "{field_name}": <{desc}>')
-            else:
-                optional_fields.append(f'    "{field_name}": <{desc}>')
+        required_fields = [f'    "{fname}": <{desc}>'
+                           for fname, desc in spec.get("required_params", {}).items()]
+        optional_fields = [f'    "{fname}": <{desc}>'
+                           for fname, desc in spec.get("optional_params", {}).items()]
         
         required_str = "\n".join(required_fields) if required_fields else "    (keine)"
         optional_str = "\n".join(optional_fields) if optional_fields else "    (keine)"
         
+        # Resolve user_message from memory if not supplied
+        if not user_message:
+            for msg in reversed(self.memory):
+                if isinstance(msg, HumanMessage):
+                    user_message = msg.content
+                    break
+
+        user_message_section = (
+            f"\nORIGINALE NUTZERNACHRICHT (einschlie\u00dflich \"Previous conversation:\"-Kontext):\n"
+            f"{user_message}\n"
+        ) if user_message else ""
+
         # Validation Prompt für LLM
         validation_prompt = f"""Du bist ein Validierungs-Agent. Bewerte ob dieser Tool-Call sinnvoll und vollständig ist.
 
 KONTEXT: Verfügbare kritische Tools mit ihren Feldern:
 {all_tools_str}
-
+{user_message_section}
 ================================================================================
 ZU VALIDIERENDER TOOL-CALL:
 ================================================================================
@@ -394,36 +317,37 @@ GEPLANTER TOOL-CALL:
 {args_formatted}
 
 BEWERTUNGSKRITERIEN:
-1. Sind ALLE oben aufgelisteten Pflichtfelder vorhanden? (nicht None, nicht leer)
-2. Sind die Werte plausibel und realistisch?
-3. Keine Platzhalter wie "TBD", "N/A", "unbekannt", "keine Angabe"
-4. Keine offensichtlich erfundenen Daten
-5. Bei Email-Feldern: Muss @ enthalten
-6. Bei Datums-Feldern: Muss vollständiges Datum sein (TT.MM.JJJJ oder ähnlich)
-7. Bei Stadt/Ort-Feldern: MUSS explizit genannt sein (nicht aus PLZ ableitbar)
-8. Bei klips2_apply_study mit study_form='Zweitstudium': prev_uni, prev_program und prev_semesters müssen vorhanden sein (auch wenn als optional gelistet)
+1. Leere Strings oder None zählen als "fehlend" — jedes Pflichtfeld muss einen echten Wert haben.
+2. HALLUZINATIONS-PRÜFUNG: Ist die originale Nutzernachricht vorhanden, muss jeder Pflichtfeld-Wert
+   dort EXPLIZIT genannt sein. Werte, die der Nutzer nie erwähnt hat, sind halluziniert → confirmed=false.
+3. Keine Platzhalter wie "TBD", "N/A", "unbekannt", "keine Angabe", generische Beispiel-Werte.
+4. Keine offensichtlich erfundenen / typischen Beispiel-Daten.
+5. Bei Email-Feldern: Muss @ enthalten.
+6. Bei Datums-Feldern: Muss vollständiges Datum sein (TT.MM.JJJJ oder ähnlich).
+7. Bei Stadt/Ort-Feldern: MUSS explizit vom Nutzer genannt worden sein.
+8. Bei klips2_apply_study mit study_form='Zweitstudium': prev_uni, prev_program und
+   prev_semesters müssen vorhanden sein (auch wenn als optional gelistet).
 
 WICHTIG:
-- Wenn auch nur EIN Pflichtfeld fehlt oder leer ist → confirmed=false
-- Format-Variationen sind OK (z.B. "m"/"männlich", verschiedene Datumsformate)
-- Optionale Felder dürfen fehlen (kein Problem)
-- Bei Ablehnung: Nenne die KONKRETEN fehlenden/ungültigen Felder
+- Wenn auch nur EIN Pflichtfeld fehlt, leer oder nicht vom Nutzer angegeben ist → confirmed=false.
+- Format-Variationen sind OK (z.B. "m"/"männlich", verschiedene Datumsformate).
+- Optionale Felder dürfen fehlen (kein Problem).
+- Bei Ablehnung: Nenne die KONKRETEN fehlenden/ungültigen Felder.
 
 ENTSCHEIDUNG:
 Antworte EXAKT in diesem JSON-Format:
-{{"confirmed": true, "reason": "Alle Pflichtfelder vollständig und plausibel"}}
+{{"confirmed": true, "reason": "Alle Pflichtfelder vollständig und in Nutzernachricht vorhanden"}}
 oder
-{{"confirmed": false, "reason": "Fehlende Pflichtfelder: <feldname1, feldname2, ...>"}}
+{{"confirmed": false, "reason": "Fehlende/halluzinierte Pflichtfelder: <feldname1, feldname2, ...>"}}
 
-Sei STRENG bei Pflichtfeldern, FAIR bei Formaten."""
+Sei STRENG bei Pflichtfeldern und Halluzinations-Prüfung, FAIR bei Formaten."""
 
         try:
-            # LLM-Bewertung einholen
-            response = self.llm.invoke(
-                [SystemMessage(content=validation_prompt)],
-                format="json"  # Nutze JSON-Modus für strukturierte Antwort
+            # LLM-Bewertung einholen (JSON-Modus über dedizierten LLM)
+            response = self.llm_json.invoke(
+                [SystemMessage(content=validation_prompt)]
             )
-            
+
             # Parse LLM-Antwort
             result_text = response.content.strip()
             
@@ -480,18 +404,17 @@ Sei STRENG bei Pflichtfeldern, FAIR bei Formaten."""
         
         tool_examples_text = "\n".join(tool_examples) if tool_examples else "- Nutze die verfügbaren Tools je nach Anfrage"
         
-        # Dynamische Tool-Liste für kritische Tools
+        # Dynamische Tool-Liste für kritische Tools (aus TOOL_SPECS abgeleitet)
         critical_tools_list = []
-        if "klips2_register" in available_tool_names:
-            critical_tools_list.append("- **klips2_register**: Pflicht: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit")
-        if "klips2_apply_study" in available_tool_names:
-            critical_tools_list.append("- **klips2_apply_study**: Pflicht: username, password, semester, degree_type, study_program, study_form, gender, birth_place, nationality, hzb_date, hzb_type, hzb_grade, hzb_place; Wenn study_form=Zweitstudium: zusätzlich prev_uni, prev_program, prev_semesters")
-        if "klips2_change_password" in available_tool_names:
-            critical_tools_list.append("- **klips2_change_password**: Pflicht: username, password, new_password")
-        if "klips2_change_address" in available_tool_names:
-            critical_tools_list.append("- **klips2_change_address**: Pflicht: username, password, street, zip_code, city")
-        if "send_email" in available_tool_names:
-            critical_tools_list.append("- **send_email**: Pflicht: subject, body")
+        for tool_name in CRITICAL_TOOL_NAMES:
+            if tool_name not in available_tool_names:
+                continue
+            spec = TOOL_SPECS.get(tool_name, {})
+            required = ", ".join(spec.get("required_params", {}).keys())
+            entry = f"- **{tool_name}**: Pflicht: {required}"
+            if tool_name == "klips2_apply_study":
+                entry += "; Wenn study_form=Zweitstudium: zusätzlich prev_uni, prev_program, prev_semesters"
+            critical_tools_list.append(entry)
         
         critical_tools_text = "\n".join(critical_tools_list) if critical_tools_list else ""
         
@@ -716,12 +639,11 @@ Antworte in diesem JSON-Format:
 Wenn satisfactory=false, beschreibe WIE die Antwort verbessert werden sollte."""
 
             try:
-                # LLM-Reflexion
-                reflection_response = self.llm.invoke(
-                    [SystemMessage(content=reflection_prompt)],
-                    format="json"
+                # LLM-Reflexion (JSON-Modus über dedizierten LLM)
+                reflection_response = self.llm_json.invoke(
+                    [SystemMessage(content=reflection_prompt)]
                 )
-                
+
                 reflection_text = reflection_response.content.strip()
                 
                 # Bereinige JSON
@@ -802,7 +724,11 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
             ]
         }
     
-    def get_tool_selection(self, message: str) -> List[Dict[str, Any]]:
+    def clear_conversation_trace(self):
+        """Lösche den Conversation-Trace."""
+        self.conversation_trace = []
+
+    def get_tool_selection(self, message: str, enable_trace: bool = False) -> List[Dict[str, Any]]:
         """
         Ermittle Tool-Auswahl mit Confirmation-Agent-Logik (für Evaluierung).
         
@@ -834,6 +760,19 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
             
             for attempt in range(max_retries):
                 response = llm_with_tools.invoke(messages)
+
+                # Trace: raw LLM response for this attempt
+                if enable_trace:
+                    raw_calls = []
+                    if hasattr(response, 'tool_calls') and response.tool_calls:
+                        for tc in response.tool_calls:
+                            raw_calls.append({"name": tc.get("name", ""), "args": tc.get("args", {})})
+                    self.conversation_trace.append({
+                        "step": f"llm_call_attempt_{attempt + 1}",
+                        "raw_output": response.content if hasattr(response, 'content') else "",
+                        "tool_calls_proposed": raw_calls,
+                        "timestamp": datetime.now().isoformat(),
+                    })
                 
                 # Tool-Calls extrahieren
                 current_tool_calls = []
@@ -846,7 +785,7 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                         tool_call_id = tc.get("id", f"call_{len(current_tool_calls)}")
                         
                         # Wenn kritisches Tool: Validierung durchführen
-                        if tool_name in CRITICAL_TOOLS:
+                        if tool_name in CRITICAL_TOOL_NAMES:
                             validation_result = self._validate_tool_call(tool_name, tool_args)
                             
                             # Tracking (wie bei echtem Aufruf)
@@ -854,6 +793,14 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                             
                             if validation_result["confirmed"]:
                                 self.confirmed_count += 1
+                                if enable_trace:
+                                    self.conversation_trace.append({
+                                        "step": "validation",
+                                        "tool_name": tool_name,
+                                        "parsed_result": tool_args,
+                                        "validation_success": True,
+                                        "validation_error": None,
+                                    })
                                 current_tool_calls.append({
                                     "name": tool_name,
                                     "args": tool_args,
@@ -863,11 +810,18 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                                 # Tool wurde abgelehnt
                                 self.rejected_count += 1
                                 has_rejection = True
+                                if enable_trace:
+                                    self.conversation_trace.append({
+                                        "step": "validation",
+                                        "tool_name": tool_name,
+                                        "parsed_result": tool_args,
+                                        "validation_success": False,
+                                        "validation_error": validation_result["reason"],
+                                    })
                                 
                                 # Fehlermeldung für Retry
-                                tool_config = CRITICAL_TOOLS[tool_name]
                                 error_message = (
-                                    f"⚠️ Validierung fehlgeschlagen für {tool_config['description']}:\n"
+                                    f"⚠️ Validierung fehlgeschlagen für {TOOL_SPECS.get(tool_name, {}).get('description', tool_name)}:\n"
                                     f"{validation_result['reason']}\n\n"
                                     "Bitte ergänze die fehlenden Informationen."
                                 )
@@ -889,6 +843,14 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                                 ))
                         else:
                             # Nicht-kritische Tools direkt durchreichen
+                            if enable_trace:
+                                self.conversation_trace.append({
+                                    "step": "validation",
+                                    "tool_name": tool_name,
+                                    "parsed_result": tool_args,
+                                    "validation_success": True,
+                                    "validation_error": None,
+                                })
                             current_tool_calls.append({
                                 "name": tool_name,
                                 "args": tool_args,

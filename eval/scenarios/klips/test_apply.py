@@ -88,18 +88,13 @@ class TestApplyEasy:
                     "study_program": "Informatik",
                     "degree_type": "Bachelor",
                     "semester": "Wintersemester 2024/25",
-                    "entry_semester": "1",
                     "study_form": "Erststudium",
                     "gender": "männlich",
                     "birth_place": "Köln",
-                    "birth_country": "Deutschland",
                     "nationality": "deutsch",
                     "hzb_date": "15.06.2018",
                     "hzb_type": "Allgemeine Hochschulreife",
-                    "hzb_name": "Abitur",
                     "hzb_grade": "2,3",
-                    "hzb_school": "Gymnasium Köln-Deutz",
-                    "hzb_country": "Deutschland",
                     "hzb_place": "Köln"
                 }
             },
@@ -128,15 +123,13 @@ class TestApplyEasy:
                     "study_program": "Wirtschaftsinformatik",
                     "degree_type": "Master",
                     "semester": "Sommersemester 2025",
-                    "entry_semester": "1",
                     "study_form": "Erststudium",
                     "gender": "weiblich",
                     "birth_place": "Berlin",
-                    "birth_country": "Deutschland",
                     "nationality": "deutsch",
                     "hzb_date": "01.07.2016",
+                    "hzb_type": "Allgemeine Hochschulreife",
                     "hzb_grade": "1,8",
-                    "hzb_school": "Friedrich-Ebert-Gymnasium",
                     "hzb_place": "Berlin"
                 }
             },
@@ -171,8 +164,10 @@ class TestApplyEasy:
                     "gender": "männlich",
                     "birth_place": "München",
                     "nationality": "deutsch",
+                    "hzb_date": "20.06.2013",
+                    "hzb_type": "Allgemeine Hochschulreife",
                     "hzb_grade": "2,0",
-                    "hzb_school": "Max-Planck-Gymnasium München",
+                    "hzb_place": "München",
                     "prev_uni": "TU München",
                     "prev_program": "Maschinenbau",
                     "prev_semesters": "6"
@@ -203,14 +198,16 @@ class TestApplyEasy:
                     "study_program": "Computer Science",
                     "degree_type": "Bachelor",
                     "semester": "Wintersemester 2024/25",
-                    "entry_semester": "1",
                     "study_form": "Erststudium",
-                    "gender": "male",
+                    "gender": "männlich",
                     "birth_place": "London",
                     "birth_country": "UK",
                     "nationality": "British",
-                    "hzb_school": "Westminster School London",
-                    "hzb_grade": "1.5"
+                    "hzb_date": "01.06.2018",
+                    "hzb_type": "*",
+                    "hzb_name": "A-Levels",
+                    "hzb_grade": "1.5",
+                    "hzb_place": "London"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC
@@ -437,7 +434,18 @@ class TestApplyMultiStep:
                     "username": "max@uni-koeln.de",
                     "password": "Geheim123",
                     "study_program": "Informatik",
-                    "semester": "Wintersemester 2024/25"
+                    "degree_type": "Bachelor",
+                    "semester": "Wintersemester 2024/25",
+                    "entry_semester": "1",
+                    "study_form": "Erststudium",
+                    "gender": "männlich",
+                    "birth_place": "Köln",
+                    "birth_country": "Deutschland",
+                    "nationality": "deutsch",
+                    "hzb_date": "15.06.2018",
+                    "hzb_type": "Allgemeine Hochschulreife",
+                    "hzb_grade": "2,3",
+                    "hzb_place": "Köln"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC
@@ -463,11 +471,19 @@ class TestApplyMultiStep:
             required_tools=["klips2_apply_study"],
             required_arguments={
                 "klips2_apply_study": {
+                    "username": "max@uni-koeln.de",
+                    "password": "pass123",
                     "study_program": "Informatik",
+                    "degree_type": "Bachelor",
                     "semester": "Wintersemester 2024/25",
-                    "hzb_grade": "2,3",
+                    "study_form": "Erststudium",
+                    "gender": "männlich",
+                    "birth_place": "Köln",
+                    "nationality": "deutsch",
                     "hzb_date": "15.06.2018",
-                    "hzb_school": "Gymnasium Köln"
+                    "hzb_type": "Allgemeine Hochschulreife",
+                    "hzb_grade": "2,3",
+                    "hzb_place": "Köln"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC
@@ -495,8 +511,19 @@ class TestApplyMultiStep:
             required_tools=["klips2_apply_study"],
             required_arguments={
                 "klips2_apply_study": {
+                    "username": "peter@uni-koeln.de",
+                    "password": "pw123",
                     "study_program": "BWL",
+                    "degree_type": "Bachelor",
+                    "semester": "Wintersemester 2024/25",
                     "study_form": "Zweitstudium",
+                    "gender": "männlich",
+                    "birth_place": "München",
+                    "nationality": "deutsch",
+                    "hzb_date": "01.06.2013",
+                    "hzb_type": "Allgemeine Hochschulreife",
+                    "hzb_grade": "2,0",
+                    "hzb_place": "München",
                     "prev_uni": "TU München",
                     "prev_program": "Maschinenbau",
                     "prev_semesters": "6"
@@ -579,7 +606,7 @@ class TestApplyMultiStep:
         Previous conversation:
         User: Informatik Bachelor WS 2024/25, Erststudium.
               Login: test@uni-koeln.de / pass
-              Abitur 2,3, Gymnasium Köln, 2018.
+              Abitur mit Note 2,3 am 15.06.2018, Gymnasium Köln, Köln.
         Assistant: Ich benötige noch Ihre persönlichen Daten (Geschlecht, Geburtsdatum, Geburtsort).
         
         Current message: Männlich, geboren am 15.03.1999 in Köln, Deutschland, deutsch
@@ -589,10 +616,20 @@ class TestApplyMultiStep:
             required_tools=["klips2_apply_study"],
             required_arguments={
                 "klips2_apply_study": {
+                    "username": "test@uni-koeln.de",
+                    "password": "pass",
                     "study_program": "Informatik",
+                    "degree_type": "Bachelor",
+                    "semester": "Wintersemester 2024/25",
+                    "study_form": "Erststudium",
                     "gender": "männlich",
                     "birth_place": "Köln",
-                    "nationality": "deutsch"
+                    "birth_country": "Deutschland",
+                    "nationality": "deutsch",
+                    "hzb_date": "15.06.2018",
+                    "hzb_type": "Allgemeine Hochschulreife",
+                    "hzb_grade": "2,3",
+                    "hzb_place": "Köln"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC
@@ -622,11 +659,20 @@ class TestApplyEdgeCases:
             required_arguments={
                 "klips2_apply_study": {
                     "username": "ali.hassan@uni-koeln.de",
+                    "password": "SecurePass123",
                     "study_program": "Computer Science",
+                    "degree_type": "Bachelor",
+                    "semester": "Wintersemester 2024/25",
+                    "study_form": "Erststudium",
+                    "gender": "männlich",
                     "birth_place": "Cairo",
                     "birth_country": "Egypt",
                     "nationality": "Egyptian",
-                    "hzb_country": "Egypt"
+                    "hzb_date": "15.06.2017",
+                    "hzb_type": "*",
+                    "hzb_grade": "1.2",
+                    "hzb_country": "Egypt",
+                    "hzb_place": "Cairo"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC
@@ -649,8 +695,19 @@ class TestApplyEdgeCases:
             required_tools=["klips2_apply_study"],
             required_arguments={
                 "klips2_apply_study": {
+                    "username": "kim@uni-koeln.de",
+                    "password": "pass123",
                     "study_program": "Informatik",
-                    "gender": "divers"
+                    "degree_type": "Bachelor",
+                    "semester": "Wintersemester 2024/25",
+                    "study_form": "Erststudium",
+                    "gender": "divers",
+                    "birth_place": "Berlin",
+                    "nationality": "deutsch",
+                    "hzb_date": "01.06.2018",
+                    "hzb_type": "Allgemeine Hochschulreife",
+                    "hzb_grade": "1,5",
+                    "hzb_place": "Berlin"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC
@@ -673,10 +730,19 @@ class TestApplyEdgeCases:
             required_tools=["klips2_apply_study"],
             required_arguments={
                 "klips2_apply_study": {
+                    "username": "lisa@uni-koeln.de",
+                    "password": "pw123",
                     "study_program": "BWL",
+                    "degree_type": "Bachelor",
+                    "semester": "Wintersemester 2024/25",
+                    "study_form": "Erststudium",
+                    "gender": "weiblich",
+                    "birth_place": "Düsseldorf",
+                    "nationality": "deutsch",
+                    "hzb_date": "01.06.2017",
                     "hzb_type": "Fachhochschulreife",
                     "hzb_grade": "2,1",
-                    "hzb_school": "Berufskolleg Düsseldorf"
+                    "hzb_place": "Düsseldorf"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC
@@ -699,8 +765,20 @@ class TestApplyEdgeCases:
             required_tools=["klips2_apply_study"],
             required_arguments={
                 "klips2_apply_study": {
+                    "username": "max@uni-koeln.de",
+                    "password": "pass",
                     "study_program": "Informatik",
-                    "entry_semester": "5"
+                    "degree_type": "Bachelor",
+                    "semester": "Wintersemester 2024/25",
+                    "study_form": "Erststudium",
+                    "entry_semester": "5",
+                    "gender": "männlich",
+                    "birth_place": "Köln",
+                    "nationality": "deutsch",
+                    "hzb_date": "01.06.2015",
+                    "hzb_type": "Allgemeine Hochschulreife",
+                    "hzb_grade": "2,0",
+                    "hzb_place": "Köln"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC

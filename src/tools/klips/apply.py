@@ -78,7 +78,7 @@ class KLIPS2ApplyInput(KLIPS2AuthenticatedInput):
     study_form: str = Field(description="Studienform (z.B. 'Erststudium', 'Zweitstudium')")
     
     # Validation mode - if True, only validates input without submitting
-    validate_only: bool = Field(default=False, description="Wenn True, wird nur die Eingabe validiert ohne die Bewerbung durchzuführen")
+    validate_only: bool = Field(default=True, description="Wenn True, wird nur die Eingabe validiert ohne die Bewerbung durchzuführen")
     
     # Personal Data Fields
     birth_place: str = Field(description="Geburtsort")
