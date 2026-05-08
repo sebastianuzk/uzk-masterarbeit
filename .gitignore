@@ -201,6 +201,7 @@ start_streamlit.ps1
 run_pipeline_*.py
 test_*.py
 !tests/**/test_*.py
+!eval/scenarios/**/test_*.py
 
 # ============================================================================
 # DATA & DATABASES
