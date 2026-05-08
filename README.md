@@ -1,401 +1,346 @@
-# Autonomer Chatbot-Agent mit RAG Web Scraper
+# Autonomous Chatbot Agent with RAG Web Scraper
 
-Ein autonomer Chatbot-Agent für die WiSo-Fakultät der Universität zu Köln, basierend auf LangChain und LangGraph mit Open-Source-Komponenten und einem erweiterten Web-Scraping-System für RAG (Retrieval-Augmented Generation).
+An autonomous chatbot agent for the WiSo Faculty of the University of Cologne, built with LangChain and LangGraph, featuring an advanced web-scraping pipeline for Retrieval-Augmented Generation (RAG).
 
-## 🎯 Überblick
-
-Dieses Projekt bietet einen intelligenten Chatbot, der:
-- ✅ **Fragen zur WiSo-Fakultät beantwortet** (Studiengänge, Bewerbung, Services, etc.)
-- ✅ **Automatisch relevante Informationen** aus der Fakultäts-Website sammelt
-- ✅ **Intelligent kategorisiert** (5 Kategorien: Studium, Fakultät, Services, Forschung, Allgemein)
-- ✅ **Vollständig Open-Source** ohne externe API-Kosten arbeitet
-- ✅ **Lokal läuft** für maximale Privatsphäre
-
-## ✨ Hauptfunktionen
-
-### Chatbot-Agent
-- **Autonomer Agent**: LangGraph's `create_react_agent` für intelligente Entscheidungsfindung
-- **Ollama Integration**: Vollständig Open-Source LLM (llama3.1) ohne API-Kosten
-- **Universitäts-RAG**: Durchsucht 329 kategorisierte Dokumente der WiSo-Fakultät
-- **Multiple Tools**: Web-Scraping, DuckDuckGo-Suche, E-Mail-Eskalation
-- **KLIPS2-Integration** (ERWEITERT): 
-  - Account-Erstellung & Aktivierung
-  - Studienbewerbung (Wizard-Automatisierung)
-  - Kurs-Details abrufen
-  - Adressänderung & Passwort-Management
-- **Streamlit UI**: Moderne, benutzerfreundliche Chat-Oberfläche
-- **Konversations-Memory**: Persistente Chat-Historie
-
-### Erweiterter Web Scraper (NEU)
-- **Intelligente Kategorisierung**: Automatische Zuordnung zu 5 Kategorien
-- **Multi-Collection Vector DB**: Separate ChromaDB-Collections pro Kategorie
-- **Metadaten-Anreicherung**: 10+ Metadatenfelder pro Dokument
-- **Batch Processing**: Asynchrone Verarbeitung mehrerer URLs
-- **Qualitätsmetriken**: Vollständige Analyse und Reporting
-- **329 Dokumente**: 50 Seiten, 100% Erfolgsrate
-
-## 📊 Daten-Status
-
-```
-✅ 50 Webseiten erfolgreich gescraped
-✅ 329 Dokument-Chunks in Vector-Datenbank
-✅ 5 intelligente Kategorien:
-   • wiso_studium (95 Dokumente)      - Studiengänge, Bewerbung
-   • wiso_fakultaet (117 Dokumente)   - Struktur, Departments
-   • wiso_services (61 Dokumente)     - IT, Support, Beratung
-   • wiso_forschung (46 Dokumente)    - Forschungsprojekte
-   • wiso_allgemein (10 Dokumente)    - Sonstiges
-```
-
-## 🛠️ Technologie-Stack
-
-- **LLM**: Ollama (llama3.1, lokal gehostet)
-- **Framework**: LangChain + LangGraph
-- **UI**: Streamlit
-- **Suche**: DuckDuckGo (privatsphärefreundlich)
-- **Vector Databases**: ChromaDB, FAISS
-- **Embeddings**: Sentence Transformers, OpenAI (optional)
-- **Vector DB**: ChromaDB mit sentence-transformers
-- **Embeddings**: all-MiniLM-L6-v2 (384 Dimensionen)
-- **Web Scraping**: aiohttp, BeautifulSoup
-- **Suche**: DuckDuckGo, Wikipedia
-
-## 📁 Projektstruktur
-
-```
-uzk-masterarbeit/
-├── src/
-│   ├── agent/
-│   │   └── react_agent.py              # LangGraph ReAct Agent
-│   ├── tools/
-│   │   ├── rag_tool.py                 # RAG für WiSo-Fakultät ⭐
-│   │   ├── web_scraper_tool.py         # Web-Scraping Tool
-│   │   ├── duckduckgo_tool.py          # DuckDuckGo-Suche
-│   │   ├── email_tool.py               # E-Mail Support-Eskalation
-│   │   └── klips/                      # KLIPS2 Integration Package ⭐
-│   │       ├── apply.py                # Studienbewerbung
-│   │       ├── register.py             # Account-Erstellung
-│   │       ├── courses.py              # Kurs-Details
-│   │       ├── address.py              # Adressänderung
-│   │       └── ...
-│   ├── scraper/                        # Erweiterte Web Scraper Pipeline ⭐
-│   │   ├── core/                       # Kern-Komponenten
-│   │   │   ├── batch_scraper.py        # Batch-Verarbeitung
-│   │   │   ├── wiso_crawler.py         # WiSo-Website Crawler
-│   │   │   ├── vector_store.py         # Vector DB Integration
-│   │   │   ├── incremental_scraper.py  # Inkrementelles Scraping
-│   │   │   └── resilient_scraper.py    # Fehlertolerantes Scraping
-│   │   ├── pipelines/                  # Ausführbare Workflows
-│   │   │   ├── crawler_scraper_pipeline.py  # Haupt-Pipeline
-│   │   │   ├── scraper_main.py         # Scraper Entry Point
-│   │   │   └── reprocess_existing_data.py   # Daten-Wiederaufbereitung
-│   │   ├── utils/                      # Hilfsfunktionen
-│   │   │   ├── content_cleaner.py      # Content-Bereinigung
-│   │   │   ├── content_deduplicator.py # Duplikat-Erkennung
-│   │   │   ├── pdf_extractor.py        # PDF-Verarbeitung
-│   │   │   ├── semantic_chunker.py     # Intelligentes Chunking
-│   │   │   └── url_cache.py            # URL-Caching
-│   │   ├── analysis/                   # Analyse & Monitoring
-│   │   │   ├── show_cached_urls.py     # Cache-Viewer
-│   │   │   └── scraper_metrics.py      # Metriken & Reports
-│   │   └── hyperparameters.py          # Zentrale Konfiguration
-│   ├── ui/
-│   │   └── streamlit_app.py            # Chat-Interface
-│   └── dev/                            # Entwicklungs-Skripte
-├── config/
-│   ├── __init__.py
-│   └── settings.py                     # Globale Einstellungen
-├── data/
-│   ├── vector_db/                      # ChromaDB Collections ⭐
-│   ├── url_cache.db                    # URL-Cache SQLite
-│   ├── pdfs/                           # Heruntergeladene PDFs
-│   └── *.json                          # Metrics & Reports
-├── tests/
-│   ├── __init__.py
-│   ├── test_agent.py                   # Agent-Tests
-│   ├── test_tools.py                   # Tool-Tests
-│   ├── test_scraper.py                 # Scraper-Tests
-│   ├── test_scraper_components.py      # Komponenten-Tests
-│   └── test_enhanced_pipeline.py       # Pipeline-Tests
-├── .github/
-│   └── copilot-instructions.md         # GitHub Copilot Instruktionen
-├── .venv/                              # Virtual Environment
-├── .env                                # Umgebungsvariablen (lokal)
-├── .gitignore
-├── requirements.txt                    # Python Dependencies
-├── setup.py                            # Package Setup
-└── README.md
-```
-
-## 🚀 Schnellstart
-
-### Voraussetzungen
-- Python 3.8+
-- Ollama installiert und laufend
-- 4GB+ RAM empfohlen
-
-### Installation in 5 Minuten
-
-```bash
-# 1. Repository klonen
-git clone https://github.com/sebastianuzk/uzk-masterarbeit.git
-cd uzk-masterarbeit
-
-# 2. Virtuelle Umgebung erstellen
-python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# oder
-venv\Scripts\activate     # Windows
-
-# 3. Dependencies installieren
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# 4. Ollama-Modell laden (in separatem Terminal)
-ollama pull llama3.1:8b
-
-# 5. Chatbot starten
-streamlit run src/ui/streamlit_app.py
-```
-
-### Erste Schritte
-
-Nach dem Start können Sie Fragen stellen wie:
-- "Welche Master-Programme bietet die WiSo-Fakultät an?"
-- "Wie bewerbe ich mich für ein höheres Fachsemester?"
-- "Wo finde ich IT-Support an der WiSo?"
-- "Welche Forschungsschwerpunkte gibt es?"
-
-## 💡 Verwendung
-
-### Chatbot starten
-```bash
-streamlit run src/ui/streamlit_app.py
-```
-Öffnet http://localhost:8501 im Browser.
-
-### Pipeline ausführen (Daten aktualisieren)
-```bash
-# WiSo-Website scrapen und kategorisieren
-python src/scraper/crawler_scraper_pipeline.py --organize-by-category
-
-# Vorhandene Daten wiederaufbereiten
-python src/scraper/reprocess_existing_data.py --organize-by-category
-```
-
-### CLI-Modus (ohne UI)
-```bash
-python main.py
-```
-
-### Tests ausführen
-```bash
-# Pipeline-Tests
-python test_enhanced_pipeline.py
-
-# Unit-Tests
-pytest tests/
-```
-
-##  Konfiguration
-
-### Ollama-Einstellungen
-Bearbeiten Sie `config/settings.py`:
-```python
-OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "llama3.1:8b"  # oder mistral, llama3.2, etc.
-TEMPERATURE = 0.7
-```
-
-### Scraper-Hyperparameter
-Bearbeiten Sie `src/scraper/hyperparameters.py`:
-```python
-# Performance
-SCRAPER_MAX_CONCURRENT_REQUESTS = 10
-SCRAPER_REQUEST_DELAY = 1.0
-
-# Vector Store
-VECTOR_CHUNK_SIZE = 1500
-VECTOR_CHUNK_OVERLAP = 300
-VECTOR_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-```
-
-## 🎯 Beispiel-Anfragen
-
-### Studium
-```
-"Welche Bachelor-Programme gibt es?"
-"Wie ist das Master-Programm strukturiert?"
-"Was sind Double Degree Programme?"
-```
-
-### Bewerbung
-```
-"Wie bewerbe ich mich für ein höheres Fachsemester?"
-"Welche Fristen muss ich beachten?"
-"Was sind die Zulassungsvoraussetzungen für Master?"
-```
-
-### Services
-```
-"Wo finde ich IT-Support?"
-"Welche Beratungsangebote gibt es?"
-"Wie erreiche ich das Prüfungsamt?"
-```
-
-### Fakultät & Forschung
-```
-"Welche Departments hat die WiSo-Fakultät?"
-"Welche Forschungsschwerpunkte gibt es?"
-"Wie ist die Fakultätsverwaltung organisiert?"
-```
-
-## 🛠️ Erweiterte Features
-
-### Verfügbare Tools
-
-Der Chatbot verfügt über folgende intelligente Tools:
-
-#### 1. **Universitäts-RAG-Tool** 📚
-- Durchsucht 329 kategorisierte WiSo-Dokumente
-- 5 Kategorien: Studium, Fakultät, Services, Forschung, Allgemein
-- Kontextbasierte Antworten mit Quellenangaben
-
-#### 2. **Web-Scraping-Tool** 🌐
-- Extrahiert Inhalte von beliebigen Webseiten
-- Automatische Text-Bereinigung
-- Für aktuelle Informationen außerhalb der Wissensdatenbank
-
-#### 3. **DuckDuckGo-Suche** 🔍
-- Privatsphärefreundliche Websuche
-- Für allgemeine Internetrecherche
-- Keine Tracking-Cookies
-
-#### 4. **KLIPS2-Registrierungs-Tool** ✅ (NEU)
-- Unterstützt bei der Erstellung von Basis-Accounts
-- Validiert Eingabedaten (Datum, E-Mail, etc.)
-- Gibt strukturierte Anleitungen zur manuellen Registrierung
-- Siehe: [KLIPS2_REGISTRATION_TOOL.md](docs/KLIPS2_REGISTRATION_TOOL.md)
-
-#### 5. **E-Mail-Support-Eskalation** 📧
-- Automatische Weiterleitung komplexer Anfragen
-- SMTP-Integration für professionellen Support
-- Siehe: [EMAIL_SETUP.md](docs/EMAIL_SETUP.md)
-
-### Web Scraper Pipeline
-
-Die erweiterte Pipeline bietet:
-- ✅ **Intelligente Kategorisierung**: 8 Kategorien-Muster
-- ✅ **Metadaten-Anreicherung**: Sprache, Themen, Qualität
-- ✅ **Multi-Collection DB**: Separate Collections pro Kategorie
-- ✅ **Batch-Processing**: Asynchrone URL-Verarbeitung
-- ✅ **Qualitätsprüfung**: Automatische Validierung
-
-```bash
-# Standard-Pipeline mit Kategorisierung
-python src/scraper/crawler_scraper_pipeline.py --organize-by-category
-
-# Erweiterte Optionen
-python src/scraper/crawler_scraper_pipeline.py \
-  --max-pages 2000 \
-  --concurrent-requests 20 \
-  --crawl-delay 0.5 \
-  --organize-by-category
-```
-
-### RAG Tool direkt verwenden
-
-```python
-from src.tools.rag_tool import UniversityRAGTool
-
-tool = UniversityRAGTool()
-result = tool._run("Wie bewerbe ich mich für Master?")
-print(result)
-```
-
-### Vector-Datenbank Status prüfen
-
-```python
-import chromadb
-from pathlib import Path
-
-client = chromadb.PersistentClient(path='data/vector_db')
-collections = client.list_collections()
-
-for c in collections:
-    print(f'{c.name}: {c.count()} Dokumente')
-```
-
-## 🔍 Fehlerbehebung
-
-### Ollama nicht erreichbar
-```bash
-# Prüfen ob Ollama läuft
-ollama list
-
-# Ollama starten
-ollama serve
-```
-
-### Keine Vector-Datenbank gefunden
-```bash
-# Pipeline ausführen um Daten zu erstellen
-python src/scraper/crawler_scraper_pipeline.py --organize-by-category
-```
-
-### Import-Fehler
-```bash
-# Sicherstellen dass virtuelle Umgebung aktiviert ist
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
-
-# Dependencies erneut installieren
-pip install -r requirements.txt
-```
-
-### Langsame Performance
-- Kleineres Ollama-Modell verwenden: `ollama pull llama3.2:1b`
-- Weniger concurrent requests: `--concurrent-requests 5`
-- Größere Delays: `--crawl-delay 2.0`
-
-## 📈 Performance-Metriken
-
-| Metrik | Wert |
-|--------|------|
-| Gescrapte Seiten | 50 |
-| Dokument-Chunks | 329 |
-| Collections | 5 |
-| Erfolgsrate | 100% |
-| Durchschn. Antwortzeit | < 1 Sekunde |
-| Embedding-Dimensionen | 384 |
-| Pipeline-Laufzeit | ~30 Sekunden |
-
-## 🔐 Datenschutz
-
-- ✅ Alle Daten werden lokal verarbeitet
-- ✅ Kein Senden von Daten an externe APIs
-- ✅ Ollama LLM läuft vollständig lokal
-- ✅ Vector-Datenbank auf lokalem Dateisystem
-- ✅ Keine Telemetrie oder Tracking
-
-## 🤝 Beitragen
-
-Dieses Projekt ist Teil einer Masterarbeit an der Universität zu Köln.
-
-## 📄 Lizenz
-
-Dieses Projekt ist für akademische Zwecke erstellt.
-
-## 🙏 Danksagungen
-
-- WiSo-Fakultät, Universität zu Köln
-- LangChain & LangGraph Teams
-- Ollama Team
-- Open-Source Community
+> **Reproducibility:** All setup steps are documented in the [Quick Start](#-quick-start) section below. Pre-built vector database available for download: [→ Vector DB Download](#-vector-database)
 
 ---
 
-**Version**: 2.0  
-**Letztes Update**: Januar 2025  
-**Status**: ✅ Produktionsbereit  
-**Daten**: 329 kategorisierte Dokumente aus 50 WiSo-Seiten
+## Overview
+
+This project provides an intelligent chatbot that:
+- Answers questions about the WiSo Faculty (programmes, applications, services, etc.)
+- Automatically retrieves relevant information from the faculty website
+- Classifies content into five categories: Studium, Fakultät, Services, Forschung, Allgemein
+- Runs fully locally using open-source components — no external API costs required
+
+## Features
+
+### Agent Architectures
+Four agent types are available, selectable at runtime:
+
+| Agent | Description |
+|---|---|
+| `single` | Standard ReAct agent (`create_react_agent` from LangGraph) |
+| `multi` | Multi-agent system with specialised sub-agents |
+| `constrained` | Schema-validated agent — rejects malformed tool calls using Pydantic |
+| `confirmation` | LLM self-critique agent — validates tool calls semantically before execution |
+
+### Tools
+| Tool | Purpose |
+|---|---|
+| `university_knowledge_search` | RAG over 329 categorised WiSo documents |
+| `web_scraper` | Extracts content from arbitrary URLs |
+| `duckduckgo_search` | Privacy-friendly web search |
+| `klips2_register` | KLIPS2 account registration |
+| `klips2_apply_study` | Study application (wizard automation) |
+| `klips2_get_course_details` | Course detail retrieval |
+| `klips2_change_address` | Address update |
+| `klips2_change_password` | Password change |
+| `send_email` | Support escalation via SMTP |
+
+### Vector Database
+- **329 document chunks** from 50 WiSo web pages
+- ChromaDB with `BAAI/bge-m3` embeddings (1024 dimensions, multilingual DE/EN)
+- Five named collections: `wiso_studium`, `wiso_fakultaet`, `wiso_services`, `wiso_forschung`, `wiso_allgemein`
+
+## Technology Stack
+
+| Component | Technology |
+|---|---|
+| LLM Framework | LangChain + LangGraph |
+| Local LLM | Ollama (`llama3.1:8b`, `gpt-oss:20b`) |
+| Cloud LLMs | OpenAI (GPT-4o, GPT-5), Anthropic (Claude Sonnet/Opus) |
+| Vector DB | ChromaDB |
+| Embeddings | `BAAI/bge-m3` via Sentence Transformers |
+| UI | Streamlit |
+| Web Search | DuckDuckGo |
+| Web Scraping | aiohttp + BeautifulSoup |
+| Evaluation | Custom framework + RAGAS |
+
+## Project Structure
+
+```
+uzk-masterarbeit/
+├── main.py                         # Entry point (CLI + Streamlit)
+├── requirements.txt
+├── Makefile                        # Convenience commands
+├── config/
+│   ├── settings.py                 # Central configuration (reads .env)
+│   └── logging_config.py
+├── src/
+│   ├── agent/
+│   │   ├── react_agent.py          # Single-agent (ReAct)
+│   │   ├── llm_factory.py          # LLM provider abstraction
+│   │   ├── tool_loader.py
+│   │   ├── tool_specs.py           # Tool metadata for prompts/validation
+│   │   ├── json_extraction.py      # UTF-8-safe arg extraction (Ollama fix)
+│   │   ├── confirmation/           # Confirmation agent
+│   │   ├── constrained/            # Constrained agent (Pydantic schemas)
+│   │   └── multi/                  # Multi-agent system
+│   ├── tools/
+│   │   ├── rag_tool.py
+│   │   ├── web_scraper_tool.py
+│   │   ├── duckduckgo_tool.py
+│   │   ├── email_tool.py
+│   │   └── klips/                  # KLIPS2 tool implementations
+│   ├── scraper/                    # Web scraping pipeline
+│   │   ├── core/                   # Crawler, vector store, batch processing
+│   │   ├── pipelines/              # Runnable pipeline scripts
+│   │   └── utils/                  # Chunking, deduplication, PDF extraction
+│   └── ui/
+│       └── streamlit_app.py
+├── eval/
+│   ├── run_full_evaluation.py      # Main evaluation script
+│   ├── core/
+│   │   ├── evaluation.py           # Argument matching logic (SEMANTIC mode)
+│   │   └── runner.py               # Scenario runner, metrics, reports
+│   └── scenarios/
+│       └── klips/                  # 100 test scenarios (register, apply, ...)
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── llm/
+└── data/
+    ├── vector_db/                  # ChromaDB collections (see Vector DB section)
+    └── eval/final/                 # Evaluation results by model/agent
+```
+
+---
+
+## Quick Start
+
+### System Requirements
+
+| Requirement | Minimum | Recommended |
+|---|---|---|
+| Python | 3.10 | 3.11+ |
+| RAM | 8 GB | 16 GB+ |
+| GPU VRAM | — | 8 GB+ (for local Ollama models) |
+| OS | Linux / macOS / Windows (WSL2) | Linux |
+
+### 1. Clone and Install
+
+```bash
+git clone <REPO_URL>
+cd uzk-masterarbeit
+
+python3 -m venv .venv
+source .venv/bin/activate        # Linux / macOS
+# .venv\Scripts\activate         # Windows
+
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 2. Configure Environment
+
+Create a `.env` file in the project root. Required fields are marked with `# REQUIRED`:
+
+```dotenv
+# ── LLM Provider ─────────────────────────────────────────────────
+# Choose one: ollama | openai | anthropic
+LLM_PROVIDER=ollama                    # REQUIRED
+
+# ── Ollama (local) ───────────────────────────────────────────────
+OLLAMA_BASE_URL=http://localhost:11434  # Address of the Ollama server
+OLLAMA_MODEL=llama3.1:8b               # Model name
+
+# ── OpenAI (optional) ────────────────────────────────────────────
+OPENAI_API_KEY=sk-...                  # REQUIRED if LLM_PROVIDER=openai
+OPENAI_MODEL=gpt-4o-mini
+
+# ── Anthropic (optional) ─────────────────────────────────────────
+ANTHROPIC_API_KEY=sk-ant-...           # REQUIRED if LLM_PROVIDER=anthropic
+ANTHROPIC_MODEL=claude-sonnet-4-6
+
+# ── LangSmith Tracing (optional) ─────────────────────────────────
+LANGSMITH_TRACING=false
+# LANGSMITH_API_KEY=lsv2_pt_...
+# LANGSMITH_PROJECT=masterarbeit
+# LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+
+# ── Email Tool (optional) ─────────────────────────────────────────
+# SMTP_SERVER=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USERNAME=your@email.com
+# SMTP_PASSWORD=your_app_password
+# DEFAULT_RECIPIENT=support@example.com
+
+# ── Misc (optional) ──────────────────────────────────────────────
+TEMPERATURE=0.0
+# NTFY_TOPIC=Evaluation   # Push notifications for evaluation runs
+```
+
+### 3. Pull an Ollama Model (if using `LLM_PROVIDER=ollama`)
+
+```bash
+# Install Ollama: https://ollama.com/download
+ollama pull llama3.1:8b
+```
+
+### 4. Vector Database
+
+> **Download:** [→ PLACEHOLDER: insert vector database download link here](#)
+
+Extract the archive into `data/vector_db/`:
+
+```bash
+tar -xzf vector_db.tar.gz -C data/vector_db/
+```
+
+### 5. Run the Agent
+
+```bash
+# Streamlit UI — Single-Agent
+python main.py --ui
+
+# Streamlit UI — Multi-Agent
+python main.py --ui --agent-mode multi
+
+# CLI — Single-Agent
+python main.py
+
+# CLI — Multi-Agent
+python main.py --agent-mode multi
+```
+
+Or via `make`:
+
+```bash
+make ui          # Streamlit, Single-Agent
+make ui-multi    # Streamlit, Multi-Agent
+make run         # CLI, Single-Agent
+make run-multi   # CLI, Multi-Agent
+```
+
+---
+
+## Running Tests
+
+```bash
+make test                # All tests
+make test-fast           # Unit tests only (fast)
+make test-integration    # Integration tests
+
+# Or directly with pytest:
+source .venv/bin/activate
+python -m pytest tests/ -v
+```
+
+---
+
+## Running Evaluations
+
+Both evaluation types are run via the same entry point:
+
+```bash
+python -m eval.run_full_evaluation [options]
+```
+
+Results are saved to `data/eval/final/<model>/<timestamp>/`.
+
+### Tool Evaluation
+
+Tests tool-selection accuracy across 100 curated KLIPS2 scenarios. Metrics: F1, precision, recall, and argument matching.
+
+```bash
+# llama3.1:8b, single agent
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools
+
+# OpenAI model
+python -m eval.run_full_evaluation --model gpt-5.2 --provider openai --agent single --mode tools
+
+# Compare all agent types
+python -m eval.run_full_evaluation --model llama3.1:8b --agent all --mode tools
+
+# Specific scenarios only
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools --test-ids s1 s2 s3
+
+# Limit number of scenarios
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools --tool-limit 20
+
+# With internal trace logging (for failed scenarios)
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools --enable-trace
+
+# Ignore existing checkpoints and restart
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools --no-resume
+```
+
+Available agent types (`--agent`):
+
+| Value | Description |
+|---|---|
+| `single` | ReAct agent |
+| `constrained` | Pydantic-validated agent |
+| `confirmation` | LLM self-critique agent |
+| `multi` | Multi-agent system |
+| `all` | All four types |
+
+### RAGAS Evaluation
+
+Tests RAG answer quality using RAGAS metrics (faithfulness, context recall, answer relevancy). Runs the agent against up to 116 questions from the testset and uses a judge model to score the responses.
+
+```bash
+# llama3.1:8b, single agent, Ollama judge
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag
+
+# Use OpenAI as the RAGAS judge (recommended for quality)
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag \
+  --ragas-judge-provider openai --ragas-judge-model gpt-4o-mini
+
+# Limit number of test questions (default: 100, max: 116)
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag --rag-limit 50
+
+# Increase parallel judge workers for faster OpenAI evaluation
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag \
+  --ragas-judge-provider openai --ragas-workers 150
+
+# Run both tool and RAGAS evaluation in one pass
+python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode all
+```
+
+RAGAS judge options:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--ragas-judge-provider` | auto-detect | `openai` or `ollama` |
+| `--ragas-judge-model` | `gpt-4o-mini` / `qwen2.5:7b` | Judge model name |
+| `--ragas-workers` | `8` | Parallel judge workers (`150` recommended for OpenAI) |
+| `--rag-limit` | `100` | Max number of RAGAS test questions (max 116) |
+
+---
+
+## Troubleshooting
+
+**Ollama not reachable**
+```bash
+ollama serve         # start the server
+ollama list          # verify available models
+```
+
+**Vector database not found**
+```bash
+python src/scraper/pipelines/crawler_scraper_pipeline.py --organize-by-category
+```
+
+**Import errors**
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Slow performance with local models**
+- Use a smaller model: `ollama pull llama3.2:1b`
+- Reduce scraper concurrency: `--concurrent-requests 5`
+
+---
+
+## License
+
+This project was created for academic purposes as part of a Master's thesis at the University of Cologne.
+
+---
+
+**Status:** Research prototype  
+**Last updated:** May 2026
