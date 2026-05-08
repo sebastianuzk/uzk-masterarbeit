@@ -11,8 +11,8 @@ import os
 
 class KLIPS2AuthenticatedInput(BaseModel):
     """Basis-Input für authentifizierte KLIPS2-Aktionen"""
-    username: Optional[str] = Field(default=None, description="Benutzername oder E-Mail für KLIPS2 Login. Optional, wenn KLIPS_USERNAME in .env gesetzt ist.")
-    password: Optional[str] = Field(default=None, description="Passwort für KLIPS2 Login. Optional, wenn KLIPS_PASSWORD in .env gesetzt ist.")
+    username: str = Field(description="Benutzername oder E-Mail für KLIPS2 Login.")
+    password: str = Field(description="Passwort für KLIPS2 Login.")
 
 class KLIPS2BaseTool(BaseTool):
     """Basis-Klasse für KLIPS2 Tools mit Session-Management"""

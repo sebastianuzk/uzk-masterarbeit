@@ -142,7 +142,12 @@ Extrahiere Parameter GROSSZÜGIG aus dem Text:
 - "Ich bin Max Müller" → vorname="Max", nachname="Müller"
 - "geboren am 15.03.1999" → geburtsdatum="15.03.1999"
 - "männlich" / "male" / "m" → geschlecht="männlich"
-- "Abitur 2018 Note 2,3" → hzb_type="Abitur", hzb_date="2018", hzb_grade="2.3"
+- "Abitur 2018 Note 2,3" → hzb_type="Allgemeine Hochschulreife", hzb_name="Abitur", hzb_date="2018", hzb_grade="2,3"
+- "Fachhochschulreife / FHR" → hzb_type="Fachhochschulreife"
+- "A-Levels" → hzb_type="Allgemeine Hochschulreife", hzb_name="A-Levels"
+- "WS 2024/25" / "WS24/25" → semester="Wintersemester 2024/25"
+- "SS 2025" / "SoSe 2025" → semester="Sommersemester 2025"
+- "Gymnasium Köln" (als HZB-Ort) → hzb_school="Gymnasium Köln", hzb_place="Köln"
 - "Musterstraße 1, 50678 Köln" → street="Musterstraße 1", zip_code="50678", city="Köln"
 
 **Format-Variationen sind OK:**

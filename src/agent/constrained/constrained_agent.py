@@ -149,41 +149,68 @@ class ApplyToolCall(BaseModel):
     """Schema für klips2_apply_study Tool-Aufruf."""
     username: str = Field(description="KLIPS2-Benutzername")
     password: str = Field(description="KLIPS2-Passwort")
-    semester: str = Field(description="Zielsemester")
-    degree_type: str = Field(description="Bachelor, Master oder Promotion")
-    study_program: str = Field(description="Name des Studiengangs")
-    entry_semester: str = Field(default="1", description="Fachsemester")
-    study_form: str = Field(default="Erststudium", description="Erststudium oder Zweitstudium")
-    gender: str = Field(description="Geschlecht")
+    semester: str = Field(description="Zielsemester (z.B. Wintersemester 2024/25, WS 2024)")
+    degree_type: str = Field(description="Bachelor, Master oder Promotionsstudium")
+    study_program: str = Field(description="Name des Studiengangs (z.B. Informatik, Medizin)")
+    entry_semester: str = Field(default="1", description="Fachsemester (Standard: 1)")
+    study_form: str = Field(description="Studienform: Erststudium oder Zweitstudium")
+    gender: str = Field(description="Geschlecht (männlich, weiblich, divers)")
     birth_place: str = Field(description="Geburtsort")
-    birth_country: str = Field(default="Deutschland", description="Geburtsland")
+    birth_country: Optional[str] = Field(default="Deutschland", description="Geburtsland (Standard: Deutschland)")
     nationality: str = Field(description="Staatsangehörigkeit")
-    hzb_date: str = Field(description="Datum der Hochschulzugangsberechtigung")
-    hzb_type: str = Field(description="Art der HZB")
-    hzb_name: str = Field(description="Bezeichnung des Zeugnisses")
-    hzb_grade: str = Field(description="Note der HZB")
-    hzb_school: str = Field(description="Name der Schule")
-    hzb_country: str = Field(default="Deutschland", description="Land der HZB")
-    hzb_place: str = Field(description="Ort der HZB")
+    hzb_date: str = Field(description="Datum der HZB (TT.MM.JJJJ, z.B. 15.06.2018)")
+    hzb_type: str = Field(description="Art der HZB (z.B. Allgemeine Hochschulreife, Fachhochschulreife)")
+    hzb_name: Optional[str] = Field(default="Abitur", description="Bezeichnung des Zeugnisses (Standard: Abitur)")
+    hzb_grade: str = Field(description="Note der HZB (z.B. 2,3 oder 2.3)")
+    hzb_school: Optional[str] = Field(default="Gymnasium", description="Name der Schule (Standard: Gymnasium)")
+    hzb_country: Optional[str] = Field(default="Deutschland", description="Land der HZB (Standard: Deutschland)")
+    hzb_place: str = Field(description="Ort/Kreis der HZB")
     # Optional
-    street: Optional[str] = Field(default=None)
-    zip_code: Optional[str] = Field(default=None)
-    city: Optional[str] = Field(default=None)
-    country: Optional[str] = Field(default="Deutschland")
-    phone: Optional[str] = Field(default=None)
-    prev_uni: Optional[str] = Field(default=None)
-    prev_program: Optional[str] = Field(default=None)
-    prev_degree: Optional[str] = Field(default=None)
-    prev_semesters: Optional[str] = Field(default=None)
+    street: Optional[str] = Field(default=None, description="Straße und Hausnummer")
+    zip_code: Optional[str] = Field(default=None, description="Postleitzahl")
+    city: Optional[str] = Field(default=None, description="Stadt")
+    country: Optional[str] = Field(default="Deutschland", description="Land (Standard: Deutschland)")
+    phone: Optional[str] = Field(default=None, description="Telefonnummer")
+    prev_uni: Optional[str] = Field(default=None, description="Vorherige Hochschule (PFLICHT bei Zweitstudium)")
+    prev_program: Optional[str] = Field(default=None, description="Vorheriger Studiengang (PFLICHT bei Zweitstudium)")
+    prev_degree: Optional[str] = Field(default=None, description="Angestrebter/erreichter Abschluss (optional bei Zweitstudium)")
+    prev_semesters: Optional[str] = Field(default=None, description="Anzahl Semester an vorheriger Hochschule (PFLICHT bei Zweitstudium)")
     validate_only: bool = Field(default=False)
+    delete_existing_hzb: bool = Field(default=False, description="Vorhandene HZB-Einträge löschen. NUR wenn explizit gewünscht!")
+    delete_existing_vorbildung: bool = Field(default=False, description="Vorhandene Vorbildungs-Einträge löschen. NUR wenn explizit gewünscht!")
 
-    @field_validator('username', 'password', 'nationality', 'hzb_name')
+    @field_validator('username', 'password', 'nationality')
     @classmethod
     def validate_not_empty(cls, v, info):
         """Verhindere leere Strings für kritische Felder."""
         if not v or not v.strip():
             raise ValueError(f"{info.field_name} darf nicht leer sein")
         return v.strip()
+
+    @field_validator('gender')
+    @classmethod
+    def normalize_gender(cls, v):
+        v_lower = v.lower().strip()
+        if v_lower in ('m', 'male', 'männlich', 'mann'):
+            return 'männlich'
+        if v_lower in ('f', 'w', 'female', 'weiblich', 'frau'):
+            return 'weiblich'
+        if v_lower in ('d', 'diverse', 'divers'):
+            return 'divers'
+        return v
+
+    @field_validator('study_form')
+    @classmethod
+    def normalize_study_form(cls, v):
+        v_lower = v.lower().strip()
+        if v_lower in ('erststudium', 'first', 'first-time', 'erstmals', 'first study', 'erster'):
+            return 'Erststudium'
+        if v_lower in ('zweitstudium', 'second', 'second degree', 'zweites', 'zweites studium'):
+            return 'Zweitstudium'
+        # Capitalize first letter if recognized prefix
+        if v.strip():
+            return v.strip().capitalize() if v.strip()[0].islower() else v.strip()
+        return v
 
 
 class ChangeAddressToolCall(BaseModel):
@@ -240,8 +267,8 @@ class WebScraperToolCall(BaseModel):
 
 class EmailToolCall(BaseModel):
     """Schema für send_email Tool-Aufruf."""
-    subject:  Optional[str] = Field(description="Betreff der E-Mail")
-    body:  Optional[str] = Field(description="Nachrichteninhalt")
+    subject: str = Field(description="Betreff der E-Mail")
+    body: str = Field(description="Nachrichteninhalt")
 
 
 class DirectResponse(BaseModel):
@@ -343,7 +370,7 @@ class ConstrainedAgent:
         if "klips2_register" in available_tool_names:
             klips_tools.append("- klips2_register: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit")
         if "klips2_apply_study" in available_tool_names:
-            klips_tools.append("- klips2_apply_study: username, password, semester, degree_type, study_program (+ weitere)")
+            klips_tools.append("- klips2_apply_study: username, password, semester, degree_type, study_program, study_form, gender, birth_place, nationality, hzb_date, hzb_type, hzb_grade, hzb_place")
         if "klips2_change_address" in available_tool_names:
             klips_tools.append("- klips2_change_address: username, password, street, zip_code, city")
         if "klips2_change_password" in available_tool_names:
@@ -458,11 +485,11 @@ Wenn im Prompt "Previous conversation:" steht:
         # Tool-spezifische Pflichtfelder
         tool_requirements = {
             "klips2_register": ["vorname", "nachname", "geschlecht", "geburtsdatum", "email", "staatsangehoerigkeit"],
-            "klips2_apply_study": ["username", "password", "semester", "degree_type", "study_program", "gender", "birth_place", "nationality", "hzb_date", "hzb_type", "hzb_name", "hzb_grade", "hzb_school", "hzb_place"],
-            "klips2_change_password": ["username", "old_password", "new_password"],
-            "klips2_change_address": ["username", "password", "street", "zip_code", "city", "country"],
-            "klips2_get_course_details": ["course_number"],
-            "send_email": [],  # No required fields - agent can generate subject/body if not provided
+            "klips2_apply_study": ["username", "password", "semester", "degree_type", "study_program", "study_form", "gender", "birth_place", "nationality", "hzb_date", "hzb_type", "hzb_grade", "hzb_place"],
+            "klips2_change_password": ["username", "password", "new_password"],
+            "klips2_change_address": ["username", "password", "street", "zip_code", "city"],
+            "klips2_get_course_details": ["course_id"],
+            "send_email": ["subject", "body"],  # Both required - agent must not invent them if absent
             "duckduckgo_search": ["query"],
             "university_knowledge_search": ["query"],
             "web_scraper": ["url"]
@@ -553,7 +580,7 @@ WICHTIG:
                 tool_trigger_sections.append("**WISSENS-SUCHE (Tool aufrufen):**\n\nWICHTIG - Entscheidungslogik für Suchen:\n\n" + "\n\n".join(search_rules))
         
         if "send_email" in available_tool_names:
-            tool_trigger_sections.append('''**E-MAIL (Tool aufrufen):**
+            tool_trigger_sections.append('''**E-MAIL (Tool aufrufen, NUR wenn Betreff UND Inhalt vorhanden):**
 - "Sende eine E-Mail" → send_email
 - "Schicke eine Mail" → send_email
 - "Verfasse eine E-Mail" → send_email
@@ -561,7 +588,13 @@ WICHTIG:
 - "Sende eine Nachricht" → send_email
 - "E-Mail versenden" → send_email
 - "send an email" / "send email" → send_email
-- "Schicke eine Nachfolge-E-Mail" → send_email''')
+- "Schicke eine Nachfolge-E-Mail" → send_email
+
+WICHTIG: Nur aufrufen wenn BEIDE Pflichtfelder vorhanden:
+  ✓ subject (Betreff - MUSS explizit genannt werden)
+  ✓ body (Inhalt - MUSS erkennbarer Nachrichtentext vorhanden sein)
+  ✗ NUR Betreff ohne Inhalt → insufficient_data
+  ✗ NUR vager Auftrag ohne Betreff → insufficient_data''')
         
         tool_trigger_text = "\n\n".join(tool_trigger_sections) if tool_trigger_sections else "Keine Tool-spezifischen Trigger definiert."
         
@@ -570,7 +603,10 @@ WICHTIG:
         if "klips2_register" in available_tool_names:
             completeness_rules.append("  - klips2_register: Vorname UND Nachname UND Email UND Geburtsdatum UND Geschlecht UND Staatsangehörigkeit")
         if "klips2_apply_study" in available_tool_names:
-            completeness_rules.append("  - klips2_apply_study: username UND password UND semester UND degree_type UND study_program UND gender UND birth_place UND nationality UND hzb_date UND hzb_type UND hzb_name UND hzb_grade UND hzb_school UND hzb_place")
+            completeness_rules.append("  - klips2_apply_study: username UND password UND semester UND degree_type UND study_program UND study_form (Erststudium/Zweitstudium) UND gender UND birth_place UND nationality UND hzb_date UND hzb_type UND hzb_grade UND hzb_place")
+            completeness_rules.append("  - Wenn study_form='Zweitstudium': ZUSÄTZLICH prev_uni UND prev_program UND prev_semesters erforderlich")
+        if "send_email" in available_tool_names:
+            completeness_rules.append("  - send_email: subject UND body (beide Felder müssen im Text vorhanden sein)")
         completeness_text = "\n".join(completeness_rules) if completeness_rules else "  (Keine tool-spezifischen Regeln)"
         
         # JSON example only if both tools are available
@@ -637,11 +673,11 @@ PERSÖNLICHE DATEN (gender, birth_place, nationality):
   ✓ "männlich, geboren 15.03.1999 in Köln" → OK: gender + birth_place vorhanden
   ✓ "Staatsangehörigkeit: deutsch" → OK: nationality vorhanden
 
-HZB-DATEN (hzb_date, hzb_type, hzb_name, hzb_grade, hzb_school, hzb_place):
-  ✗ "Abitur 2,3 vom 01.06.2018, Gymnasium Bonn" → hzb_name fehlt! → insufficient_data (fehlt: hzb_name)
-  ✓ "Abitur 2,3 vom 01.06.2018, Abitur Zeugnis, Gymnasium Bonn, Bonn" → OK: ALLE HZB-Felder
+HZB-DATEN (hzb_date, hzb_type, hzb_grade, hzb_place):
+  ✗ "Abitur 2,3 vom 01.06.2018" → hzb_place fehlt! → insufficient_data (fehlt: hzb_place)
+  ✓ "Abitur 2,3 vom 01.06.2018, Gymnasium Bonn, Bonn" → OK: alle HZB-Pflichtfelder vorhanden
   
-  WICHTIG: hzb_name = Bezeichnung des Zeugnisses (z.B. "Abitur Zeugnis", "Fachhochschulreife")
+  HINWEIS: hzb_name (Zeugnis-Bezeichnung) und hzb_school (Schulname) sind OPTIONAL mit Standardwerten.
 
 EMAIL (nur für klips2_register - die Registrierungs-E-Mail-Adresse des Nutzers):
   - MUSS @ enthalten: "max@test.de" ✓
@@ -733,6 +769,24 @@ Antworte im JSON-Format:
             fields.append(f'  "{name}": "<{desc}>" // {req_str}')
         
         fields_str = ",\n".join(fields)
+
+        # Tool-spezifische Normalisierungshinweise
+        tool_hints = ""
+        if tool_name == "klips2_apply_study":
+            tool_hints = """
+HZB-NORMALISIERUNG:
+  * "Abitur" → hzb_type="Allgemeine Hochschulreife", hzb_name="Abitur"
+  * "A-Levels" → hzb_type="Allgemeine Hochschulreife", hzb_name="A-Levels"
+  * "Fachhochschulreife" / "FHR" → hzb_type="Fachhochschulreife"
+  * "Fachgebundene Hochschulreife" → hzb_type="Fachgebundene Hochschulreife"
+  * "High School Diploma" → hzb_type="Ausländische Hochschulzugangsberechtigung"
+
+SEMESTER-NORMALISIERUNG:
+  * "WS 2024/25" / "WS24/25" / "Wintersemester 2024" → "Wintersemester 2024/25"
+  * "SS 2025" / "SoSe 2025" / "Sommersemester 25" → "Sommersemester 2025"
+
+HZB-ORT: "Gymnasium Köln" → hzb_school="Gymnasium Köln", hzb_place="Köln" (Stadt aus Schulname ableiten wenn kein separater Ort genannt)
+"""
         
         return f"""Extrahiere die Parameter für {tool_name} aus dem Nutzertext.
 
@@ -747,7 +801,7 @@ WICHTIGE REGELN:
   * Geschlecht: "m"→"männlich", "w"→"weiblich", "d"→"divers", "male"→"männlich", etc.
   * Email: lowercase, beliebige Domains OK (auch .edu, .org, etc.)
   * Namen: Capitalize first letter, auch internationale Namen
-
+{tool_hints}
 FORMAT-TOLERANZ:
 - Akzeptiere verschiedene Datumsformate (DD.MM.YYYY, YYYY-MM-DD, Month DD, YYYY)
 - Akzeptiere Abkürzungen (m/w/d, DE/USA, etc.)

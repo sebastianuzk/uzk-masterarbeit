@@ -72,33 +72,39 @@ CRITICAL_TOOLS = {
     "klips2_apply_study": {
         "description": "Studienbewerbung einreichen",
         "required_params": ["username", "password", "semester", "degree_type", "study_program", 
-                           "gender", "birth_place", "nationality", "hzb_date", "hzb_type", 
-                           "hzb_name", "hzb_grade", "hzb_school", "hzb_place"],
-        "optional_params": ["entry_semester", "study_form", "birth_country", "hzb_country", 
-                           "street", "zip_code", "city", "country"],
+                           "study_form", "gender", "birth_place", "nationality", "hzb_date", "hzb_type", 
+                           "hzb_grade", "hzb_place"],
+        "optional_params": ["entry_semester", "birth_country", "hzb_name", "hzb_school", "hzb_country",
+                           "street", "zip_code", "city", "country", "phone",
+                           "prev_uni", "prev_program", "prev_degree", "prev_semesters"],
         "fields": {
             "username": {"required": True, "desc": "KLIPS2-Benutzername"},
             "password": {"required": True, "desc": "KLIPS2-Passwort"},
-            "semester": {"required": True, "desc": "Zielsemester (z.B. WS2024)"},
-            "degree_type": {"required": True, "desc": "Bachelor, Master oder Promotion"},
+            "semester": {"required": True, "desc": "Zielsemester (z.B. Wintersemester 2024/25 oder WS 2024/25)"},
+            "degree_type": {"required": True, "desc": "Bachelor, Master oder Promotionsstudium"},
             "study_program": {"required": True, "desc": "Name des Studiengangs"},
-            "gender": {"required": True, "desc": "Geschlecht"},
+            "gender": {"required": True, "desc": "Geschlecht (männlich/weiblich/divers)"},
             "birth_place": {"required": True, "desc": "Geburtsort"},
             "nationality": {"required": True, "desc": "Staatsangehörigkeit"},
-            "hzb_date": {"required": True, "desc": "Datum der Hochschulzugangsberechtigung"},
-            "hzb_type": {"required": True, "desc": "Art der HZB (z.B. Abitur)"},
-            "hzb_name": {"required": True, "desc": "Bezeichnung des Zeugnisses"},
-            "hzb_grade": {"required": True, "desc": "Note der HZB"},
-            "hzb_school": {"required": True, "desc": "Name der Schule"},
-            "hzb_place": {"required": True, "desc": "Ort der HZB"},
+            "hzb_date": {"required": True, "desc": "Datum der HZB (TT.MM.JJJJ, z.B. 15.06.2018)"},
+            "hzb_type": {"required": True, "desc": "Art der HZB (z.B. Allgemeine Hochschulreife, Fachhochschulreife)"},
+            "hzb_name": {"required": False, "desc": "Bezeichnung des Zeugnisses (Standard: Abitur)"},
+            "hzb_grade": {"required": True, "desc": "Note der HZB (z.B. 2,3 oder 2.3)"},
+            "hzb_school": {"required": False, "desc": "Name der Schule (Standard: Gymnasium)"},
+            "hzb_place": {"required": True, "desc": "Ort/Kreis der HZB"},
+            "study_form": {"required": True, "desc": "Erststudium oder Zweitstudium"},
             "entry_semester": {"required": False, "desc": "Fachsemester (Standard: 1)"},
-            "study_form": {"required": False, "desc": "Erststudium oder Zweitstudium"},
             "birth_country": {"required": False, "desc": "Geburtsland (Standard: Deutschland)"},
             "hzb_country": {"required": False, "desc": "Land der HZB (Standard: Deutschland)"},
             "street": {"required": False, "desc": "Straße und Hausnummer"},
             "zip_code": {"required": False, "desc": "Postleitzahl"},
             "city": {"required": False, "desc": "Stadt"},
-            "country": {"required": False, "desc": "Land (Standard: Deutschland)"}
+            "country": {"required": False, "desc": "Land (Standard: Deutschland)"},
+            "phone": {"required": False, "desc": "Telefonnummer"},
+            "prev_uni": {"required": False, "desc": "Vorherige Hochschule (PFLICHT wenn study_form=Zweitstudium)"},
+            "prev_program": {"required": False, "desc": "Vorheriger Studiengang (PFLICHT wenn study_form=Zweitstudium)"},
+            "prev_degree": {"required": False, "desc": "Angestrebter/erreichter Abschluss (optional bei Zweitstudium)"},
+            "prev_semesters": {"required": False, "desc": "Anzahl Semester an vorheriger Hochschule (PFLICHT wenn study_form=Zweitstudium)"}
         },
         "validations": {}
     },
@@ -126,15 +132,14 @@ CRITICAL_TOOLS = {
             "country": {"required": False, "desc": "Land (Standard: Deutschland)"}
         },
         "validations": {
-            "zip_code": r"^\d{4,5}$"
+            "zip_code": r"^[A-Za-z0-9 -]{2,10}$"
         }
     },
     "send_email": {
         "description": "E-Mail senden",
         "required_params": ["subject", "body"],
-        "optional_params": ["to"],
+        "optional_params": [],
         "fields": {
-            "to": {"required": False, "desc": "Empfänger-Adresse (Standard: Studierendensekretariat)"},
             "subject": {"required": True, "desc": "Betreff der E-Mail"},
             "body": {"required": True, "desc": "Text der E-Mail"}
         },
@@ -396,6 +401,7 @@ BEWERTUNGSKRITERIEN:
 5. Bei Email-Feldern: Muss @ enthalten
 6. Bei Datums-Feldern: Muss vollständiges Datum sein (TT.MM.JJJJ oder ähnlich)
 7. Bei Stadt/Ort-Feldern: MUSS explizit genannt sein (nicht aus PLZ ableitbar)
+8. Bei klips2_apply_study mit study_form='Zweitstudium': prev_uni, prev_program und prev_semesters müssen vorhanden sein (auch wenn als optional gelistet)
 
 WICHTIG:
 - Wenn auch nur EIN Pflichtfeld fehlt oder leer ist → confirmed=false
@@ -479,7 +485,7 @@ Sei STRENG bei Pflichtfeldern, FAIR bei Formaten."""
         if "klips2_register" in available_tool_names:
             critical_tools_list.append("- **klips2_register**: Pflicht: vorname, nachname, geschlecht, geburtsdatum, email, staatsangehoerigkeit")
         if "klips2_apply_study" in available_tool_names:
-            critical_tools_list.append("- **klips2_apply_study**: Pflicht: username, password, semester, degree_type, study_program")
+            critical_tools_list.append("- **klips2_apply_study**: Pflicht: username, password, semester, degree_type, study_program, study_form, gender, birth_place, nationality, hzb_date, hzb_type, hzb_grade, hzb_place; Wenn study_form=Zweitstudium: zusätzlich prev_uni, prev_program, prev_semesters")
         if "klips2_change_password" in available_tool_names:
             critical_tools_list.append("- **klips2_change_password**: Pflicht: username, password, new_password")
         if "klips2_change_address" in available_tool_names:

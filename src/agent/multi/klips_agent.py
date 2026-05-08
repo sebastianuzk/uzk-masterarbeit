@@ -56,27 +56,32 @@ KLIPS_TOOL_SPECS = {
             "username": "KLIPS2-Benutzername",
             "password": "KLIPS2-Passwort",
             "semester": "Zielsemester (z.B. Wintersemester 2024/25, WS 2024)",
-            "degree_type": "Bachelor, Master oder Promotion",
+            "degree_type": "Bachelor, Master oder Promotionsstudium",
             "study_program": "Name des Studiengangs (z.B. Informatik, Medizin)",
             "gender": "Geschlecht (männlich, weiblich, divers)",
             "birth_place": "Geburtsort",
             "nationality": "Staatsangehörigkeit",
-            "hzb_date": "Datum der Hochschulzugangsberechtigung (z.B. 15.06.2018)",
-            "hzb_type": "Art der HZB (z.B. Abitur, Fachhochschulreife)",
-            "hzb_name": "Bezeichnung des Zeugnisses (z.B. Allgemeine Hochschulreife)",
+            "hzb_date": "Datum der HZB (TT.MM.JJJJ, z.B. 15.06.2018)",
+            "hzb_type": "Art der HZB (z.B. Allgemeine Hochschulreife, Fachhochschulreife)",
             "hzb_grade": "Note der HZB (z.B. 2,3 oder 2.3)",
-            "hzb_school": "Name der Schule",
-            "hzb_place": "Ort der HZB"
+            "hzb_place": "Ort/Kreis der HZB",
+            "study_form": "Studienform: Erststudium oder Zweitstudium"
         },
         "optional_params": {
             "entry_semester": "Fachsemester (Standard: 1)",
-            "study_form": "Erststudium oder Zweitstudium (Standard: Erststudium)",
             "birth_country": "Geburtsland (Standard: Deutschland)",
+            "hzb_name": "Bezeichnung des Zeugnisses (Standard: Abitur)",
+            "hzb_school": "Name der Schule (Standard: Gymnasium)",
             "hzb_country": "Land der HZB (Standard: Deutschland)",
             "street": "Straße und Hausnummer",
             "zip_code": "Postleitzahl",
             "city": "Stadt",
-            "country": "Land (Standard: Deutschland)"
+            "country": "Land (Standard: Deutschland)",
+            "phone": "Telefonnummer",
+            "prev_uni": "Vorherige Hochschule (PFLICHT bei Zweitstudium)",
+            "prev_program": "Vorheriger Studiengang (PFLICHT bei Zweitstudium)",
+            "prev_degree": "Angestrebter/erreichter Abschluss (optional bei Zweitstudium)",
+            "prev_semesters": "Anzahl Semester an vorheriger Hochschule (PFLICHT bei Zweitstudium)"
         }
     },
     "klips2_change_address": {
@@ -202,7 +207,7 @@ Extrahiere Parameter GROSSZÜGIG aus dem Text:
 - "Ich bin Lisa Müller" → vorname="Lisa", nachname="Müller"
 - "geboren am 3. Januar 2000" → geburtsdatum="03.01.2000"
 - "weiblich" / "female" / "w" → geschlecht="weiblich"
-- "Abitur 2018 Note 2,3" → hzb_type="Abitur", hzb_date="2018", hzb_grade="2.3"
+- "Abitur 2018 Note 2,3" → hzb_type="Allgemeine Hochschulreife", hzb_name="Abitur", hzb_date="2018", hzb_grade="2,3"
 - "Musterstraße 1, 50678 Köln" → street="Musterstraße 1", zip_code="50678", city="Köln"
 - "Informatik Bachelor WS 2024/25" → study_program="Informatik", degree_type="Bachelor", semester="WS 2024/25"
 

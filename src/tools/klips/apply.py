@@ -75,16 +75,16 @@ class KLIPS2ApplyInput(KLIPS2AuthenticatedInput):
     degree_type: str = Field(description="Art des Abschlusses (z.B. 'Bachelor', 'Master', 'Promotionsstudium')")
     study_program: str = Field(description="Name des Studiengangs (z.B. 'Rechtswissenschaften')")
     entry_semester: str = Field(default="1", description="Fachsemester (Standard: '1')")
-    study_form: Optional[str] = Field(default=None, description="Studienform (z.B. 'Erststudium', 'Zweitstudium'). Wenn leer, wird die erste verfügbare Option gewählt.")
+    study_form: str = Field(description="Studienform (z.B. 'Erststudium', 'Zweitstudium')")
     
     # Validation mode - if True, only validates input without submitting
     validate_only: bool = Field(default=False, description="Wenn True, wird nur die Eingabe validiert ohne die Bewerbung durchzuführen")
     
     # Personal Data Fields
-    birth_place: Optional[str] = Field(default=None, description="Geburtsort (falls nicht vorausgefüllt)")
+    birth_place: str = Field(description="Geburtsort")
     birth_country: Optional[str] = Field(default="Deutschland", description="Geburtsland")
-    nationality: Optional[str] = Field(default="Deutschland", description="Staatsangehörigkeit")
-    gender: Optional[str] = Field(default=None, description="Geschlecht (z.B. 'Männlich', 'Weiblich', 'Divers')")
+    nationality: str = Field(description="Staatsangehörigkeit")
+    gender: str = Field(description="Geschlecht (z.B. 'männlich', 'weiblich', 'divers')")
 
     # Address Fields
     street: Optional[str] = Field(default=None, description="Straße und Hausnummer")
@@ -94,13 +94,13 @@ class KLIPS2ApplyInput(KLIPS2AuthenticatedInput):
     phone: Optional[str] = Field(default=None, description="Telefonnummer")
 
     # HZB Fields
-    hzb_date: Optional[str] = Field(default=None, description="Datum der HZB (TT.MM.JJJJ)")
-    hzb_type: Optional[str] = Field(default=None, description="Art der HZB (z.B. 'Allgemeine Hochschulreife')")
+    hzb_date: str = Field(description="Datum der HZB (TT.MM.JJJJ)")
+    hzb_type: str = Field(description="Art der HZB (z.B. 'Allgemeine Hochschulreife', 'Fachhochschulreife')")
     hzb_name: Optional[str] = Field(default="Abitur", description="Bezeichnung des Zeugnisses")
-    hzb_grade: Optional[str] = Field(default=None, description="Note der HZB (z.B. '2,3')")
+    hzb_grade: str = Field(description="Note der HZB (z.B. '2,3' oder '2.3')")
     hzb_school: Optional[str] = Field(default="Gymnasium", description="Name der Schule")
     hzb_country: Optional[str] = Field(default="Deutschland", description="Land der HZB")
-    hzb_place: Optional[str] = Field(default=None, description="Ort/Kreis der HZB")
+    hzb_place: str = Field(description="Ort/Kreis der HZB")
 
     # Vorbildung Fields (only needed for Zweitstudium)
     prev_uni: Optional[str] = Field(default=None, description="Name der vorherigen Hochschule (nur bei Zweitstudium)")
@@ -118,24 +118,29 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
     Erfordert Login-Daten.
     Navigiert durch den Bewerbungs-Wizard und füllt die Studiendaten aus.
     
+    PFLICHTFELDER: username, password, semester, degree_type, study_program,
+    study_form (Erststudium/Zweitstudium), gender, birth_place, nationality,
+    hzb_date, hzb_type, hzb_grade, hzb_place.
+    Bei Zweitstudium zusätzlich: prev_uni, prev_program, prev_semesters.
+    
     WICHTIG: Das Tool kann im validate_only=True Modus aufgerufen werden,
     um die Eingaben vorab zu prüfen und fehlende Felder zu identifizieren.
     
-    Beispiel:
+    Beispiel (vollständig):
     klips2_apply_study(
+        username="max@uni-koeln.de",
+        password="Geheim123",
         semester="Wintersemester 2024/25",
         degree_type="Bachelor",
         study_program="Betriebswirtschaftslehre",
-        entry_semester="1",
-        study_form="Erststudium"
-    )
-    
-    Für Vorvalidierung:
-    klips2_apply_study(
-        semester="Wintersemester 2024/25",
-        degree_type="Master",
-        study_program="Informatik",
-        validate_only=True
+        study_form="Erststudium",
+        gender="männlich",
+        birth_place="Köln",
+        nationality="deutsch",
+        hzb_date="15.06.2018",
+        hzb_type="Allgemeine Hochschulreife",
+        hzb_grade="2,3",
+        hzb_place="Köln"
     )
     """
     args_schema: Type[BaseModel] = KLIPS2ApplyInput
@@ -150,7 +155,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
         # Required fields - without these we cannot proceed
         required_fields = {
             'semester': 'Semester für die Bewerbung (z.B. "Wintersemester 2025/26")',
-            'degree_type': 'Art des Abschlusses (z.B. "Bachelor", "Master")',
+            'degree_type': 'Art des Abschlusses (z.B. "Bachelor", "Master", "Promotionsstudium")',
             'study_program': 'Name des Studiengangs (z.B. "Informatik", "Rechtswissenschaften")',
         }
         
@@ -166,34 +171,33 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             status.missing_required.append("username: KLIPS Benutzername (oder KLIPS_USERNAME Umgebungsvariable)")
         if not password:
             status.missing_required.append("password: KLIPS Passwort (oder KLIPS_PASSWORD Umgebungsvariable)")
+        if not kwargs.get('nationality'):
+            status.missing_required.append("nationality: Staatsangehörigkeit")
         
         # Determine if Zweitstudium-specific fields are needed
         study_form = kwargs.get('study_form', '').lower() if kwargs.get('study_form') else ''
         is_zweitstudium = 'zweitstudium' in study_form
         
-        # Check if study_form is provided - this is important for KLIPS!
+        # study_form is REQUIRED (Erststudium/Zweitstudium) - matches Pydantic schema
         if not kwargs.get('study_form'):
-            status.missing_optional.append("study_form: Studienform (WICHTIG - z.B. 'Erststudium' oder 'Zweitstudium')")
+            status.missing_required.append("study_form: Studienform (z.B. 'Erststudium' oder 'Zweitstudium')")
         
-        # IMPORTANT: These fields are marked as "recommended" but KLIPS will likely require them!
-        # The tool can start without them, but the application may fail or be incomplete.
-        
-        # Fields that KLIPS typically requires (will be filled from profile if available)
-        important_fields = {
-            'birth_place': 'Geburtsort (WICHTIG - wird von KLIPS benötigt)',
-            'gender': 'Geschlecht (WICHTIG - wird von KLIPS benötigt)',
-            'street': 'Straße und Hausnummer (WICHTIG für Korrespondenzadresse)',
-            'zip_code': 'Postleitzahl (WICHTIG für Korrespondenzadresse)',
-            'city': 'Stadt/Ort (WICHTIG für Korrespondenzadresse)',
+        # Personal data fields - REQUIRED by Pydantic schema
+        personal_required_fields = {
+            'birth_place': 'Geburtsort',
+            'gender': 'Geschlecht (z.B. "Männlich", "Weiblich", "Divers")',
         }
         
-        for field, description in important_fields.items():
+        for field, description in personal_required_fields.items():
             value = kwargs.get(field)
             if not value:
-                status.missing_optional.append(f"{field}: {description}")
+                status.missing_required.append(f"{field}: {description}")
         
-        # Less critical optional fields
+        # Truly optional fields
         optional_fields = {
+            'street': 'Straße und Hausnummer',
+            'zip_code': 'Postleitzahl',
+            'city': 'Stadt/Ort',
             'phone': 'Telefonnummer',
         }
         
@@ -202,32 +206,38 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             if not value:
                 status.missing_optional.append(f"{field}: {description}")
         
-        # HZB fields - these are REQUIRED for new applications in KLIPS
+        # HZB fields - REQUIRED by Pydantic schema
         hzb_fields = {
-            'hzb_date': 'Datum der Hochschulzugangsberechtigung (WICHTIG - TT.MM.JJJJ)',
-            'hzb_type': 'Art der HZB (WICHTIG - z.B. "Allgemeine Hochschulreife")',
-            'hzb_grade': 'Note der HZB (WICHTIG - z.B. "2,3")',
+            'hzb_date': 'Datum der Hochschulzugangsberechtigung (TT.MM.JJJJ)',
+            'hzb_type': 'Art der HZB (z.B. "Allgemeine Hochschulreife", "Fachhochschulreife")',
+            'hzb_grade': 'Note der HZB (z.B. "2,3")',
             'hzb_place': 'Ort/Kreis der HZB',
         }
         
         for field, description in hzb_fields.items():
             value = kwargs.get(field)
             if not value:
-                status.missing_optional.append(f"{field}: {description}")
+                status.missing_required.append(f"{field}: {description}")
         
-        # Zweitstudium-specific fields
+        # Zweitstudium-specific fields - conditionally required
         if is_zweitstudium:
             zweitstudium_fields = {
-                'prev_uni': 'Name der vorherigen Hochschule',
-                'prev_program': 'Vorheriger Studiengang',
-                'prev_degree': 'Erreichter/Angestrebter Abschluss',
-                'prev_semesters': 'Anzahl der Semester',
+                'prev_uni': 'Name der vorherigen Hochschule (Pflicht bei Zweitstudium)',
+                'prev_program': 'Vorheriger Studiengang (Pflicht bei Zweitstudium)',
+                'prev_semesters': 'Anzahl der Semester (Pflicht bei Zweitstudium)',
+            }
+            zweitstudium_optional = {
+                'prev_degree': 'Erreichter/Angestrebter Abschluss (optional bei Zweitstudium)',
             }
             
             for field, description in zweitstudium_fields.items():
                 value = kwargs.get(field)
                 if not value:
-                    status.missing_optional.append(f"{field}: {description} (wichtig für Zweitstudium!)")
+                    status.missing_required.append(f"{field}: {description}")
+            for field, description in zweitstudium_optional.items():
+                value = kwargs.get(field)
+                if not value:
+                    status.missing_optional.append(f"{field}: {description}")
         
         return status
 
@@ -251,63 +261,16 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
             response_parts.append(f"  • Semester: {semester}")
         response_parts.append("")
         
-        # Separate IMPORTANT (KLIPS-required) fields from truly optional ones
+        # Optional fields (address, etc.)
         if status.missing_optional:
-            # Split into KLIPS-required (WICHTIG) and truly optional fields
-            wichtig_fields = [f for f in status.missing_optional if 'WICHTIG' in f]
-            optional_fields = [f for f in status.missing_optional if 'WICHTIG' not in f]
-            
-            if wichtig_fields:
-                response_parts.append("🔴 **WICHTIGE Felder die KLIPS wahrscheinlich benötigt:**")
-                
-                # Group by category for better readability
-                personal = [f for f in wichtig_fields if any(x in f for x in ['birth_place', 'gender'])]
-                address = [f for f in wichtig_fields if any(x in f for x in ['street', 'zip_code', 'city'])]
-                hzb = [f for f in wichtig_fields if f.startswith('hzb_')]
-                
-                if personal:
-                    response_parts.append("  **Persönliche Daten:**")
-                    for f in personal:
-                        # Clean up the display
-                        field_desc = f.split(':')[1].strip() if ':' in f else f
-                        response_parts.append(f"    - {field_desc}")
-                
-                if address:
-                    response_parts.append("  **Korrespondenzadresse:**")
-                    for f in address:
-                        field_desc = f.split(':')[1].strip() if ':' in f else f
-                        response_parts.append(f"    - {field_desc}")
-                
-                if hzb:
-                    response_parts.append("  **Hochschulzugangsberechtigung (HZB):**")
-                    for f in hzb:
-                        field_desc = f.split(':')[1].strip() if ':' in f else f
-                        response_parts.append(f"    - {field_desc}")
-                
-                response_parts.append("")
-            
-            if optional_fields:
-                response_parts.append("ℹ️ **Optionale Felder:**")
-                for f in optional_fields:
-                    field_desc = f.split(':')[1].strip() if ':' in f else f
-                    response_parts.append(f"  - {field_desc}")
-                response_parts.append("")
-        
-        # Decision logic based on both required AND important fields
-        has_important_missing = any('WICHTIG' in f for f in status.missing_optional)
-        
-        if not status.missing_required and not has_important_missing:
-            response_parts.append("✅ **Alle wichtigen Felder sind vorhanden - Bewerbung kann gestartet werden.**")
-        elif not status.missing_required and has_important_missing:
-            response_parts.append("⚠️ **Das Tool kann starten, aber WICHTIGE Felder fehlen!**")
-            response_parts.append("Die Bewerbung wird wahrscheinlich unvollständig sein oder von KLIPS abgelehnt werden.")
+            response_parts.append("ℹ️ **Optionale Felder:**")
+            for f in status.missing_optional:
+                field_desc = f.split(':')[1].strip() if ':' in f else f
+                response_parts.append(f"  - {field_desc}")
             response_parts.append("")
-            response_parts.append("🔵 **Bitte ergänzen Sie mindestens:**")
-            response_parts.append("  - Ihre Adresse (Straße, PLZ, Ort)")
-            response_parts.append("  - Ihren Geburtsort")
-            response_parts.append("  - Ihre HZB-Daten (Datum, Art, Note)")
-            response_parts.append("")
-            response_parts.append("💡 Möchten Sie diese Daten jetzt ergänzen?")
+        
+        if not status.missing_required:
+            response_parts.append("✅ **Alle Pflichtfelder vorhanden - Bewerbung kann gestartet werden.**")
         else:
             response_parts.append("❌ **Pflichtfelder fehlen - Bewerbung kann nicht gestartet werden.**")
             response_parts.append("💡 Bitte ergänzen Sie die fehlenden Pflichtfelder und versuchen Sie es erneut.")
@@ -1144,7 +1107,7 @@ class KLIPS2ApplyTool(KLIPS2BaseTool):
              username: Optional[str] = None, password: Optional[str] = None,
              entry_semester: str = "1", study_form: Optional[str] = None,
              birth_place: Optional[str] = None, birth_country: Optional[str] = "Deutschland", 
-             nationality: Optional[str] = "Deutschland", gender: Optional[str] = None,
+             nationality: Optional[str] = None, gender: Optional[str] = None,
              street: Optional[str] = None, zip_code: Optional[str] = None, 
              city: Optional[str] = None, country: Optional[str] = "Deutschland", phone: Optional[str] = None,
              hzb_date: Optional[str] = None, hzb_type: Optional[str] = None, 
