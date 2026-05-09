@@ -112,6 +112,7 @@ class KlipsAgent(BaseSpecializedAgent):
 
 ✅ Wenn der Nutzer ALLE Pflichtparameter nennt → SOFORT Tool aufrufen!
 ❌ Nur wenn PFLICHTPARAMETER fehlen → Konkret nachfragen welche
+❌ Wenn der Nutzer abbricht ("nein", "abbrechen", "stop", "cancel", "nicht mehr", "vergiss es") → KEIN Tool aufrufen, nur antworten
 
 **WICHTIG:**
 - Prüfe für jedes Tool ob ALLE Pflichtparameter vorhanden sind

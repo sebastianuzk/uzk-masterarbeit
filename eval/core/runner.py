@@ -1012,7 +1012,7 @@ def run_single_scenario(agent, scenario: EvaluationScenario, enable_trace: bool 
     Args:
         agent: Der zu testende Agent (ReactAgent, MultiAgentSystem, etc.)
         scenario: Das auszuführende Szenario
-        enable_trace: Wenn True, wird Conversation-Trace aufgezeichnet (nur für Constrained Agent)
+        enable_trace: Wenn True, wird Conversation-Trace aufgezeichnet (für Agenten die es unterstützen)
     
     Returns:
         ScenarioResult mit allen Metriken

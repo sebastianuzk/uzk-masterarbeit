@@ -344,3 +344,4 @@ $RECYCLE.BIN/
 *_old
 eval/ragas/data/responses_checkpoint.pkl
 eval/ragas/data/responses_checkpoint.pkl
+eval/ragas_eval/data/responses_checkpoint_single.pkl

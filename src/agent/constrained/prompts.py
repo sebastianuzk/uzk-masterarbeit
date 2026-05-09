@@ -95,13 +95,14 @@ Signalwörter für Multi-Tool:
 ## WANN EIN TOOL AUFRUFEN?
 
 ✅ Tool aufrufen bei: {tool_categories_text}
-❌ KEIN Tool bei: Begrüßungen, Fragen über dich, Rechenaufgaben, allgemeine Fragen
+❌ KEIN Tool bei: Begrüßungen, Fragen über dich, Rechenaufgaben, allgemeine Fragen, Abbruch/Ablehnung durch den Nutzer ("nein", "abbrechen", "stop", "cancel")
 
 ## REGELN
 
 1. Wenn Tool passend UND alle Pflichtdaten vorhanden → Tool aufrufen
 2. Wenn Tool passend ABER Daten fehlen → Nachfragen (KEIN Tool-Aufruf)
 3. Wenn KEIN Tool passend → Direkt antworten
+4. Wenn Nutzer abbricht oder ablehnt → KEIN Tool aufrufen, nur antworten
 
 ## TOOLS (Pflichtparameter)
 {tools_section}

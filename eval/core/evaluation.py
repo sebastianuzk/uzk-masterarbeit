@@ -69,7 +69,6 @@ class GoldStandard:
         forbidden_tools: Set von Tool-Namen, die NICHT aufgerufen werden dürfen
         optional_tools: Set von Tools, die aufgerufen werden können, aber nicht müssen
         ordered: Ob die erforderlichen Tools in exakter Reihenfolge aufgerufen werden müssen
-        allow_extra_tools: Ob zusätzliche (nicht verbotene) Tools erlaubt sind
         argument_match_mode: Wie strikt Argumentwerte abgeglichen werden
     """
     required_tools: List[str]
@@ -77,7 +76,6 @@ class GoldStandard:
     forbidden_tools: Set[str] = field(default_factory=set)
     optional_tools: Set[str] = field(default_factory=set)
     ordered: bool = False
-    allow_extra_tools: bool = True
     argument_match_mode: ArgumentMatchMode = ArgumentMatchMode.NORMALIZED
 
     def __post_init__(self):
@@ -276,28 +274,99 @@ def _values_match(expected: Any, actual: Any, mode: ArgumentMatchMode) -> bool:
         if _normalize_decimal(exp_str) == _normalize_decimal(act_str):
             return True
 
+        # Lower-cased forms used by all remaining checks
+        exp_lower = exp_str.strip().lower()
+        act_lower = act_str.strip().lower()
+
+        # Gender equivalence: English/German forms
+        _GENDER_VARIANTS = {
+            "m": {"male", "männlich", "mann", "m"},
+            "f": {"female", "weiblich", "frau", "f", "w"},
+            "d": {"diverse", "divers", "d"},
+        }
+        for variants in _GENDER_VARIANTS.values():
+            if exp_lower in variants and act_lower in variants:
+                return True
+
         # Language name equivalence: English/Englisch, German/Deutsch
         _LANGUAGE_VARIANTS = {
             "english": {"english", "englisch"},
             "deutsch": {"deutsch", "german"},
         }
-        exp_lower = exp_str.strip().lower()
-        act_lower = act_str.strip().lower()
         for variants in _LANGUAGE_VARIANTS.values():
             if exp_lower in variants and act_lower in variants:
                 return True
 
         # Nationality equivalence: adjective form ↔ country name
         # e.g. "deutsch" / "Deutschland" / "german" / "Germany"
+        # Also strip "Staatsangehörigkeit" suffix: "ägyptische Staatsangehörigkeit" → "ägyptische"
+        def _strip_nationality_suffix(s: str) -> str:
+            return re.sub(
+                r'\s+(staatsangehörigkeit|staatsbürger(?:in)?|citizen|bürger|national)$',
+                '', s, flags=re.IGNORECASE
+            ).strip()
+
+        exp_nat = _strip_nationality_suffix(exp_lower)
+        act_nat = _strip_nationality_suffix(act_lower)
+
         _NATIONALITY_VARIANTS = {
-            "de": {"deutsch", "deutsche", "deutschen", "deutschland", "german", "germany"},
-            "at": {"österreichisch", "österreich", "oesterreich", "austrian", "austria"},
+            "de": {"deutsch", "deutsche", "deutscher", "deutschen", "deutsches", "deutschland", "german", "germany"},
+            "at": {"österreichisch", "österreichische", "österreich", "oesterreich", "austrian", "austria"},
             "ch": {"schweizerisch", "schweizer", "schweiz", "swiss", "switzerland"},
-            "us": {"amerikanisch", "usa", "united states", "american"},
-            "gb": {"britisch", "großbritannien", "british", "great britain", "uk"},
-            "fr": {"französisch", "frankreich", "french", "france"},
+            "us": {"amerikanisch", "amerikanische", "usa", "united states", "american"},
+            "gb": {
+                "britisch", "britische", "britischer", "british",
+                "großbritannien", "uk", "united kingdom",
+                "vereinigtes königreich", "vereinigtes königreich (uk)",
+            },
+            "fr": {"französisch", "französische", "frankreich", "french", "france"},
+            "eg": {
+                "ägyptisch", "ägyptische", "ägyptischer", "egyptian",
+                "ägypten", "egypt", "egyptisch", "egyptische",
+            },
         }
         for variants in _NATIONALITY_VARIANTS.values():
+            if exp_nat in variants and act_nat in variants:
+                return True
+            # also try original (non-stripped) forms
+            if exp_lower in variants and act_lower in variants:
+                return True
+
+        # City / place name translations (EN ↔ DE)
+        _CITY_VARIANTS = {
+            "cairo":   {"cairo", "kairo"},
+            "cologne": {"cologne", "köln"},
+            "munich":  {"munich", "münchen"},
+            "vienna":  {"vienna", "wien"},
+            "rome":    {"rome", "rom"},
+            "prague":  {"prague", "prag"},
+            "warsaw":  {"warsaw", "warschau"},
+            "beijing": {"beijing", "peking"},
+            "moscow":  {"moscow", "moskau"},
+        }
+        for variants in _CITY_VARIANTS.values():
+            if exp_lower in variants and act_lower in variants:
+                return True
+
+        # Country name translations (EN ↔ DE), separate from nationality adjectives
+        _COUNTRY_NAME_VARIANTS = {
+            "de": {"deutschland", "germany"},
+            "at": {"österreich", "austria"},
+            "ch": {"schweiz", "switzerland"},
+            "us": {"usa", "united states", "vereinigte staaten"},
+            "gb": {"großbritannien", "uk", "united kingdom"},
+            "fr": {"frankreich", "france"},
+            "eg": {"ägypten", "egypt"},
+            "cn": {"china"},
+            "jp": {"japan"},
+            "in": {"indien", "india"},
+            "ru": {"russland", "russia"},
+            "tr": {"türkei", "turkey"},
+            "it": {"italien", "italy"},
+            "es": {"spanien", "spain"},
+            "pl": {"polen", "poland"},
+        }
+        for variants in _COUNTRY_NAME_VARIANTS.values():
             if exp_lower in variants and act_lower in variants:
                 return True
 
@@ -311,10 +380,17 @@ def _values_match(expected: Any, actual: Any, mode: ArgumentMatchMode) -> bool:
             if exp_lower in variants and act_lower in variants:
                 return True
 
-        # Study program abbreviation equivalence
-        # e.g. "BWL" == "Betriebswirtschaftslehre"
+        # Study program abbreviation / translation equivalence
         _PROGRAM_VARIANTS = {
-            "bwl": {"bwl", "betriebswirtschaftslehre", "betriebswirtschaft"},
+            "bwl":  {"bwl", "betriebswirtschaftslehre", "betriebswirtschaft", "business administration"},
+            "cs":   {"computer science", "informatik", "computerwissenschaften"},
+            "winfo": {"wirtschaftsinformatik", "business informatics", "business information systems"},
+            "mathe": {"mathematik", "mathematics", "math"},
+            "physik": {"physik", "physics"},
+            "bio":   {"biologie", "biology"},
+            "chem":  {"chemie", "chemistry"},
+            "vwl":   {"vwl", "volkswirtschaftslehre", "volkswirtschaft", "economics"},
+            "jura":  {"jura", "rechtswissenschaft", "rechtswissenschaften", "law"},
         }
         for variants in _PROGRAM_VARIANTS.values():
             if exp_lower in variants and act_lower in variants:
@@ -451,15 +527,14 @@ def evaluate_tool_run(
                         f"expected '{expected_value}', got '{actual_value}'"
                     )
     
-    # --- Check 6: Extra tools (informational, not necessarily failure) ---
+    # --- Check 6: Extra tools (always a failure) ---
     all_known = required_set | gold_standard.optional_tools | gold_standard.forbidden_tools
     extra = called_tools_set - all_known
     if extra:
         result.extra_tools = list(extra)
-        if not gold_standard.allow_extra_tools:
-            result.success = False
-            for tool in extra:
-                result.failure_reasons.append(f"Unexpected tool '{tool}' was called")
+        result.success = False
+        for tool in extra:
+            result.failure_reasons.append(f"Unexpected tool '{tool}' was called")
     
     return result
 

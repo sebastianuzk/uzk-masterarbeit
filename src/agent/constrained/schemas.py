@@ -62,7 +62,7 @@ class RegisterToolCall(BaseModel):
     geburtsname: Optional[str] = Field(default=None, description="Geburtsname falls abweichend")
     sprache: str = Field(default="Deutsch", description="Deutsch oder Englisch")
 
-    @field_validator('vorname', 'nachname')
+    @field_validator('vorname', 'nachname', 'staatsangehoerigkeit')
     @classmethod
     def validate_not_empty(cls, v, info):
         """Verhindere leere Strings für kritische Felder."""
@@ -73,6 +73,8 @@ class RegisterToolCall(BaseModel):
     @field_validator('geburtsdatum')
     @classmethod
     def validate_date(cls, v):
+        if not v or not v.strip():
+            raise ValueError("geburtsdatum darf nicht leer sein")
         v = v.strip()
         patterns = [
             (r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$', '{:02d}.{:02d}.{}'),
@@ -139,10 +141,14 @@ class ApplyToolCall(BaseModel):
     prev_degree: Optional[str] = Field(default=None, description="Angestrebter/erreichter Abschluss (optional bei Zweitstudium)")
     prev_semesters: Optional[str] = Field(default=None, description="Anzahl Semester an vorheriger Hochschule (PFLICHT bei Zweitstudium)")
 
-    @field_validator('username', 'password', 'nationality')
+    @field_validator(
+        'username', 'password', 'nationality',
+        'study_program', 'semester', 'degree_type', 'birth_place',
+        'hzb_date', 'hzb_type', 'hzb_grade', 'hzb_place',
+    )
     @classmethod
     def validate_not_empty(cls, v, info):
-        """Verhindere leere Strings für kritische Felder."""
+        """Verhindere leere Strings für Pflichtfelder."""
         if not v or not v.strip():
             raise ValueError(f"{info.field_name} darf nicht leer sein")
         return v.strip()
@@ -150,6 +156,8 @@ class ApplyToolCall(BaseModel):
     @field_validator('gender')
     @classmethod
     def normalize_gender(cls, v):
+        if not v or not v.strip():
+            raise ValueError("gender darf nicht leer sein")
         v_lower = v.lower().strip()
         if v_lower in ('m', 'male', 'männlich', 'mann'):
             return 'männlich'
@@ -157,6 +165,14 @@ class ApplyToolCall(BaseModel):
             return 'weiblich'
         if v_lower in ('d', 'diverse', 'divers'):
             return 'divers'
+        return v.strip()
+
+    @field_validator('street', 'zip_code', 'city', 'country', mode='before')
+    @classmethod
+    def coerce_empty_address_to_none(cls, v):
+        """Konvertiere leere Strings für optionale Adressfelder zu None."""
+        if isinstance(v, str) and not v.strip():
+            return None
         return v
 
     @field_validator('study_form')
@@ -181,10 +197,10 @@ class ChangeAddressToolCall(BaseModel):
     city: str = Field(description="Stadt")
     country: str = Field(default="Deutschland", description="Land")
 
-    @field_validator('username', 'password')
+    @field_validator('username', 'password', 'street', 'city', 'country')
     @classmethod
     def validate_not_empty(cls, v, info):
-        """Verhindere leere Strings für Zugangsdaten."""
+        """Verhindere leere Strings für Pflichtfelder."""
         if not v or not v.strip():
             raise ValueError(f"{info.field_name} darf nicht leer sein")
         return v.strip()
@@ -208,12 +224,21 @@ class ChangePasswordToolCall(BaseModel):
     password: str = Field(description="Aktuelles Passwort")
     new_password: str = Field(description="Neues Passwort")
 
-    @field_validator('username', 'password', 'new_password')
+    @field_validator('password', 'new_password')
     @classmethod
     def validate_not_empty(cls, v, info):
-        """Verhindere leere Strings für Zugangsdaten."""
+        """Verhindere leere Strings für Passwörter."""
         if not v or not v.strip():
             raise ValueError(f"{info.field_name} darf nicht leer sein")
+        return v.strip()
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v):
+        if not v or not v.strip():
+            raise ValueError("username darf nicht leer sein")
+        if '@' not in v:
+            raise ValueError("username muss eine KLIPS2-E-Mail-Adresse sein (enthält @)")
         return v.strip()
 
 
@@ -221,6 +246,19 @@ class CourseDetailsToolCall(BaseModel):
     """Schema für klips2_get_course_details Tool-Aufruf."""
     course_id: str = Field(description="Kursnummer")
     semester: Optional[str] = Field(default=None, description="Semester")
+
+    @field_validator('course_id')
+    @classmethod
+    def validate_course_id(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("course_id darf nicht leer sein")
+        # Must look like an ID (contains at least one digit) — not a course name
+        if not any(c.isdigit() for c in v):
+            raise ValueError(
+                f"course_id muss eine numerische Kurs-ID sein, kein Kursname: '{v}'"
+            )
+        return v
 
 
 class SearchToolCall(BaseModel):
@@ -245,6 +283,13 @@ class EmailToolCall(BaseModel):
     """Schema für send_email Tool-Aufruf."""
     subject: str = Field(description="Betreff der E-Mail")
     body: str = Field(description="Nachrichteninhalt")
+
+    @field_validator('subject', 'body')
+    @classmethod
+    def validate_not_empty(cls, v, info):
+        if not v or not v.strip():
+            raise ValueError(f"{info.field_name} darf nicht leer sein")
+        return v.strip()
 
 
 class DirectResponse(BaseModel):

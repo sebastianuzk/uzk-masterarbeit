@@ -248,7 +248,7 @@ class ConfirmationAgent:
         """
         spec = TOOL_SPECS.get(tool_name, {})
         tool_description = spec.get("description", tool_name)
-        
+
         # Formatiere Argumente für LLM-Bewertung
         args_formatted = json.dumps(args, indent=2, ensure_ascii=False)
         
@@ -457,6 +457,7 @@ Sei STRENG bei Pflichtfeldern und Halluzinations-Prüfung, FAIR bei Formaten."""
 - **VAGE Anfragen**: "irgendwann", "irgendwie", "irgendwelche", "vielleicht", "würde gerne"
 - **Reine FRAGEN** ohne Handlungsabsicht: "Kann man..?", "Ist es möglich..?"
 - **UNVOLLSTÄNDIGE Daten**: Wenn Pflichtfelder fehlen → FRAGE NACH, rufe KEIN Tool auf
+- **ABBRUCH/ABLEHNUNG**: Wenn der Nutzer abbricht ("nein", "abbrechen", "stop", "cancel", "nicht mehr", "vergiss es") → KEIN Tool aufrufen, nur antworten
 
 ## DEINE BESONDERHEIT: INTERNE VALIDIERUNG
 
@@ -776,6 +777,7 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                 
                 # Tool-Calls extrahieren
                 current_tool_calls = []
+                rejection_tool_messages = []  # ToolMessages für abgelehnte Calls
                 has_rejection = False
                 
                 if hasattr(response, 'tool_calls') and response.tool_calls:
@@ -786,7 +788,9 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                         
                         # Wenn kritisches Tool: Validierung durchführen
                         if tool_name in CRITICAL_TOOL_NAMES:
-                            validation_result = self._validate_tool_call(tool_name, tool_args)
+                            validation_result = self._validate_tool_call(
+                                tool_name, tool_args, user_message=message
+                            )
                             
                             # Tracking (wie bei echtem Aufruf)
                             self.confirmation_count += 1
@@ -819,7 +823,7 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                                         "validation_error": validation_result["reason"],
                                     })
                                 
-                                # Fehlermeldung für Retry
+                                # Fehlermeldung für Retry sammeln
                                 error_message = (
                                     f"⚠️ Validierung fehlgeschlagen für {TOOL_SPECS.get(tool_name, {}).get('description', tool_name)}:\n"
                                     f"{validation_result['reason']}\n\n"
@@ -835,9 +839,8 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                                     "validation_reason": validation_result["reason"]
                                 })
                                 
-                                # Füge Fehlermeldung als Tool-Response hinzu für nächste Iteration
-                                messages.append(response)
-                                messages.append(ToolMessage(
+                                # ToolMessage für diesen abgelehnten Call sammeln
+                                rejection_tool_messages.append(ToolMessage(
                                     content=error_message,
                                     tool_call_id=tool_call_id
                                 ))
@@ -856,6 +859,11 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                                 "args": tool_args,
                                 "id": tool_call_id
                             })
+                
+                # AI-Response und alle ToolMessages einmalig anhängen (nach der Schleife)
+                if rejection_tool_messages:
+                    messages.append(response)
+                    messages.extend(rejection_tool_messages)
                 
                 # Speichere Tool-Calls dieser Iteration
                 all_tool_calls.extend(current_tool_calls)

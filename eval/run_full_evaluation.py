@@ -47,6 +47,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config.logging_config import get_logger, setup_logging
 from config.settings import settings
 from eval.utils.formatting import format_duration
+from eval.utils.trace_output import print_scenario_outcome, print_agent_trace
 
 logger = get_logger(__name__)
 
@@ -856,7 +857,7 @@ def run_tool_evaluation(
         output_dir: Ausgabeverzeichnis
         limit: Optionale Begrenzung der Test-Szenarien
         test_ids: Optionale Liste spezifischer Test-IDs (short_ids)
-        enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
+        enable_trace: Aktiviere Conversation-Trace-Logging (für alle Agenten die es unterstützen)
         provider: LLM-Provider ('ollama' oder 'openai')
         resume: Wenn True, versuche von Checkpoint fortzusetzen; wenn False, starte neu
     
@@ -930,7 +931,7 @@ def run_tool_evaluation(
     
     # Szenarien durchführen
     print(f"\n🚀 Starte Evaluation ({len(scenarios)} Szenarien)...")
-    if enable_trace and agent_type == "constrained":
+    if enable_trace:
         print("   📝 Conversation-Trace-Logging aktiviert")
     print("-" * 80)
     
@@ -986,7 +987,7 @@ def run_tool_evaluation(
             result = run_single_scenario(agent, scenario, enable_trace=enable_trace)
             results.append(result)
             completed_scenario_ids.add(scenario.short_id)
-            
+
             status = "✓" if result.exact_match else "✗"
             print(f"{status} (F1={result.tool_f1:.2f}, {result.latency_ms:.0f}ms)", end="")
 
@@ -1005,7 +1006,14 @@ def run_tool_evaluation(
             with open(checkpoint_path, 'wb') as f:
                 pickle.dump(checkpoint_data, f)
             print(f" 💾")
-            
+
+            # Per-scenario outcome summary (always shown)
+            print_scenario_outcome(result)
+
+            # Inline trace output — coloured, same format as test_eval_live.py
+            if enable_trace:
+                print_agent_trace(agent)
+
         except Exception as e:
             print(f"ERROR: {str(e)[:50]}")
     
@@ -1041,12 +1049,6 @@ def run_tool_evaluation(
     
     # Speichere mit save_report
     save_report(report, str(output_dir))
-    
-    # Speichere Conversation-Trace falls aktiviert (nur für Constrained Agent)
-    if enable_trace and agent_type == "constrained" and hasattr(agent, 'save_conversation_trace'):
-        trace_file = output_dir / "conversation_trace.json"
-        agent.save_conversation_trace(str(trace_file))
-        print(f"\n   📝 Conversation-Trace gespeichert: {trace_file}")
     
     # Metriken aus dem Report extrahieren
     exact_match_count = int(metrics.exact_match_rate * metrics.total_scenarios)
@@ -1291,7 +1293,7 @@ def run_full_evaluation(
         tool_limit: Optionale Begrenzung für Tool-Szenarien
         output_dir: Optionales Ausgabeverzeichnis (wenn None, wird neuer Timestamp erstellt)
         test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
-        enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
+        enable_trace: Aktiviere Conversation-Trace-Logging (für alle Agenten die es unterstützen)
         provider: LLM-Provider ('ollama' oder 'openai', wenn None wird automatisch ermittelt)
         ragas_judge_provider: RAGAS Judge Provider ('openai' oder 'ollama')
         ragas_judge_model: RAGAS Judge Modell
@@ -1486,7 +1488,7 @@ def run_all_agents_evaluation(
         tool_limit: Optionale Begrenzung für Tool-Szenarien
         agents: Liste von Agenten (default: alle aus AGENT_TYPES)
         test_ids: Optionale Liste spezifischer Test-IDs für Tool-Evaluation
-        enable_trace: Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)
+        enable_trace: Aktiviere Conversation-Trace-Logging (für alle Agenten die es unterstützen)
         provider: LLM-Provider ('ollama' oder 'openai', wenn None wird automatisch ermittelt)
         ragas_judge_provider: RAGAS Judge Provider
         ragas_judge_model: RAGAS Judge Modell
@@ -1681,7 +1683,7 @@ Beispiele:
     parser.add_argument(
         "--enable-trace",
         action="store_true",
-        help="Aktiviere Conversation-Trace-Logging (nur für Constrained Agent)"
+        help="Aktiviere Conversation-Trace-Logging (für alle Agenten die es unterstützen)"
     )
     
     parser.add_argument(

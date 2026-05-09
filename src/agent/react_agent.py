@@ -135,6 +135,7 @@ class ReactAgent:
 - Einfache Rechenaufgaben, Übersetzungen
 - Allgemeine Wissensfragen ohne Uni-Bezug
 - **UNVOLLSTÄNDIGE Daten**: Wenn Pflichtparameter fehlen → FRAGE NACH, rufe KEIN Tool auf
+- **ABBRUCH/ABLEHNUNG**: Wenn der Nutzer abbricht ("nein", "abbrechen", "stop", "cancel", "nicht mehr", "vergiss es") → KEIN Tool aufrufen, nur antworten
 
 ## PARAMETER-EXTRAKTION
 
