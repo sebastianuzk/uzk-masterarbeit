@@ -10,9 +10,12 @@ Evaluiert den Chatbot mit RAGAS-Framework:
 """
 
 import sys
+import os
+import pickle
+import tempfile
 import pandas as pd
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import time
 
 # Import RAGAS library FIRST (before adding project_root to avoid shadowing)
@@ -37,6 +40,80 @@ from config.settings import (
     settings
 )
 from src.agent.react_agent import create_react_agent
+
+
+def _save_checkpoint_atomic(checkpoint_path: Path, checkpoint_data: dict) -> None:
+    """Persist checkpoint atomically.
+
+    Writes to a temp file in the same directory, fsyncs, then os.replace()s
+    onto the target. Prevents partial/corrupted .pkl files if the process is
+    killed mid-write (Ctrl+C, OOM, container stop).
+    """
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=checkpoint_path.name + ".",
+        suffix=".tmp",
+        dir=str(checkpoint_path.parent),
+    )
+    try:
+        with os.fdopen(fd, "wb") as f:
+            pickle.dump(checkpoint_data, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, checkpoint_path)
+    except Exception:
+        # Best-effort cleanup of the temp file on failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _find_run_by_session_id(
+    langsmith_client: Client,
+    session_id: str,
+    max_attempts: int = 6,
+    initial_wait: float = 1.0,
+    list_limit: int = 30,
+) -> Optional[object]:
+    """Poll LangSmith for a root run whose metadata.session_id matches.
+
+    LangSmith trace ingestion is eventually consistent, so a single list_runs()
+    immediately after agent.chat() may miss the run. We poll with exponential
+    backoff (1s, 2s, 4s, ...) up to ``max_attempts`` times. Returns the matching
+    run, or None if no match was found within the budget.
+
+    The caller is responsible for any fallback behavior; this function does NOT
+    fall back to "some other recent run" because that would attribute contexts
+    to the wrong question and silently corrupt RAGAS metrics.
+    """
+    wait = initial_wait
+    for attempt in range(1, max_attempts + 1):
+        time.sleep(wait)
+        try:
+            recent_runs = list(langsmith_client.list_runs(
+                project_name=LANGSMITH_PROJECT,
+                is_root=True,
+                limit=list_limit,
+            ))
+        except Exception as e:
+            print(f"   ⚠️ LangSmith list_runs failed (attempt {attempt}/{max_attempts}): {e}")
+            wait = min(wait * 2, 16.0)
+            continue
+
+        for run in recent_runs:
+            run_name = str(run.name).lower() if run.name else ""
+            if "self_reflection" in run_name or "chatollama" in run_name:
+                continue
+            run_metadata = run.extra.get("metadata", {}) if run.extra else {}
+            if run_metadata.get("session_id") == session_id:
+                return run
+
+        # No match yet — back off and retry
+        wait = min(wait * 2, 16.0)
+
+    return None
 
 
 def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.DataFrame:
@@ -111,17 +188,21 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str, debug: bool = 
             if debug:
                 print(f"      ✅ DEBUG: {len(contexts)} Kontexte gefunden")
             return contexts  # Liste von Chunks zurückgeben
-        
+
         if debug:
             print(f"      ⚠️ DEBUG: Keine Kontexte gefunden")
-        return ["Kein RAG-Kontext gefunden"]  # Als Liste
-    
+        # WICHTIG: Leere Liste statt Platzhalter-String, damit RAGAS-Metriken NaN liefern
+        # und diese Zeilen in der Aggregation explizit ausgeschlossen werden können
+        # (siehe display_and_save_results / _metric_stats).
+        return []
+
     except Exception as e:
         print(f"      ⚠️ LangSmith-Fehler: {str(e)[:100]}")
         if debug:
             import traceback
             traceback.print_exc()
-        return ["LangSmith-Fehler"]  # Als Liste
+        # Leere Liste statt Fehler-String → Zeile wird in der Aggregation ausgeschlossen
+        return []
 
 
 def generate_chatbot_responses(
@@ -199,35 +280,34 @@ def generate_chatbot_responses(
         print(f"   Starte frisch...\n")
     
     # Retry-Questions verarbeiten: Fragen wiederholen während bestehender Progress beibehalten wird
+    #
+    # WICHTIG (B1/B2-Fix): retry_questions wird AUSSCHLIESSLICH auf einen vollständigen
+    # Checkpoint angewendet (len(samples) == len(df)). Ein gemischter Modus
+    # "retry + Fortsetzung des Tails" führte zu falscher Index-Ausrichtung
+    # zwischen samples und test_df (Antworten landeten an falschen Positionen).
+    #
+    # Workflow:
+    #   1. Erst eval normal zu Ende laufen lassen (alle Fragen beantwortet).
+    #   2. Dann mit retry_questions=[...] gezielt einzelne Fragen überschreiben.
     questions_to_process = set()
-    
+
     if retry_questions:
         # Konvertiere 1-basierte Indizes zu 0-basierten
         retry_indices = {q - 1 for q in retry_questions if 0 <= q - 1 < len(df)}
-        
-        if retry_indices:
+
+        if not retry_indices:
+            print("⚠️  retry_questions enthielt keine gültigen Indizes → nichts zu tun.")
+        else:
+            if len(samples) != len(df):
+                raise ValueError(
+                    f"retry_questions benötigt einen vollständigen Checkpoint "
+                    f"(len(samples)={len(samples)}, len(df)={len(df)}). "
+                    f"Bitte zuerst die Evaluation ohne retry_questions vollständig durchlaufen lassen, "
+                    f"dann gezielt Fragen mit retry_questions wiederholen."
+                )
             print(f"\n🔄 Wiederhole {len(retry_indices)} Fragen: {sorted(q + 1 for q in retry_indices)}\n")
             questions_to_process = retry_indices
-            
-            # Wenn Samples vorhanden: Entferne alte Antworten für diese Fragen
-            if samples:
-                # Erstelle Mapping von Index zu Sample für alle vorhandenen Samples
-                # WICHTIG: Wir müssen herausfinden, welche Fragen schon beantwortet sind
-                # Die samples Liste hat len(samples) Einträge, die zu den ersten len(samples) Fragen gehören
-                samples_to_keep = []
-                for i in range(len(samples)):
-                    if i not in retry_indices:
-                        samples_to_keep.append(samples[i])
-                    else:
-                        print(f"   🗑️  Lösche alte Antwort für Frage {i + 1}")
-                samples = samples_to_keep
-            
-            # Füge alle noch nicht beantworteten Fragen hinzu
-            if samples:
-                # start_idx ist die Anzahl der schon beantworteten Fragen
-                for i in range(len(samples), len(df)):
-                    questions_to_process.add(i)
-    
+
     # Wenn keine Retry-Questions: Normale Fortsetzung ab start_idx
     if not questions_to_process:
         questions_to_process = set(range(start_idx, len(df)))
@@ -254,70 +334,47 @@ def generate_chatbot_responses(
         # Agent.chat() mit session_id aufrufen
         answer = agent.chat(question, session_id=session_id)
         print(f"   ✅ Antwort: {answer[:80]}...")
-        
-        # Warten damit LangSmith Trace vollständig ist
-        time.sleep(5 if provider == "anthropic" else 1)  # Anthropic has stricter rate limits
-        
+
         # RAG-Kontext aus LangSmith holen
         # WICHTIG: Wir müssen den LangGraph-Run finden, NICHT den self-reflection-Run!
         # Self-reflection Runs sind separate LLM calls die NACH dem LangGraph-Agent laufen.
-        print(f"   🔍 Hole RAG-Kontext aus LangSmith...")
-        
-        # Strategie: Hole mehrere kürzliche Runs und finde den LangGraph-Run
-        recent_runs = list(langsmith_client.list_runs(
-            project_name=LANGSMITH_PROJECT,
-            is_root=True,
-            limit=20  # Mehr Runs holen um den richtigen zu finden
-        ))
-        
-        contexts = ["Kein RAG-Kontext gefunden"]  # Default als Liste
-        matching_run = None
-        
-        # Suche den LangGraph-Run (nicht self_reflection oder ChatOllama)
-        # LangGraph-Runs haben typischerweise name="LangGraph" und run_type="chain"
-        for run in recent_runs:
-            run_name = str(run.name).lower() if run.name else ""
-            
-            # Skip self-reflection und ChatOllama Runs
-            if "self_reflection" in run_name or "chatollama" in run_name:
-                continue
-            
-            # Finde LangGraph Run (oder Agent-ähnlichen Run)
-            if "langgraph" in run_name or run.run_type == "chain":
-                # Zusätzliche Validierung: Prüfe session_id in Metadata
-                run_metadata = run.extra.get("metadata", {}) if run.extra else {}
-                run_session_id = run_metadata.get("session_id", "")
-                
-                # Wenn session_id passt, ist es definitiv unser Run
-                if run_session_id == session_id:
-                    matching_run = run
-                    print(f"   ✅ LangGraph-Run gefunden (session_id match): {run.name}")
-                    break
-                
-                # Fallback: Wenn kein session_id-Match, nimm trotzdem LangGraph-Run
-                # (aber nur wenn wir noch keinen gefunden haben)
-                if matching_run is None:
-                    matching_run = run
-        
-        # Fallback: Wenn kein LangGraph-Run gefunden, nimm den neuesten Run
-        # der NICHT self_reflection ist (für Constrained/Confirmation Agents)
-        if matching_run is None:
-            for run in recent_runs:
-                run_name = str(run.name).lower() if run.name else ""
-                if "self_reflection" not in run_name and "chatollama" not in run_name:
-                    matching_run = run
-                    # Nur Warnung wenn es KEIN bekannter Tool-Run ist
-                    if "university_knowledge" not in run_name:
-                        print(f"   ⚠️ Fallback: Verwende Run '{run.name}' (kein LangGraph gefunden)")
-                    break
-        
-        if matching_run:
+        # Wir polling auf eine session_id-Übereinstimmung statt blind zu schlafen,
+        # weil LangSmith-Ingestion eventually consistent ist und ein Fallback auf einen
+        # "irgendeinen kürzlichen" Run die Kontexte einer ANDEREN Frage zuordnen würde.
+        print(f"   🔍 Hole RAG-Kontext aus LangSmith (polling auf session_id)...")
+
+        # Initial-Wait pro Provider:
+        # - Anthropic: 5s wegen strikterer Rate-Limits.
+        # - Lokale/OpenAI Modelle: 3s. Ein zu kleiner Initial-Wait führte
+        #   dazu, dass schnelle lokale Modelle häufiger das Polling-Budget
+        #   erschöpften, bevor LangSmith ihren Run sichtbar macht. Das Ergebnis
+        #   waren pro Modell unterschiedlich große "no-context"-Anteile und
+        #   damit nicht-vergleichbare RAGAS-Mittelwerte (siehe Audit B3).
+        initial_wait = 5.0 if provider == "anthropic" else 3.0
+        matching_run = _find_run_by_session_id(
+            langsmith_client,
+            session_id,
+            max_attempts=6,
+            initial_wait=initial_wait,
+        )
+
+        # Leere Liste = kein RAG-Kontext. Wird in display_and_save_results / _metric_stats
+        # als invalid behandelt und aus den Mittelwerten entfernt (verhindert systematische
+        # Verzerrung von Faithfulness / Context-Recall / Context-Precision).
+        contexts: List[str] = []
+
+        if matching_run is not None:
             trace_id = matching_run.trace_id
-            # Debug disabled for cleaner output
             contexts = get_rag_context_from_langsmith(langsmith_client, trace_id, debug=False)
-            print(f"   ✅ Run gefunden: {matching_run.name} (type: {matching_run.run_type})")
+            print(f"   ✅ Run gefunden (session_id match): {matching_run.name} (type: {matching_run.run_type})")
         else:
-            print(f"   ⚠️ Kein passender Run gefunden für Session-ID {session_id[:8]}...")
+            # HARTE Warnung: Wir haben den Trace nicht gefunden. KEIN Fallback auf einen
+            # anderen Run, weil das die RAGAS-Metriken stillschweigend kontaminieren würde.
+            print(
+                f"   ❌ HARD WARNING: Kein LangSmith-Run mit session_id={session_id} "
+                f"innerhalb des Polling-Budgets gefunden. "
+                f"Frage {idx + 1} wird OHNE RAG-Kontext gespeichert."
+            )
         
         total_chars = sum(len(c) for c in contexts)
         print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
@@ -330,17 +387,14 @@ def generate_chatbot_responses(
             reference=expected_answer
         )
         
-        # Wenn retry: Sample an richtiger Stelle einfügen; sonst: append
+        # Wenn retry: Sample an gleicher Position überschreiben (samples ist vollständig);
+        # sonst: append (samples wächst sequenziell von start_idx auf len(df)).
         if retry_questions:
-            # Samples als Dict verwalten für gezielte Updates
-            samples_dict = {i: samples[i] for i in range(len(samples))}
-            samples_dict[idx] = sample
-            samples = [samples_dict[i] for i in sorted(samples_dict.keys())]
+            samples[idx] = sample
         else:
             samples.append(sample)
         
-        # Checkpoint nach jeder Frage speichern (schnell: ~1-5ms)
-        import pickle
+        # Checkpoint nach jeder Frage atomar speichern (~ms; tempfile + os.replace)
         try:
             checkpoint_data = {
                 'samples': samples,
@@ -348,8 +402,7 @@ def generate_chatbot_responses(
                 'last_idx': idx,
                 'model_name': model_name  # Speichere Modellname
             }
-            with open(checkpoint_path, 'wb') as f:
-                pickle.dump(checkpoint_data, f)
+            _save_checkpoint_atomic(checkpoint_path, checkpoint_data)
             print(f"   💾 Checkpoint gespeichert ({len(samples)}/{len(df)} Fragen)")
             print(f"      Pfad: {checkpoint_path}")
         except Exception as e:
@@ -361,7 +414,7 @@ def generate_chatbot_responses(
     # Finale Dataset-Konvertierung
     dataset = EvaluationDataset(samples=samples)
     
-    # Finales Checkpoint mit vollständigem Dataset
+    # Finales Checkpoint mit vollständigem Dataset (atomar)
     try:
         checkpoint_data = {
             'dataset': dataset,
@@ -369,8 +422,7 @@ def generate_chatbot_responses(
             'test_df': df,
             'model_name': model_name  # Speichere Modellname
         }
-        with open(checkpoint_path, 'wb') as f:
-            pickle.dump(checkpoint_data, f)
+        _save_checkpoint_atomic(checkpoint_path, checkpoint_data)
         print(f"💾 Finaler Checkpoint gespeichert: {checkpoint_path}")
         print(f"   (Antworten + Kontexte für alle {len(samples)} Fragen)\n")
     except Exception as e:
@@ -419,20 +471,28 @@ def run_ragas_evaluation(
     print(f"   Max Workers:   {max_workers}")
     
     # LLM konfigurieren basierend auf Provider
+    # WICHTIG: Judge MUSS deterministisch sein (temperature=0.0 + seed),
+    # sonst sind RAGAS-Scores zwischen wiederholten Läufen nicht reproduzierbar
+    # und Vergleiche zwischen Agent-Varianten werden verrauscht.
+    JUDGE_TEMPERATURE = 0.0
+    JUDGE_SEED = 42
     if final_judge_provider == 'openai':
         from langchain_openai import ChatOpenAI
         llm = ChatOpenAI(
             model=final_judge_model,
-            temperature=TEMPERATURE,
+            temperature=JUDGE_TEMPERATURE,
+            seed=JUDGE_SEED,
             api_key=settings.OPENAI_API_KEY,
             max_retries=3
         )
     else:
-        # Ollama LLM konfigurieren
+        # Ollama LLM konfigurieren (seed via model_kwargs, da ChatOllama
+        # ihn nicht als Top-Level-Parameter exponiert)
         llm = ChatOllama(
             model=final_judge_model,
             base_url=OLLAMA_BASE_URL,
-            temperature=TEMPERATURE
+            temperature=JUDGE_TEMPERATURE,
+            seed=JUDGE_SEED,
         )
     
     # Ollama Embeddings für answer_relevancy (später aktivieren)
@@ -456,8 +516,8 @@ def run_ragas_evaluation(
     else:
         print(f"   💡 Dies kann mehrere Minuten dauern (ca. 1-2 Min pro Sample)\n")
     
-    # RunConfig für parallele Requests
-    run_config = RunConfig(max_workers=max_workers)
+    # RunConfig für parallele Requests (seed für Reproduzierbarkeit der Sampling-Reihenfolge)
+    run_config = RunConfig(max_workers=max_workers, seed=JUDGE_SEED)
     
     # Evaluation durchführen
     results = evaluate(
@@ -471,26 +531,94 @@ def run_ragas_evaluation(
     return results.to_pandas()
 
 
+def _metric_stats(df: pd.DataFrame, metric: str) -> dict:
+    """NaN- und Empty-Context-bewusste Aggregation einer RAGAS-Metrik.
+
+    Schließt Zeilen ohne RAG-Kontext (context_count == 0) explizit aus, weil dort
+    die Metrik systematisch 0 oder NaN ist und sonst die Vergleichbarkeit zwischen
+    Agent-Varianten verzerren würde (Agenten, die seltener auf RAG routen, würden
+    fälschlich schlechter aussehen).
+
+    Reports:
+      mean / std — über Zeilen mit Kontext UND nicht-NaN-Wert
+      n_valid    — Zähler des Mittelwerts (Zeilen mit Kontext, Wert nicht NaN)
+      n_total    — Gesamtzeilen in df
+      n_no_ctx   — Zeilen mit context_count == 0 (ausgeschlossen)
+      n_nan      — Zeilen mit Kontext aber NaN-Metrik (ausgeschlossen)
+    """
+    n_total = len(df)
+    if metric not in df.columns or n_total == 0:
+        return {"mean": float("nan"), "std": float("nan"),
+                "n_valid": 0, "n_total": n_total, "n_no_ctx": 0, "n_nan": 0}
+
+    if "context_count" in df.columns:
+        has_ctx = df["context_count"] > 0
+    else:
+        # Fallback: Kontextliste direkt prüfen
+        has_ctx = df["retrieved_contexts"].apply(
+            lambda x: isinstance(x, list) and len(x) > 0
+            and not (len(x) == 1 and isinstance(x[0], str) and x[0] in (
+                "Kein RAG-Kontext gefunden", "LangSmith-Fehler"))
+        ) if "retrieved_contexts" in df.columns else pd.Series([True] * n_total, index=df.index)
+
+    n_no_ctx = int((~has_ctx).sum())
+    series_with_ctx = df.loc[has_ctx, metric]
+    n_nan = int(series_with_ctx.isna().sum())
+    valid = series_with_ctx.dropna()
+    n_valid = int(len(valid))
+
+    return {
+        "mean": float(valid.mean()) if n_valid > 0 else float("nan"),
+        "std": float(valid.std()) if n_valid > 1 else float("nan"),
+        "n_valid": n_valid,
+        "n_total": n_total,
+        "n_no_ctx": n_no_ctx,
+        "n_nan": n_nan,
+    }
+
+
+def _format_metric_stats(stats: dict) -> str:
+    """Kompakte einzeilige Darstellung: '0.647 (n=92/100, no_ctx=5, nan=3)'."""
+    excl = stats["n_no_ctx"] + stats["n_nan"]
+    if excl == 0:
+        return f"{stats['mean']:.3f} (n={stats['n_valid']}/{stats['n_total']})"
+    return (
+        f"{stats['mean']:.3f} "
+        f"(n={stats['n_valid']}/{stats['n_total']}, "
+        f"no_ctx={stats['n_no_ctx']}, nan={stats['n_nan']})"
+    )
+
+
 def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
     """Zeigt Ergebnisse an und speichert sie."""
-    
+
     # IDs, Kategorien und Schwierigkeiten hinzufügen
     results_df['id'] = test_df['id'].values[:len(results_df)]
     results_df['category'] = test_df['category'].values[:len(results_df)]
     results_df['difficulty'] = test_df['difficulty'].values[:len(results_df)]
-    
+
+    # Context-Count FRÜH berechnen, damit _metric_stats sie für alle Aggregationen nutzen kann.
+    # Zusätzlich: alte Platzhalter-Strings (aus historischen CSVs) als 0 zählen.
+    def _ctx_count(x):
+        if not isinstance(x, list):
+            return 0
+        if len(x) == 1 and isinstance(x[0], str) and x[0] in (
+                "Kein RAG-Kontext gefunden", "LangSmith-Fehler"):
+            return 0
+        return len(x)
+    results_df['context_count'] = results_df['retrieved_contexts'].apply(_ctx_count)
+
     print("\n" + "=" * 80)
     print("📊 RAGAS-EVALUATION ERGEBNISSE")
     print("=" * 80)
-    
-    # Gesamtscores
+
+    # Gesamtscores (NaN- und Empty-Context-aware)
     print("\n📈 Durchschnittliche Scores:")
     print("-" * 80)
     for metric in ['faithfulness', 'context_recall', 'context_precision']:
-        if metric in results_df.columns:
-            avg = results_df[metric].mean()
-            print(f"   {metric:20s}: {avg:.3f}")
-    
+        stats = _metric_stats(results_df, metric)
+        print(f"   {metric:20s}: {_format_metric_stats(stats)}")
+
     # Nach Kategorie
     print("\n📁 Scores nach Kategorie:")
     print("-" * 80)
@@ -498,10 +626,9 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
         cat_df = results_df[results_df['category'] == category]
         print(f"\n   {category}:")
         for metric in ['faithfulness', 'context_recall', 'context_precision']:
-            if metric in cat_df.columns:
-                avg = cat_df[metric].mean()
-                print(f"      {metric:20s}: {avg:.3f}")
-    
+            stats = _metric_stats(cat_df, metric)
+            print(f"      {metric:20s}: {_format_metric_stats(stats)}")
+
     # Nach Schwierigkeit
     print("\n⚡ Scores nach Schwierigkeit:")
     print("-" * 80)
@@ -510,15 +637,11 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
         if len(diff_df) > 0:
             print(f"\n   {difficulty.upper()}:")
             for metric in ['faithfulness', 'context_recall', 'context_precision']:
-                if metric in diff_df.columns:
-                    avg = diff_df[metric].mean()
-                    print(f"      {metric:20s}: {avg:.3f}")
-    
+                stats = _metric_stats(diff_df, metric)
+                print(f"      {metric:20s}: {_format_metric_stats(stats)}")
+
     # Speichern in CSV (alle Spalten)
     output_path_csv = Path(__file__).parent / "data" / "ragas_results.csv"
-    
-    # Berechne Anzahl der Context-Chunks
-    results_df['context_count'] = results_df['retrieved_contexts'].apply(lambda x: len(x) if isinstance(x, list) else 0)
     
     # Entferne Zeilenumbrüche aus Textfeldern für saubere CSV
     text_columns = ['user_input', 'response', 'reference']
@@ -604,28 +727,33 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
         ws_summary['A1'].font = Font(bold=True, size=14)
         ws_summary.merge_cells('A1:D1')
         
-        # Durchschnittliche Scores
+        # Durchschnittliche Scores (NaN- und Empty-Context-aware)
         row = 3
         ws_summary[f'A{row}'] = "Durchschnittliche Scores"
         ws_summary[f'A{row}'].font = Font(bold=True, size=12)
         row += 1
-        
+
         for metric in ['faithfulness', 'context_recall', 'context_precision']:
-            if metric in results_df.columns:
-                avg = results_df[metric].mean()
-                ws_summary[f'A{row}'] = metric
-                ws_summary[f'B{row}'] = avg
-                ws_summary[f'B{row}'].number_format = '0.000'
-                
-                # Farbe basierend auf Score
+            stats = _metric_stats(results_df, metric)
+            avg = stats["mean"]
+            ws_summary[f'A{row}'] = metric
+            ws_summary[f'B{row}'] = avg if avg == avg else None  # NaN → leere Zelle
+            ws_summary[f'C{row}'] = (
+                f"n={stats['n_valid']}/{stats['n_total']} "
+                f"(no_ctx={stats['n_no_ctx']}, nan={stats['n_nan']})"
+            )
+            ws_summary[f'B{row}'].number_format = '0.000'
+
+            # Farbe basierend auf Score (NaN → keine Einfärbung)
+            if avg == avg:
                 if avg >= 0.8:
                     ws_summary[f'B{row}'].fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
                 elif avg >= 0.6:
                     ws_summary[f'B{row}'].fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
                 else:
                     ws_summary[f'B{row}'].fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-                
-                row += 1
+
+            row += 1
         
         # Nach Kategorie
         row += 2
@@ -646,14 +774,14 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
         for category in sorted(results_df['category'].unique()):
             cat_df = results_df[results_df['category'] == category]
             ws_summary[f'A{row}'] = category
-            
+
             for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision'], 2):
-                if metric in cat_df.columns:
-                    avg = cat_df[metric].mean()
-                    col_letter = chr(65 + idx)  # B, C, D
-                    ws_summary[f'{col_letter}{row}'] = avg
-                    ws_summary[f'{col_letter}{row}'].number_format = '0.000'
-            
+                stats = _metric_stats(cat_df, metric)
+                avg = stats["mean"]
+                col_letter = chr(65 + idx)  # B, C, D
+                ws_summary[f'{col_letter}{row}'] = avg if avg == avg else None
+                ws_summary[f'{col_letter}{row}'].number_format = '0.000'
+
             row += 1
         
         # Nach Schwierigkeit
@@ -676,14 +804,14 @@ def display_and_save_results(results_df: pd.DataFrame, test_df: pd.DataFrame):
             diff_df = results_df[results_df['difficulty'] == difficulty]
             if len(diff_df) > 0:
                 ws_summary[f'A{row}'] = difficulty.upper()
-                
+
                 for idx, metric in enumerate(['faithfulness', 'context_recall', 'context_precision'], 2):
-                    if metric in diff_df.columns:
-                        avg = diff_df[metric].mean()
-                        col_letter = chr(65 + idx)
-                        ws_summary[f'{col_letter}{row}'] = avg
-                        ws_summary[f'{col_letter}{row}'].number_format = '0.000'
-                
+                    stats = _metric_stats(diff_df, metric)
+                    avg = stats["mean"]
+                    col_letter = chr(65 + idx)
+                    ws_summary[f'{col_letter}{row}'] = avg if avg == avg else None
+                    ws_summary[f'{col_letter}{row}'].number_format = '0.000'
+
                 row += 1
         
         # Spaltenbreiten für Zusammenfassung

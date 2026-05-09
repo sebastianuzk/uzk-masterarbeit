@@ -50,24 +50,27 @@ def load_existing_responses(csv_path: Path) -> EvaluationDataset:
         EvaluationDataset ready for RAGAS evaluation
     """
     print(f"📂 Loading existing responses from: {csv_path}")
-    
-    df = pd.read_csv(csv_path)
+
+    # ragas_results.csv wird in ragas_evaluation.py mit sep=',' und encoding='utf-8-sig'
+    # geschrieben. Beim Lesen explizit dieselben Parameter verwenden, damit ein BOM oder
+    # ein anderer Default kein stilles Spaltenshift verursacht.
+    df = pd.read_csv(csv_path, sep=',', encoding='utf-8-sig')
     print(f"   ✅ Loaded {len(df)} responses")
-    
+
     # Convert to RAGAS samples
+    import ast
     samples = []
     for idx, row in df.iterrows():
         # Parse retrieved_contexts (might be string representation of list)
         contexts = row['retrieved_contexts']
         if isinstance(contexts, str):
-            # Try to parse as list
-            import ast
             try:
                 contexts = ast.literal_eval(contexts)
-            except:
-                # If parsing fails, treat as single string
+            except (ValueError, SyntaxError) as e:
+                # Echte Parse-Fehler loggen statt still verschlucken; Fallback: Ein-Element-Liste
+                print(f"   ⚠️ Row {idx}: konnte retrieved_contexts nicht als Liste parsen ({e}); behandle als single string")
                 contexts = [contexts]
-        
+
         if not isinstance(contexts, list):
             contexts = [str(contexts)]
         
@@ -199,19 +202,29 @@ def main():
     print("\n💾 Saving results...")
     results_df.to_csv(input_path, index=False, encoding='utf-8-sig')
     print(f"   ✅ Updated: {input_path}")
-    
-    # Generate summary
+
+    # Generate summary (NaN- und Empty-Context-aware: Zeilen ohne RAG-Kontext
+    # werden aus den Mittelwerten ausgeschlossen, damit Vergleiche zwischen
+    # Agent-Varianten nicht durch unterschiedliches RAG-Routing verzerrt werden.)
+    from eval.ragas_eval.ragas_evaluation import _metric_stats
     summary = {
         "metrics": {}
     }
-    
+
     for metric in ["faithfulness", "context_recall", "context_precision"]:
         if metric in results_df.columns:
+            stats = _metric_stats(results_df, metric)
             summary["metrics"][metric] = {
-                "mean": float(results_df[metric].mean()),
-                "std": float(results_df[metric].std()),
-                "min": float(results_df[metric].min()),
-                "max": float(results_df[metric].max()),
+                "mean": stats["mean"],
+                "std": stats["std"],
+                "min": float(results_df[metric].min(skipna=True))
+                    if results_df[metric].notna().any() else float("nan"),
+                "max": float(results_df[metric].max(skipna=True))
+                    if results_df[metric].notna().any() else float("nan"),
+                "n_valid": stats["n_valid"],
+                "n_total": stats["n_total"],
+                "n_no_context": stats["n_no_ctx"],
+                "n_nan": stats["n_nan"],
             }
     
     # Save summary JSON

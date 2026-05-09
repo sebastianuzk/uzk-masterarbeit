@@ -86,6 +86,8 @@ def create_llm(
             "model": _model,
             "timeout": _timeout,
             "api_key": settings.OPENAI_API_KEY,
+            "temperature": _temperature,
+            "seed": 42,
         }
 
         if settings.OPENAI_BASE_URL:
@@ -95,8 +97,7 @@ def create_llm(
             openai_kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
 
         llm = ChatOpenAI(**openai_kwargs)
-        llm.model_kwargs["temperature"] = _temperature
-        logger.info(f"Creating ChatOpenAI with model: {_model} (temperature={_temperature}, json_mode={json_mode})")
+        logger.info(f"Creating ChatOpenAI with model: {_model} (temperature={_temperature}, seed=42, json_mode={json_mode})")
         return llm
     
     elif _provider == "anthropic":

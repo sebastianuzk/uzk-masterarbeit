@@ -179,35 +179,61 @@ def calculate_argument_accuracy(expected_args: dict, actual_args: dict,
                                 match_mode: ArgumentMatchMode) -> tuple[float, dict, dict]:
     """
     Calculate argument accuracy and identify correct/missing arguments.
-    
+
+    Argument accuracy is scoped to expected tools that were ACTUALLY called by
+    the agent. Arguments of expected tools that the agent never invoked are
+    NOT counted toward the denominator, because that would conflate a
+    tool-selection failure with an argument-extraction failure (the agent
+    never had the chance to extract those arguments).
+
+    Behavior:
+        - If no arguments are expected at all -> accuracy = 1.0.
+        - If none of the expected tools were called -> accuracy = NaN
+          (undefined; report aggregation must skip NaN values).
+        - Otherwise -> correct_args / total_expected_args, restricted to
+          expected tools that appear in `actual_args`.
+
+    The `missing` dict still contains the full set of un-extracted arguments
+    across ALL expected tools (including un-called ones) for reporting /
+    debugging purposes; only the accuracy scalar is restricted.
+
     Returns: (accuracy, correct_args, missing_args)
     """
     if not expected_args:
         return 1.0, {}, {}
-    
+
     correct = {}
     missing = {}
-    
+
     for tool, args in expected_args.items():
         correct[tool] = {}
         missing[tool] = {}
         actual_tool_args = actual_args.get(tool, {})
-        
+
         for arg_name, expected_value in args.items():
             actual_value = actual_tool_args.get(arg_name)
-            
+
             if actual_value is None:
                 missing[tool][arg_name] = expected_value
             elif _values_match(expected_value, actual_value, match_mode):
                 correct[tool][arg_name] = actual_value
             else:
                 missing[tool][arg_name] = expected_value
-    
-    total_args = sum(len(args) for args in expected_args.values())
-    correct_count = sum(len(args) for args in correct.values())
-    
+
+    # Restrict denominator (and matching numerator) to expected tools the
+    # agent actually called. This isolates argument-extraction quality from
+    # tool-selection quality.
+    called_expected_tools = [t for t in expected_args if t in actual_args]
+
+    if not called_expected_tools:
+        # No expected tool was called -> argument accuracy is undefined.
+        return float("nan"), correct, missing
+
+    total_args = sum(len(expected_args[t]) for t in called_expected_tools)
+    correct_count = sum(len(correct[t]) for t in called_expected_tools)
+
     accuracy = correct_count / total_args if total_args > 0 else 1.0
-    
+
     return accuracy, correct, missing
 
 
@@ -306,8 +332,19 @@ def aggregate_results(results: list[ScenarioResult]) -> AggregatedMetrics:
     precisions = [r.tool_precision for r in results]
     recalls = [r.tool_recall for r in results]
     f1s = [r.tool_f1 for r in results]
-    arg_accs = [r.argument_accuracy for r in results]
-    
+    # Argument accuracy can be NaN for scenarios in which none of the expected
+    # tools were called (then arg accuracy is undefined; see
+    # calculate_argument_accuracy). Skip NaN entries when averaging so the
+    # mean reflects argument-extraction quality on attempted tools, not a
+    # mix of selection failure and extraction failure.
+    arg_accs = [r.argument_accuracy for r in results
+                if not math.isnan(r.argument_accuracy)]
+
+    def _mean_arg_acc(rs):
+        vals = [r.argument_accuracy for r in rs
+                if not math.isnan(r.argument_accuracy)]
+        return statistics.mean(vals) if vals else float("nan")
+
     # Group by difficulty
     by_difficulty = {}
     for diff in Difficulty:
@@ -317,7 +354,7 @@ def aggregate_results(results: list[ScenarioResult]) -> AggregatedMetrics:
                 "count": len(diff_results),
                 "mean_f1": statistics.mean([r.tool_f1 for r in diff_results]),
                 "exact_match_rate": sum(1 for r in diff_results if r.exact_match) / len(diff_results),
-                "mean_argument_accuracy": statistics.mean([r.argument_accuracy for r in diff_results])
+                "mean_argument_accuracy": _mean_arg_acc(diff_results)
             }
     
     # Group by tool
@@ -329,7 +366,7 @@ def aggregate_results(results: list[ScenarioResult]) -> AggregatedMetrics:
             "count": len(tool_results),
             "mean_f1": statistics.mean([r.tool_f1 for r in tool_results]),
             "exact_match_rate": sum(1 for r in tool_results if r.exact_match) / len(tool_results),
-            "mean_argument_accuracy": statistics.mean([r.argument_accuracy for r in tool_results])
+            "mean_argument_accuracy": _mean_arg_acc(tool_results)
         }
     
     # Group by category
@@ -374,7 +411,7 @@ def aggregate_results(results: list[ScenarioResult]) -> AggregatedMetrics:
         mean_precision=statistics.mean(precisions),
         mean_recall=statistics.mean(recalls),
         mean_f1=statistics.mean(f1s),
-        mean_argument_accuracy=statistics.mean(arg_accs),
+        mean_argument_accuracy=statistics.mean(arg_accs) if arg_accs else float("nan"),
         exact_match_rate=sum(1 for r in results if r.exact_match) / len(results),
         std_precision=statistics.stdev(precisions) if len(precisions) > 1 else 0,
         std_recall=statistics.stdev(recalls) if len(recalls) > 1 else 0,

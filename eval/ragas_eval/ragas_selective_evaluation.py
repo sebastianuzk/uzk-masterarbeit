@@ -39,6 +39,17 @@ from config.settings import (
 )
 from src.agent.react_agent import create_react_agent
 
+# Wiederverwende die korrekten Helfer aus dem Haupt-Pipeline-Modul, damit
+# die selektive Evaluation NICHT von der Hauptpipeline abdriftet.
+# Insbesondere `_find_run_by_session_id` pollt LangSmith mit exponentiellem
+# Backoff auf eine session_id-Übereinstimmung statt blind den letzten Root-Run
+# zu nehmen (das würde Kontexte stillschweigend der falschen Frage zuweisen
+# und alle RAGAS-Metriken kontaminieren).
+from eval.ragas_eval.ragas_evaluation import (
+    _find_run_by_session_id,
+    get_rag_context_from_langsmith as _get_rag_context_from_langsmith_main,
+)
+
 # ============================================================================
 # KONFIGURATION: Hier die Indizes eintragen (1-basiert wie in CSV)
 # ============================================================================
@@ -127,31 +138,13 @@ def load_testset_filtered(csv_path: str = "data/Testset.CSV", indices: List[int]
 
 
 def get_rag_context_from_langsmith(client: Client, trace_id: str) -> List[str]:
-    """Holt RAG-Kontext-Chunks aus LangSmith"""
-    try:
-        child_runs = list(client.list_runs(
-            project_name=LANGSMITH_PROJECT,
-            trace_id=trace_id,
-            is_root=False
-        ))
-        
-        contexts = []
-        for child in child_runs:
-            if child.run_type == "retriever":
-                if child.outputs and isinstance(child.outputs, dict):
-                    documents = child.outputs.get('output', [])
-                    for doc in documents:
-                        if isinstance(doc, dict) and 'page_content' in doc:
-                            contexts.append(doc['page_content'])
-        
-        if contexts:
-            return contexts
-        
-        return ["Kein RAG-Kontext gefunden"]
-    
-    except Exception as e:
-        print(f"      ⚠️ LangSmith-Fehler: {str(e)[:100]}")
-        return ["LangSmith-Fehler"]
+    """Holt RAG-Kontext-Chunks aus LangSmith.
+
+    Delegiert an die kanonische Implementierung in `ragas_evaluation`, damit
+    Tool-Run-Fallbacks und das "leere Liste statt Platzhalter"-Verhalten
+    konsistent zwischen Voll- und Selektiv-Pipeline sind.
+    """
+    return _get_rag_context_from_langsmith_main(client, trace_id, debug=False)
 
 
 def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client) -> EvaluationDataset:
@@ -176,32 +169,40 @@ def generate_chatbot_responses(df: pd.DataFrame, agent, langsmith_client: Client
         
         answer = agent.chat(question, session_id=session_id)
         print(f"   ✅ Antwort: {answer[:80]}...")
-        
-        time.sleep(1)  # Reduziert von 3s auf 1s
-        
-        print(f"   🔍 Hole RAG-Kontext aus LangSmith...")
-        
-        # Optimiert: Nur den letzten Run holen (statt alle)
-        recent_runs = list(langsmith_client.list_runs(
-            project_name=LANGSMITH_PROJECT,
-            is_root=True,
-            limit=1  # Nur den letzten Run
-        ))
-        
-        contexts = ["Kein RAG-Kontext gefunden"]
-        matching_run = None
-        
-        # Der letzte Run sollte unser Run sein
-        if recent_runs:
-            matching_run = recent_runs[0]
-        
-        if matching_run:
+
+        # RAG-Kontext per session_id-Polling holen.
+        # WICHTIG: Kein Fallback auf "irgendeinen kürzlichen Root-Run" — das
+        # würde Kontexte einer ANDEREN Frage zuordnen (LangSmith-Ingestion
+        # ist eventually consistent und parallele Self-Reflection-Runs sind
+        # ebenfalls Root-Runs). Bei Miss: leere Kontextliste, Zeile wird in
+        # der Aggregation (display_and_save_results / _metric_stats) als
+        # invalid behandelt und aus den Mittelwerten ausgeschlossen.
+        print(f"   🔍 Hole RAG-Kontext aus LangSmith (polling auf session_id)...")
+
+        # Initial-Wait analog zur Hauptpipeline: 3s gibt LangSmith genug Zeit,
+        # den Run sichtbar zu machen, bevor das Polling-Budget verbraucht ist.
+        # Andernfalls bekommen schnelle lokale Modelle systematisch mehr
+        # "no-context"-Treffer als langsamere und Mittelwerte werden
+        # über unterschiedlich große Subsets gebildet (Audit B3).
+        matching_run = _find_run_by_session_id(
+            langsmith_client,
+            session_id,
+            max_attempts=6,
+            initial_wait=3.0,
+        )
+
+        contexts: List[str] = []
+        if matching_run is not None:
             trace_id = matching_run.trace_id
             contexts = get_rag_context_from_langsmith(langsmith_client, trace_id)
-            print(f"   ✅ Run gefunden mit Session-ID: {session_id[:8]}...")
+            print(f"   ✅ Run gefunden (session_id match): {matching_run.name} (type: {matching_run.run_type})")
         else:
-            print(f"   ⚠️ Kein Run mit Session-ID {session_id[:8]}... gefunden")
-        
+            print(
+                f"   ❌ HARD WARNING: Kein LangSmith-Run mit session_id={session_id} "
+                f"innerhalb des Polling-Budgets gefunden. "
+                f"ID={question_id} wird OHNE RAG-Kontext gespeichert."
+            )
+
         total_chars = sum(len(c) for c in contexts)
         print(f"   📄 Kontext: {len(contexts)} chunks, {total_chars} Zeichen")
         

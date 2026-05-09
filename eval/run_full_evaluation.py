@@ -137,35 +137,45 @@ def _generate_ragas_reports(
     # By Category
     readme_content += "\n## Metrics by Category\n\n"
     categories = results_df['category'].dropna().unique()
-    
+
+    from eval.ragas_eval.ragas_evaluation import _metric_stats
+
     for category in sorted(categories):
         cat_df = results_df[results_df['category'] == category]
         readme_content += f"\n### {category} ({len(cat_df)} questions)\n\n"
-        readme_content += "| Metric | Mean | Std Dev |\n"
-        readme_content += "|--------|------|---------|\n"
-        
+        readme_content += "| Metric | Mean | Std Dev | n_valid | n_no_ctx |\n"
+        readme_content += "|--------|------|---------|---------|----------|\n"
+
         for metric in ['faithfulness', 'context_recall', 'context_precision']:
             if metric in cat_df.columns:
-                mean_val = cat_df[metric].mean()
-                std_val = cat_df[metric].std()
-                readme_content += f"| {metric.replace('_', ' ').title()} | {mean_val:.3f} | {std_val:.3f} |\n"
-    
+                s = _metric_stats(cat_df, metric)
+                mean_str = f"{s['mean']:.3f}" if s['mean'] == s['mean'] else "—"
+                std_str = f"{s['std']:.3f}" if s['std'] == s['std'] else "—"
+                readme_content += (
+                    f"| {metric.replace('_', ' ').title()} | {mean_str} | {std_str} "
+                    f"| {s['n_valid']}/{s['n_total']} | {s['n_no_ctx']} |\n"
+                )
+
     # By Difficulty
     readme_content += "\n## Metrics by Difficulty\n\n"
     difficulties = ['easy', 'medium', 'hard']
-    
+
     for difficulty in difficulties:
         diff_df = results_df[results_df['difficulty'] == difficulty]
         if len(diff_df) > 0:
             readme_content += f"\n### {difficulty.upper()} ({len(diff_df)} questions)\n\n"
-            readme_content += "| Metric | Mean | Std Dev |\n"
-            readme_content += "|--------|------|---------|\n"
-            
+            readme_content += "| Metric | Mean | Std Dev | n_valid | n_no_ctx |\n"
+            readme_content += "|--------|------|---------|---------|----------|\n"
+
             for metric in ['faithfulness', 'context_recall', 'context_precision']:
                 if metric in diff_df.columns:
-                    mean_val = diff_df[metric].mean()
-                    std_val = diff_df[metric].std()
-                    readme_content += f"| {metric.replace('_', ' ').title()} | {mean_val:.3f} | {std_val:.3f} |\n"
+                    s = _metric_stats(diff_df, metric)
+                    mean_str = f"{s['mean']:.3f}" if s['mean'] == s['mean'] else "—"
+                    std_str = f"{s['std']:.3f}" if s['std'] == s['std'] else "—"
+                    readme_content += (
+                        f"| {metric.replace('_', ' ').title()} | {mean_str} | {std_str} "
+                        f"| {s['n_valid']}/{s['n_total']} | {s['n_no_ctx']} |\n"
+                    )
     
     # Distribution
     readme_content += "\n## Score Distribution\n\n"
@@ -341,23 +351,29 @@ def _generate_ragas_reports(
         <div class="category-section">
             <h3>{category} <span class="badge">{len(cat_df)} questions</span></h3>
             <table>
-                <tr><th>Metric</th><th>Mean</th><th>Std Dev</th></tr>
+                <tr><th>Metric</th><th>Mean</th><th>Std Dev</th><th>n_valid</th><th>n_no_ctx</th></tr>
 """
         for metric in ['faithfulness', 'context_recall', 'context_precision']:
             if metric in cat_df.columns:
-                mean_val = cat_df[metric].mean()
-                std_val = cat_df[metric].std()
-                html_content += f"<tr><td>{metric.replace('_', ' ').title()}</td><td>{mean_val:.3f}</td><td>{std_val:.3f}</td></tr>\n"
-        
+                s = _metric_stats(cat_df, metric)
+                mean_str = f"{s['mean']:.3f}" if s['mean'] == s['mean'] else "—"
+                std_str = f"{s['std']:.3f}" if s['std'] == s['std'] else "—"
+                html_content += (
+                    f"<tr><td>{metric.replace('_', ' ').title()}</td>"
+                    f"<td>{mean_str}</td><td>{std_str}</td>"
+                    f"<td>{s['n_valid']}/{s['n_total']}</td>"
+                    f"<td>{s['n_no_ctx']}</td></tr>\n"
+                )
+
         html_content += """
             </table>
         </div>
 """
-    
+
     html_content += """
         <h2>⚡ Metrics by Difficulty</h2>
 """
-    
+
     # By Difficulty
     for difficulty in difficulties:
         diff_df = results_df[results_df['difficulty'] == difficulty]
@@ -366,14 +382,20 @@ def _generate_ragas_reports(
         <div class="category-section">
             <h3>{difficulty.upper()} <span class="badge">{len(diff_df)} questions</span></h3>
             <table>
-                <tr><th>Metric</th><th>Mean</th><th>Std Dev</th></tr>
+                <tr><th>Metric</th><th>Mean</th><th>Std Dev</th><th>n_valid</th><th>n_no_ctx</th></tr>
 """
             for metric in ['faithfulness', 'context_recall', 'context_precision']:
                 if metric in diff_df.columns:
-                    mean_val = diff_df[metric].mean()
-                    std_val = diff_df[metric].std()
-                    html_content += f"<tr><td>{metric.replace('_', ' ').title()}</td><td>{mean_val:.3f}</td><td>{std_val:.3f}</td></tr>\n"
-            
+                    s = _metric_stats(diff_df, metric)
+                    mean_str = f"{s['mean']:.3f}" if s['mean'] == s['mean'] else "—"
+                    std_str = f"{s['std']:.3f}" if s['std'] == s['std'] else "—"
+                    html_content += (
+                        f"<tr><td>{metric.replace('_', ' ').title()}</td>"
+                        f"<td>{mean_str}</td><td>{std_str}</td>"
+                        f"<td>{s['n_valid']}/{s['n_total']}</td>"
+                        f"<td>{s['n_no_ctx']}</td></tr>\n"
+                    )
+
             html_content += """
             </table>
         </div>
@@ -1218,7 +1240,10 @@ def run_rag_evaluation(
     
     # JSON-Zusammenfassung
     duration = time.time() - start_time
-    
+
+    # Lazy import (kein zusätzlicher Top-Level-Import nötig)
+    from eval.ragas_eval.ragas_evaluation import _metric_stats
+
     summary = {
         "model": model,
         "agent_type": agent_type,
@@ -1227,15 +1252,24 @@ def run_rag_evaluation(
         "metrics": {},
         "output_path": str(csv_path),
     }
-    
-    # Metriken extrahieren
+
+    # Metriken extrahieren (NaN- und Empty-Context-aware: Zeilen ohne RAG-Kontext
+    # werden ausgeschlossen, damit Agent-Varianten mit unterschiedlichem RAG-Routing
+    # vergleichbar bleiben.)
     for metric in ["faithfulness", "context_recall", "context_precision"]:
         if metric in results_df.columns:
+            stats = _metric_stats(results_df, metric)
             summary["metrics"][metric] = {
-                "mean": float(results_df[metric].mean()),
-                "std": float(results_df[metric].std()),
-                "min": float(results_df[metric].min()),
-                "max": float(results_df[metric].max()),
+                "mean": stats["mean"],
+                "std": stats["std"],
+                "min": float(results_df[metric].min(skipna=True))
+                    if results_df[metric].notna().any() else float("nan"),
+                "max": float(results_df[metric].max(skipna=True))
+                    if results_df[metric].notna().any() else float("nan"),
+                "n_valid": stats["n_valid"],
+                "n_total": stats["n_total"],
+                "n_no_context": stats["n_no_ctx"],
+                "n_nan": stats["n_nan"],
             }
     
     json_path = ragas_dir / "ragas_summary.json"

@@ -646,7 +646,6 @@ Antworte direkt und natürlich:"""
                     missing = decision_result.missing_fields or []
                     retry_hint = (
                         f"Deine vorherige Entscheidung war 'insufficient_data' mit fehlenden Feldern {missing}. "
-                        f"ABER: Das Tool '{identified_tool}' hat PFLICHT: keine – es kann IMMER aufgerufen werden. "
                         f"Bitte entscheide erneut. Antworte nur im JSON-Format."
                     )
                     retry_decision_msgs = [
