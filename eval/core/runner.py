@@ -441,7 +441,7 @@ Precision & %.3f & %.3f \\
 Recall & %.3f & %.3f \\
 F1-Score & %.3f & %.3f \\
 Argument Accuracy & %.3f & -- \\
-Exact Match Rate & %.3f & -- \\
+Task Success Rate & %.3f & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -461,7 +461,7 @@ Exact Match Rate & %.3f & -- \\
 \label{tab:results_by_difficulty}
 \begin{tabular}{lccc}
 \toprule
-\textbf{Difficulty} & \textbf{N} & \textbf{F1} & \textbf{Exact Match} \\
+\textbf{Difficulty} & \textbf{N} & \textbf{F1} & \textbf{Task Success Rate} \\
 \midrule
 """
     for diff, data in sorted(metrics.metrics_by_difficulty.items()):
@@ -482,7 +482,7 @@ Exact Match Rate & %.3f & -- \\
 \label{tab:results_by_tool}
 \begin{tabular}{lccc}
 \toprule
-\textbf{Tool} & \textbf{N} & \textbf{F1} & \textbf{Exact Match} \\
+\textbf{Tool} & \textbf{N} & \textbf{F1} & \textbf{Task Success Rate} \\
 \midrule
 """
     for tool, data in sorted(metrics.metrics_by_tool.items()):
@@ -520,13 +520,13 @@ def generate_markdown_report(report: EvaluationReport) -> str:
 | Recall | {m.mean_recall:.3f} | ±{m.std_recall:.3f} |
 | F1-Score | {m.mean_f1:.3f} | ±{m.std_f1:.3f} |
 | Argument Accuracy | {m.mean_argument_accuracy:.3f} | - |
-| **Exact Match Rate** | **{m.exact_match_rate:.1%}** | - |
+| **Task Success Rate** | **{m.exact_match_rate:.1%}** | - |
 
 ---
 
 ## Results by Difficulty
 
-| Difficulty | N | F1 | Exact Match |
+| Difficulty | N | F1 | Task Success Rate |
 |------------|---|-----|-------------|
 """
     
@@ -538,7 +538,7 @@ def generate_markdown_report(report: EvaluationReport) -> str:
 
 ## Results by Tool
 
-| Tool | N | F1 | Exact Match | Arg Accuracy |
+| Tool | N | F1 | Task Success Rate | Arg Accuracy |
 |------|---|-----|-------------|--------------|
 """
     

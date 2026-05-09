@@ -83,7 +83,7 @@ def plot_overall_metrics(metrics: dict, save_path: Optional[str] = None) -> Opti
     
     fig, ax = plt.subplots(figsize=(8, 5))
     
-    metric_names = ["Precision", "Recall", "F1-Score", "Arg. Accuracy", "Exact Match"]
+    metric_names = ["Precision", "Recall", "F1-Score", "Arg. Accuracy", "Task Success Rate"]
     values = [
         metrics["mean_precision"],
         metrics["mean_recall"],
@@ -165,7 +165,7 @@ def plot_by_difficulty(metrics: dict, save_path: Optional[str] = None) -> Option
     
     bars1 = ax.bar(x - width/2, f1_scores, width, label="F1-Score",
                    color=COLORS["primary"], edgecolor="black", linewidth=0.5)
-    bars2 = ax.bar(x + width/2, exact_match, width, label="Exact Match Rate",
+    bars2 = ax.bar(x + width/2, exact_match, width, label="Task Success Rate",
                    color=COLORS["secondary"], edgecolor="black", linewidth=0.5)
     
     # Anzahl-Annotationen hinzufügen
@@ -221,7 +221,7 @@ def plot_by_tool(metrics: dict, save_path: Optional[str] = None) -> Optional[plt
     
     bars1 = ax.barh(y + height/2, f1_scores, height, label="F1-Score",
                     color=COLORS["primary"], edgecolor="black", linewidth=0.5)
-    bars2 = ax.barh(y - height/2, exact_match, height, label="Exact Match Rate",
+    bars2 = ax.barh(y - height/2, exact_match, height, label="Task Success Rate",
                     color=COLORS["secondary"], edgecolor="black", linewidth=0.5)
     
     # Anzahl-Annotationen hinzufügen

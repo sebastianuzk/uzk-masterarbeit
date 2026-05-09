@@ -511,7 +511,7 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
 {{"steps": ["Schritt 1", "Schritt 2", ...]}}"""
 
         try:
-            response = self.json_llm.invoke([SystemMessage(content=decompose_prompt)])
+            response = self.json_llm.invoke([HumanMessage(content=decompose_prompt)])
             content = response.content.strip()
             
             # Entferne Markdown-Wrapper
@@ -750,6 +750,12 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
                         
                         if agent:
                             context_string = self.shared_context.to_context_string()
+                            # Include original full message so sub-agents have full context
+                            # (e.g. email agent needs to know what was done in prior steps)
+                            if context_string:
+                                context_string = f"Vollständige Nutzeranfrage: {message}\n\n{context_string}"
+                            else:
+                                context_string = f"Vollständige Nutzeranfrage: {message}"
                             step_tools = agent.get_tool_selection(step, context=context_string)
                             all_tools.extend(step_tools)
                             step_details.append({

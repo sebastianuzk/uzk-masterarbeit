@@ -580,7 +580,10 @@ class TestApplyMultiStep:
         """
         user_prompt = """
         Previous conversation:
-        User: [Vollständige Bewerbungsdaten für Medizin]
+        User: Bewerbung Medizin Bachelor WS 2024/25, Erststudium, 1. Semester.
+              Login: anna@uni-koeln.de / Sicher456
+              Weiblich, 22.07.2001, Hamburg, Deutschland, deutsch.
+              Abitur 1,7 am 20.06.2019, Gymnasium Hamburg-Blankenese.
         Assistant: Ich bereite die Bewerbung für Medizin vor.
         
         Current message: Sorry, ich meinte Biologie nicht Medizin
@@ -590,7 +593,19 @@ class TestApplyMultiStep:
             required_tools=["klips2_apply_study"],
             required_arguments={
                 "klips2_apply_study": {
-                    "study_program": "Biologie"
+                    "username": "anna@uni-koeln.de",
+                    "password": "Sicher456",
+                    "study_program": "Biologie",
+                    "degree_type": "Bachelor",
+                    "semester": "Wintersemester 2024/25",
+                    "study_form": "Erststudium",
+                    "gender": "weiblich",
+                    "birth_place": "Hamburg",
+                    "nationality": "deutsch",
+                    "hzb_date": "20.06.2019",
+                    "hzb_type": "Allgemeine Hochschulreife",
+                    "hzb_grade": "1,7",
+                    "hzb_place": "Hamburg-Blankenese"
                 }
             },
             argument_match_mode=ArgumentMatchMode.SEMANTIC

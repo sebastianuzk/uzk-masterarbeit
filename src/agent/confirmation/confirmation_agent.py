@@ -344,17 +344,32 @@ Sei STRENG bei Pflichtfeldern und Halluzinations-Prüfung, FAIR bei Formaten."""
 
         try:
             # LLM-Bewertung einholen (JSON-Modus über dedizierten LLM)
+            # response = self.llm_json.invoke(
+            #     [HumanMessage(content=validation_prompt)]
+            # )
+
             response = self.llm_json.invoke(
                 [SystemMessage(content=validation_prompt)]
             )
 
             # Parse LLM-Antwort
-            result_text = response.content.strip()
+            raw_content = response.content
+            if isinstance(raw_content, list):
+                raw_content = " ".join(str(b) for b in raw_content)
+            result_text = raw_content.strip()
             
-            # Bereinige JSON (entferne Markdown-Blöcke falls vorhanden)
+            # Bereinige JSON (entferne Markdown-Blöcke und Präambel-Text falls vorhanden)
             if result_text.startswith("```"):
                 result_text = re.sub(r'^```(?:json)?\n?', '', result_text)
                 result_text = re.sub(r'\n?```$', '', result_text)
+            elif not result_text.startswith("{") and not result_text.startswith("["):
+                code_block = re.search(r'```(?:json)?\n?(.*?)```', result_text, re.DOTALL)
+                if code_block:
+                    result_text = code_block.group(1).strip()
+                else:
+                    m = re.search(r'(\{|\[)', result_text)
+                    if m:
+                        result_text = result_text[m.start():]
             
             result = json.loads(result_text)
             
@@ -641,16 +656,31 @@ Wenn satisfactory=false, beschreibe WIE die Antwort verbessert werden sollte."""
 
             try:
                 # LLM-Reflexion (JSON-Modus über dedizierten LLM)
+                # reflection_response = self.llm_json.invoke(
+                #     [HumanMessage(content=reflection_prompt)]
+                # )
+
                 reflection_response = self.llm_json.invoke(
                     [SystemMessage(content=reflection_prompt)]
                 )
 
-                reflection_text = reflection_response.content.strip()
+                raw_ref = reflection_response.content
+                if isinstance(raw_ref, list):
+                    raw_ref = " ".join(str(b) for b in raw_ref)
+                reflection_text = raw_ref.strip()
                 
-                # Bereinige JSON
+                # Bereinige JSON (entferne Markdown-Blöcke und Präambel-Text falls vorhanden)
                 if reflection_text.startswith("```"):
                     reflection_text = re.sub(r'^```(?:json)?\n?', '', reflection_text)
                     reflection_text = re.sub(r'\n?```$', '', reflection_text)
+                elif not reflection_text.startswith("{") and not reflection_text.startswith("["):
+                    code_block = re.search(r'```(?:json)?\n?(.*?)```', reflection_text, re.DOTALL)
+                    if code_block:
+                        reflection_text = code_block.group(1).strip()
+                    else:
+                        m = re.search(r'(\{|\[)', reflection_text)
+                        if m:
+                            reflection_text = reflection_text[m.start():]
                 
                 reflection = json.loads(reflection_text)
                 
@@ -768,9 +798,12 @@ Schreibe die Antwort so, als würdest du direkt mit dem Nutzer sprechen."""
                     if hasattr(response, 'tool_calls') and response.tool_calls:
                         for tc in response.tool_calls:
                             raw_calls.append({"name": tc.get("name", ""), "args": tc.get("args", {})})
+                    raw_content_trace = response.content if hasattr(response, 'content') else ""
+                    if isinstance(raw_content_trace, list):
+                        raw_content_trace = " ".join(str(b) for b in raw_content_trace)
                     self.conversation_trace.append({
                         "step": f"llm_call_attempt_{attempt + 1}",
-                        "raw_output": response.content if hasattr(response, 'content') else "",
+                        "raw_output": raw_content_trace,
                         "tool_calls_proposed": raw_calls,
                         "timestamp": datetime.now().isoformat(),
                     })

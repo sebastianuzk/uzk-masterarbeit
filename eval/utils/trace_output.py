@@ -76,6 +76,8 @@ def print_agent_trace(agent: Any, *, max_raw_lines: int = 30) -> None:
         print(f"  {_CYA}{' | '.join(header_parts)}{_RST}")
 
         raw_out = step.get("raw_output", "")
+        if isinstance(raw_out, list):
+            raw_out = " ".join(str(b) for b in raw_out)
         if raw_out:
             lines = raw_out.strip().split("\n")
             for line in lines[:max_raw_lines]:

@@ -88,7 +88,7 @@ Du sendest E-Mails für den Nutzer an den Support.
 ### send_email
 Parameter:
 - subject: Betreff (PFLICHT - erstelle passenden wenn Thema bekannt)
-- body: Inhalt (PFLICHT - formuliere professionell basierend auf Anliegen)
+- body: Text der E-Mail (PFLICHT - muss vom Assistenten aus dem Gesprächskontext generiert werden, wenn der Nutzer keinen expliziten Text angibt)
 
 ## BEISPIELE
 

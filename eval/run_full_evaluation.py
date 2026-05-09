@@ -539,7 +539,7 @@ def _generate_markdown_report(agent_results: List[Dict], model: str) -> str:
             tools = result['tools']
             md += "#### Tool-Evaluation\n\n"
             md += f"- **Szenarien:** {tools.get('total_scenarios', 0)}\n"
-            md += f"- **Exact Match:** {tools.get('exact_match_count', 0)} ({tools.get('exact_match_rate', 0):.1%})\n"
+            md += f"- **Task Success Rate:** {tools.get('exact_match_count', 0)} ({tools.get('exact_match_rate', 0):.1%})\n"
             md += f"- **F1-Score:** {tools.get('mean_f1', 0):.3f}\n"
             md += f"- **Precision:** {tools.get('mean_precision', 0):.3f}\n"
             md += f"- **Recall:** {tools.get('mean_recall', 0):.3f}\n\n"
@@ -669,7 +669,7 @@ def _generate_html_report(agent_results: List[Dict], model: str) -> str:
 """
             html += f"""
                         <p><strong>Szenarien:</strong> {tools.get('total_scenarios', 0)}</p>
-                        <p><strong>Exact Match:</strong> <span class="metric-value">{tools.get('exact_match_rate', 0):.1%}</span> ({tools.get('exact_match_count', 0)} von {tools.get('total_scenarios', 0)})</p>
+                        <p><strong>Task Success Rate:</strong> <span class="metric-value">{tools.get('exact_match_rate', 0):.1%}</span> ({tools.get('exact_match_count', 0)} von {tools.get('total_scenarios', 0)})</p>
                         <p><strong>F1-Score:</strong> {tools.get('mean_f1', 0):.3f}</p>
                         <p><strong>Precision:</strong> {tools.get('mean_precision', 0):.3f}</p>
                         <p><strong>Recall:</strong> {tools.get('mean_recall', 0):.3f}</p>
@@ -1082,7 +1082,7 @@ def run_tool_evaluation(
     print(f"   Modell:           {model}")
     print(f"   Agent:            {agent_type}")
     print(f"   Szenarien:        {report.total_scenarios}")
-    print(f"   Exact Match:      {exact_match_count} ({metrics.exact_match_rate:.1%})")
+    print(f"   Task Success Rate: {exact_match_count} ({metrics.exact_match_rate:.1%})")
     print(f"   Mean F1:          {metrics.mean_f1:.3f}")
     print(f"   Mean Precision:   {metrics.mean_precision:.3f}")
     print(f"   Mean Recall:      {metrics.mean_recall:.3f}")
@@ -1445,7 +1445,7 @@ def run_full_evaluation(
     if "tools" in results and "exact_match_rate" in results.get("tools", {}):
         tools = results["tools"]
         print(f"\n   Tool-Metriken:")
-        print(f"      Exact Match:   {tools['exact_match_rate']:.1%}")
+        print(f"      Task Success Rate: {tools['exact_match_rate']:.1%}")
         print(f"      Mean F1:       {tools['mean_f1']:.3f}")
         print(f"      Mean Precision:{tools['mean_precision']:.3f}")
         print(f"      Mean Recall:   {tools['mean_recall']:.3f}")

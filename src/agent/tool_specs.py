@@ -87,10 +87,10 @@ TOOL_SPECS = {
         }
     },
     "send_email": {
-        "description": "E-Mail senden",
+        "description": "E-Mail senden. Der Empfänger ist automatisch vorkonfiguriert – keine 'to'-Adresse nötig.",
         "required_params": {
             "subject": "Betreff der E-Mail",
-            "body": "Text der E-Mail"
+            "body": "Text der E-Mail. Muss vom Assistenten aus dem Gesprächskontext generiert werden, wenn der Nutzer keinen expliziten Text angibt."
         },
         "optional_params": {}
     },

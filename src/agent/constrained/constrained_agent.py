@@ -169,11 +169,21 @@ class ConstrainedAgent:
 
         # 1. JSON parsen
         try:
-            # Bereinige JSON (entferne Markdown-Blöcke falls vorhanden)
+            # Bereinige JSON (entferne Markdown-Blöcke und Präambel-Text falls vorhanden)
             json_str = json_str.strip()
             if json_str.startswith("```"):
                 json_str = re.sub(r'^```(?:json)?\n?', '', json_str)
                 json_str = re.sub(r'\n?```$', '', json_str)
+            elif not json_str.startswith("{") and not json_str.startswith("["):
+                # Modell hat Fließtext vor dem JSON-Block ausgegeben — extrahiere JSON-Block
+                code_block = re.search(r'```(?:json)?\n?(.*?)```', json_str, re.DOTALL)
+                if code_block:
+                    json_str = code_block.group(1).strip()
+                else:
+                    # Kein Code-Block — suche nach dem ersten { oder [
+                    m = re.search(r'(\{|\[)', json_str)
+                    if m:
+                        json_str = json_str[m.start():]
 
             data = json.loads(json_str)
         except json.JSONDecodeError as e:
@@ -680,9 +690,7 @@ Antworte direkt und natürlich:"""
                 if email_keywords:
                     retry_hint = (
                         "Deine vorherige Entscheidung war 'respond', aber die Nachricht enthält "
-                        "eindeutige E-Mail-Signalwörter. Das Tool 'send_email' hat PFLICHT: keine "
-                        "und kann immer aufgerufen werden. Bitte entscheide erneut: "
-                        "action='tool', tool_names=['send_email']. Antworte nur im JSON-Format."
+                        "eindeutige E-Mail-Signalwörter. Bitte entscheide erneut: "
                     )
                     retry_decision_msgs = [
                         SystemMessage(content=decision_prompt),

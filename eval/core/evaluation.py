@@ -343,6 +343,8 @@ def _values_match(expected: Any, actual: Any, mode: ArgumentMatchMode) -> bool:
             "warsaw":  {"warsaw", "warschau"},
             "beijing": {"beijing", "peking"},
             "moscow":  {"moscow", "moskau"},
+            # District names: agent may extract full district name instead of city
+            "hamburg": {"hamburg", "hamburg-blankenese"},
         }
         for variants in _CITY_VARIANTS.values():
             if exp_lower in variants and act_lower in variants:

@@ -94,8 +94,6 @@ class KnowledgeAgent(BaseSpecializedAgent):
 
 ## KRITISCHE REGEL: IMMER EIN TOOL AUFRUFEN
 
-⚠️ Du MUSST bei jeder Anfrage mindestens ein Tool aufrufen! Antworte NIEMALS ohne Tool-Aufruf.
-
 **AUSNAHME:** Wenn der Nutzer abbricht ("nein", "abbrechen", "stop", "cancel", "nicht mehr", "vergiss es") → KEIN Tool aufrufen, nur antworten.
 
 ## TOOL-AUSWAHL

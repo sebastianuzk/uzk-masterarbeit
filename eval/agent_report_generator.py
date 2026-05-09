@@ -33,7 +33,7 @@ def generate_agent_report(agent_dir: Path, results: Dict[str, Any], model: str, 
 
 ### Gesamtmetriken
 - **Szenarien:** {tools.get('total_scenarios', 0)}
-- **Exact Match:** {tools.get('exact_match_rate', 0):.1%} ({tools.get('exact_match_count', 0)} von {tools.get('total_scenarios', 0)})
+- **Task Success Rate:** {tools.get('exact_match_rate', 0):.1%} ({tools.get('exact_match_count', 0)} von {tools.get('total_scenarios', 0)})
 - **F1-Score:** {tools.get('mean_f1', 0):.3f}
 - **Precision:** {tools.get('mean_precision', 0):.3f}
 - **Recall:** {tools.get('mean_recall', 0):.3f}
@@ -41,7 +41,7 @@ def generate_agent_report(agent_dir: Path, results: Dict[str, Any], model: str, 
 
 ### Nach Schwierigkeit
 
-| Schwierigkeit | Anzahl | F1-Score | Exact Match | Argument Accuracy |
+| Schwierigkeit | Anzahl | F1-Score | Task Success Rate | Argument Accuracy |
 |---------------|--------|----------|-------------|-------------------|
 """
         
@@ -195,7 +195,7 @@ def generate_agent_report(agent_dir: Path, results: Dict[str, Any], model: str, 
         <h2>Tool-Evaluation</h2>
         <div>
             <div class="metric">
-                <div class="metric-label">Exact Match Rate</div>
+                <div class="metric-label">Task Success Rate</div>
                 <div class="metric-value">{tools.get('exact_match_rate', 0):.1%}</div>
             </div>
             <div class="metric">

@@ -462,7 +462,7 @@ def generate_html_report(data: Dict, output_path: Path):
             </div>
             
             <div class="stat-card">
-                <h3>Exact Match</h3>
+                <h3>Task Success Rate</h3>
                 <div class="value">{agg['exact_match_rate']:.1%}</div>
                 <div class="label">{int(data['total_scenarios'] * agg['exact_match_rate'])} / {data['total_scenarios']}</div>
                 <div class="progress-bar">
@@ -715,7 +715,7 @@ def generate_html_report(data: Dict, output_path: Path):
                         <th>Schwierigkeit</th>
                         <th>Anzahl</th>
                         <th>F1-Score</th>
-                        <th>Exact Match</th>
+                        <th>Task Success Rate</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -799,7 +799,7 @@ def generate_markdown_report(data: Dict, output_path: Path):
 | Metrik | Wert |
 |--------|------|
 | **Gesamt-Szenarien** | {data['total_scenarios']} |
-| **Exact Match Rate** | {agg['exact_match_rate']:.1%} ({int(data['total_scenarios'] * agg['exact_match_rate'])}/{data['total_scenarios']}) |
+| **Task Success Rate** | {agg['exact_match_rate']:.1%} ({int(data['total_scenarios'] * agg['exact_match_rate'])}/{data['total_scenarios']}) |
 | **F1-Score** | {agg['mean_f1']:.3f} |
 | **Precision** | {agg['mean_precision']:.3f} |
 | **Recall** | {agg['mean_recall']:.3f} |
@@ -942,7 +942,7 @@ Szenarien mit sehr langen Antwortzeiten (> 60 Sekunden):
 
 ## 📊 Ergebnisse nach Schwierigkeit
 
-| Schwierigkeit | Anzahl | F1-Score | Exact Match |
+| Schwierigkeit | Anzahl | F1-Score | Task Success Rate |
 |---------------|--------|----------|-------------|
 """
     
