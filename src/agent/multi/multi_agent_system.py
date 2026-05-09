@@ -109,15 +109,27 @@ class MultiAgentSystem:
         if enable_trace:
             self.conversation_trace = []
 
-        agent_name, tool_calls = self.orchestrator.get_tool_selection(message)
+        agent_name, tool_calls, step_details = self.orchestrator.get_tool_selection(message)
 
         if enable_trace:
-            self.conversation_trace.append({
-                "step": "routing",
-                "routed_to": agent_name,
-                "tool_calls_proposed": [{"name": tc.get("name", ""), "args": tc.get("args", {})} for tc in tool_calls],
-                "timestamp": datetime.now().isoformat(),
-            })
+            if step_details:
+                # Multi-step: one trace entry per decomposed step
+                for i, step in enumerate(step_details, 1):
+                    self.conversation_trace.append({
+                        "step": f"routing_step_{i}",
+                        "step_query": step["step_query"],
+                        "routed_to": step["routed_to"],
+                        "tool_calls_proposed": [{"name": tc.get("name", ""), "args": tc.get("args", {})} for tc in step["tools"]],
+                        "timestamp": datetime.now().isoformat(),
+                    })
+            else:
+                # Single-step: one trace entry
+                self.conversation_trace.append({
+                    "step": "routing",
+                    "routed_to": agent_name,
+                    "tool_calls_proposed": [{"name": tc.get("name", ""), "args": tc.get("args", {})} for tc in tool_calls],
+                    "timestamp": datetime.now().isoformat(),
+                })
 
         return tool_calls  # Nur Tool-Calls zurückgeben, nicht das Tuple!
 

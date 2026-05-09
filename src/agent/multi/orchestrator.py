@@ -729,7 +729,8 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
             message: Die Nutzeranfrage
             
         Returns:
-            Tuple von (agent_name, tool_calls) - bei multi-step: mehrere Agenten, aggregierte Tools
+            Tuple von (agent_name, tool_calls, steps) wobei steps eine Liste von
+            {"step_query", "routed_to", "tools"} Dicts ist (leer bei single-step)
         """
         try:
             # Check if multi-step
@@ -741,9 +742,9 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
                 if len(steps) > 1:
                     # Multi-Step: Sammle Tools von allen Schritten
                     all_tools = []
-                    agent_names = []
+                    step_details = []
                     
-                    for i, step in enumerate(steps, 1):
+                    for step in steps:
                         routing = self._route_query(step)
                         agent = self.agents.get(routing.agent_name)
                         
@@ -751,11 +752,14 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
                             context_string = self.shared_context.to_context_string()
                             step_tools = agent.get_tool_selection(step, context=context_string)
                             all_tools.extend(step_tools)
-                            agent_names.append(routing.agent_name)
+                            step_details.append({
+                                "step_query": step,
+                                "routed_to": routing.agent_name,
+                                "tools": step_tools,
+                            })
                     
-                    # Return first agent name, all tools (evaluation compatibility)
-                    primary_agent = agent_names[0] if agent_names else "Wissens-Agent"
-                    return primary_agent, all_tools
+                    primary_agent = step_details[0]["routed_to"] if step_details else "Wissens-Agent"
+                    return primary_agent, all_tools, step_details
             
             # Single-Step: Normales Routing
             routing = self._route_query(message)
@@ -766,17 +770,17 @@ Antworte NUR mit diesem JSON-Format (ohne Markdown):
             # Spezialisierten Agenten für Tool-Auswahl fragen (ohne Ausführung)
             agent = self.agents.get(routing.agent_name)
             if not agent:
-                return routing.agent_name, []
+                return routing.agent_name, [], []
             
             # Tool-Auswahl ohne Ausführung (mit strukturiertem Kontext)
             context_string = self.shared_context.to_context_string()
             tool_calls = agent.get_tool_selection(message, context=context_string)
             
-            return routing.agent_name, tool_calls
+            return routing.agent_name, tool_calls, []
             
         except Exception as e:
             logger.error(f"Fehler bei Tool-Auswahl: {str(e)}")
-            return "Wissens-Agent", []
+            return "Wissens-Agent", [], []
     
     def get_memory_summary(self) -> Dict[str, Any]:
         """Gebe Zusammenfassung des Memory zurück."""
