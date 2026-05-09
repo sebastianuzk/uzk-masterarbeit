@@ -675,40 +675,9 @@ Antworte direkt und natürlich:"""
                 else:
                     return []  # Fehlende Daten → kein Tool-Call
             
-            # Also retry if model said 'respond' but message clearly contains email keywords
-            # (sub-second failures indicate model skipped the tool entirely)
             if decision_result.action == "respond":
-                available_tool_names = {tool.name for tool in self.tools}
-                email_keywords = (
-                    "send_email" in available_tool_names and any(
-                        kw in message.lower() for kw in [
-                            "e-mail", "email", "mail", "sende", "schicke", "schreibe",
-                            "verfasse", "nachricht", "send", "write",
-                        ]
-                    )
-                )
-                if email_keywords:
-                    retry_hint = (
-                        "Deine vorherige Entscheidung war 'respond', aber die Nachricht enthält "
-                        "eindeutige E-Mail-Signalwörter. Bitte entscheide erneut: "
-                    )
-                    retry_decision_msgs = [
-                        SystemMessage(content=decision_prompt),
-                        HumanMessage(content=message),
-                        AIMessage(content=decision_response.content),
-                        HumanMessage(content=retry_hint),
-                    ]
-                    retry_decision_response = self.llm_json.invoke(retry_decision_msgs)
-                    retry_decision_result, retry_err = self._parse_and_validate(
-                        retry_decision_response.content, ToolDecision
-                    )
-                    if not retry_err and retry_decision_result and retry_decision_result.action == "tool":
-                        decision_result = retry_decision_result
-                    else:
-                        return []  # Still wrong after retry
-                else:
-                    return []  # Direkte Antwort, kein Tool
-            
+                return []  # Direkte Antwort, kein Tool
+
             # Schritt 2: Tool-Argumente mit Schema extrahieren (Multi-Tool Support)
             tool_names = decision_result.tool_names
             if not tool_names:

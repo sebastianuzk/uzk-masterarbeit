@@ -282,7 +282,7 @@ class WebScraperToolCall(BaseModel):
 class EmailToolCall(BaseModel):
     """Schema für send_email Tool-Aufruf."""
     subject: str = Field(description="Betreff der E-Mail")
-    body: str = Field(description="Nachrichteninhalt")
+    body: str = Field(description="Text der E-Mail. Muss vom Assistenten aus dem Gesprächskontext generiert werden, wenn der Nutzer keinen expliziten Text angibt.")
 
     @field_validator('subject', 'body')
     @classmethod
