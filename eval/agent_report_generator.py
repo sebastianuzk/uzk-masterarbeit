@@ -44,11 +44,31 @@ def generate_agent_report(agent_dir: Path, results: Dict[str, Any], model: str, 
 | Schwierigkeit | Anzahl | F1-Score | Task Success Rate | Argument Accuracy |
 |---------------|--------|----------|-------------|-------------------|
 """
-        
-        by_diff = tools.get('by_difficulty', {})
-        for diff, metrics in by_diff.items():
-            md_content += f"| {diff} | {metrics.get('count', 0)} | {metrics.get('mean_f1', 0):.3f} | {metrics.get('exact_match_rate', 0):.1%} | {metrics.get('mean_argument_accuracy', 0):.1%} |\n"
-        
+
+        thesis_order = ["Easy", "Medium", "Hard"]
+        hard_order = ["Standard", "Multi_step", "Multi_tool", "Negative", "EdgeCases"]
+
+        by_top = tools.get('by_thesis_difficulty') or tools.get('by_difficulty', {})
+        order = thesis_order if tools.get('by_thesis_difficulty') else list(by_top.keys())
+        for diff in order:
+            metrics = by_top.get(diff)
+            if not metrics:
+                continue
+            arg_acc = metrics.get('mean_argument_accuracy', 0) or 0
+            md_content += f"| {diff} | {metrics.get('count', 0)} | {metrics.get('mean_f1', 0):.3f} | {metrics.get('exact_match_rate', 0):.1%} | {arg_acc:.1%} |\n"
+
+        by_hard = tools.get('by_hard_subtype') or {}
+        if by_hard:
+            md_content += "\n### Nach Hard-Typ\n\n"
+            md_content += "| Hard-Typ | Anzahl | F1-Score | Task Success Rate | Argument Accuracy |\n"
+            md_content += "|---------------|--------|----------|-------------|-------------------|\n"
+            for cat in hard_order:
+                metrics = by_hard.get(cat)
+                if not metrics:
+                    continue
+                arg_acc = metrics.get('mean_argument_accuracy', 0) or 0
+                md_content += f"| {cat} | {metrics.get('count', 0)} | {metrics.get('mean_f1', 0):.3f} | {metrics.get('exact_match_rate', 0):.1%} | {arg_acc:.1%} |\n"
+
         md_content += "\n"
     
     # RAGAS-Evaluation Ergebnisse
@@ -226,21 +246,64 @@ def generate_agent_report(agent_dir: Path, results: Dict[str, Any], model: str, 
             <tbody>
 """
         
-        by_diff = tools.get('by_difficulty', {})
-        for diff, metrics in by_diff.items():
+        by_top = tools.get('by_thesis_difficulty') or tools.get('by_difficulty', {})
+        order = ["Easy", "Medium", "Hard"] if tools.get('by_thesis_difficulty') else list(by_top.keys())
+        for diff in order:
+            metrics = by_top.get(diff)
+            if not metrics:
+                continue
+            arg_acc = metrics.get('mean_argument_accuracy', 0) or 0
             html_content += f"""
                 <tr>
                     <td><span class="badge badge-info">{diff}</span></td>
                     <td>{metrics.get('count', 0)}</td>
                     <td>{metrics.get('mean_f1', 0):.3f}</td>
                     <td>{metrics.get('exact_match_rate', 0):.1%}</td>
-                    <td>{metrics.get('mean_argument_accuracy', 0):.1%}</td>
+                    <td>{arg_acc:.1%}</td>
                 </tr>
 """
         
         html_content += """
             </tbody>
         </table>
+"""
+
+        by_hard = tools.get('by_hard_subtype') or {}
+        if by_hard:
+            html_content += """
+        <h3>Nach Hard-Typ</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Hard-Typ</th>
+                    <th>Anzahl</th>
+                    <th>F1-Score</th>
+                    <th>Exact Match</th>
+                    <th>Argument Accuracy</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+            for cat in ["Standard", "Multi_step", "Multi_tool", "Negative", "EdgeCases"]:
+                metrics = by_hard.get(cat)
+                if not metrics:
+                    continue
+                arg_acc = metrics.get('mean_argument_accuracy', 0) or 0
+                html_content += f"""
+                <tr>
+                    <td><span class="badge badge-info">{cat}</span></td>
+                    <td>{metrics.get('count', 0)}</td>
+                    <td>{metrics.get('mean_f1', 0):.3f}</td>
+                    <td>{metrics.get('exact_match_rate', 0):.1%}</td>
+                    <td>{arg_acc:.1%}</td>
+                </tr>
+"""
+            html_content += """
+            </tbody>
+        </table>
+"""
+
+        html_content += """
     </div>
 """
     

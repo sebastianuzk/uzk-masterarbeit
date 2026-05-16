@@ -68,8 +68,6 @@ class KnowledgeAgent(BaseSpecializedAgent):
         
         # Basis-Prompt
         prompt = """Du bist der Wissens-Spezialist, ein KI-Agent für Informationssuche und Wissensabfragen.
-
-
 ## TOOL-AUSWAHL
 """
         

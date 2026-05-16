@@ -129,7 +129,7 @@ class ReactAgent:
 ✅ Tool aufrufen bei:
 {tool_usage_text}
 
-❌ KEIN Tool bei:
+B❌ KEIN Tool bei:
 - Begrüßungen ("Hallo!", "Wie geht's?")
 - Fragen über dich selbst ("Was kannst du?")
 - Einfache Rechenaufgaben, Übersetzungen

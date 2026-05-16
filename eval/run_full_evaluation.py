@@ -31,10 +31,12 @@ Ergebnisse: data/eval/final/<modell>/
 """
 
 import argparse
+import concurrent.futures
 import json
 import os
 import sys
 import time
+import requests
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
@@ -857,6 +859,28 @@ def get_provider_for_model(model: str) -> str:
 
 
 # ============================================================================
+# MODEL OFFLOAD
+# ============================================================================
+
+def _offload_ollama_model(model: str, provider: str) -> None:
+    """Unloads an Ollama model from GPU/memory after a completed run."""
+    if provider != "ollama":
+        return
+    try:
+        response = requests.post(
+            f"{settings.OLLAMA_BASE_URL}/api/generate",
+            json={"model": model, "keep_alive": 0},
+            timeout=15,
+        )
+        if response.status_code == 200:
+            print(f"\n   ↓ Model offloaded: {model}")
+        else:
+            print(f"\n   ⚠️  Offload returned HTTP {response.status_code}")
+    except Exception as e:
+        print(f"\n   ⚠️  Could not offload model: {e}")
+
+
+# ============================================================================
 # TOOL-EVALUATION
 # ============================================================================
 
@@ -907,6 +931,7 @@ def run_tool_evaluation(
         run_single_scenario,
         aggregate_results,
         save_report,
+        ScenarioResult,
     )
     
     # Agent erstellen
@@ -988,6 +1013,8 @@ def run_tool_evaluation(
         print(f"\n🗑️  Ignoriere vorhandenen Checkpoint (resume=False)")
         print(f"   Starte frisch...\n")
     
+    SCENARIO_TIMEOUT_SECONDS = 900  # 15 Minuten
+
     for i, scenario in enumerate(scenarios, 1):
         # Überspringe bereits abgeschlossene Szenarien
         if scenario.short_id in completed_scenario_ids:
@@ -1006,12 +1033,64 @@ def run_tool_evaluation(
         print(f"[{i}/{len(scenarios)}] {display_name}...", end=" ", flush=True)
         
         try:
-            result = run_single_scenario(agent, scenario, enable_trace=enable_trace)
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(run_single_scenario, agent, scenario, enable_trace)
+            try:
+                result = future.result(timeout=SCENARIO_TIMEOUT_SECONDS)
+            except concurrent.futures.TimeoutError:
+                latency_ms = SCENARIO_TIMEOUT_SECONDS * 1000
+                result = ScenarioResult(
+                    scenario_id=scenario.id,
+                    short_id=scenario.short_id,
+                    tool=scenario.tool,
+                    difficulty=scenario.difficulty.value,
+                    category=scenario.category,
+                    user_prompt=scenario.user_prompt,
+                    expected_tools=scenario.gold_standard.required_tools,
+                    actual_tools=[],
+                    correct_tools=[],
+                    forbidden_tools_called=[],
+                    expected_arguments=scenario.gold_standard.required_arguments,
+                    actual_arguments={},
+                    correct_arguments={},
+                    missing_arguments=scenario.gold_standard.required_arguments,
+                    tool_precision=0.0,
+                    tool_recall=0.0,
+                    tool_f1=0.0,
+                    argument_accuracy=float('nan'),
+                    exact_match=False,
+                    latency_ms=latency_ms,
+                    error=f"TIMEOUT nach {SCENARIO_TIMEOUT_SECONDS}s",
+                    input_tokens=0,
+                    output_tokens=0,
+                    total_tokens=0,
+                )
+                print(f"⏱️  TIMEOUT ({SCENARIO_TIMEOUT_SECONDS}s)")
+                # Unload the model from Ollama to abort the hung request
+                # and free the server for the next scenario.
+                if provider == "ollama":
+                    try:
+                        requests.post(
+                            f"{settings.OLLAMA_BASE_URL}/api/generate",
+                            json={"model": model, "keep_alive": 0},
+                            timeout=10,
+                        )
+                        print(" 🔄 Ollama reset", end="")
+                        time.sleep(3)
+                    except Exception:
+                        pass
+            finally:
+                # Don't wait for the hung thread — let it die in the background
+                executor.shutdown(wait=False)
+
             results.append(result)
             completed_scenario_ids.add(scenario.short_id)
 
-            status = "✓" if result.exact_match else "✗"
-            print(f"{status} (F1={result.tool_f1:.2f}, {result.latency_ms:.0f}ms)", end="")
+            if result.error and result.error.startswith("TIMEOUT"):
+                pass  # Timeout-Meldung bereits gedruckt
+            else:
+                status = "✓" if result.exact_match else "✗"
+                print(f"{status} (F1={result.tool_f1:.2f}, {result.latency_ms:.0f}ms)", end="")
 
             # Rate limit delay for Anthropic
             if provider == "anthropic":
@@ -1033,7 +1112,7 @@ def run_tool_evaluation(
             print_scenario_outcome(result)
 
             # Inline trace output — coloured, same format as test_eval_live.py
-            if enable_trace:
+            if enable_trace and not (result.error and result.error.startswith("TIMEOUT")):
                 print_agent_trace(agent)
 
         except Exception as e:
@@ -1089,6 +1168,9 @@ def run_tool_evaluation(
     print(f"   Dauer:            {format_duration(duration)}")
     print(f"   Ergebnisse:       {output_dir}")
     
+    # Offload model from memory when done
+    _offload_ollama_model(model, provider)
+
     return {
         "model": model,
         "agent_type": agent_type,
@@ -1100,6 +1182,8 @@ def run_tool_evaluation(
         "mean_recall": metrics.mean_recall,
         "duration_seconds": duration,
         "by_difficulty": metrics.metrics_by_difficulty,
+        "by_thesis_difficulty": metrics.metrics_by_thesis_difficulty,
+        "by_hard_subtype": metrics.metrics_by_hard_subtype,
         "by_tool": metrics.metrics_by_tool,
         "output_path": str(output_dir),
     }
@@ -1293,7 +1377,10 @@ def run_rag_evaluation(
     print(f"\n   Ergebnisse:       {csv_path}")
     print(f"   README:           {ragas_dir / 'README.md'}")
     print(f"   HTML Report:      {ragas_dir / 'ragas_report.html'}")
-    
+
+    # Offload model from memory when done
+    _offload_ollama_model(model, provider)
+
     return summary
 
 

@@ -48,6 +48,60 @@ class Difficulty(str, Enum):
     MULTI_STEP = "multi_step"
 
 
+# --- Thesis taxonomy --------------------------------------------------------
+# Buckets are derived from the test *class name* (the prefix of `scenario_id`),
+# not the per-scenario `difficulty` field. The `difficulty` field mislabels
+# Negative + EdgeCases as `medium` and MultiTool as `multi_step`.
+#
+# Top-level (3 buckets, sums to 100):
+#   Easy   : *Easy                                                (20)
+#   Medium : *Medium                                              (20)
+#   Hard   : *Hard + *MultiStep + *MultiTool + *Negative + *EdgeCases (60)
+#
+# Hard sub-breakdown (5 buckets, sums to 60):
+#   Standard / Multi_step / Multi_tool / Negative / EdgeCases
+
+THESIS_TOP_ORDER = ["Easy", "Medium", "Hard"]
+THESIS_HARD_ORDER = ["Standard", "Multi_step", "Multi_tool", "Negative", "EdgeCases"]
+
+
+def _scenario_class(scenario_id: str) -> str:
+    """Return the test class name encoded in the scenario id."""
+    return scenario_id.split("_test_", 1)[0]
+
+
+def thesis_top_bucket(scenario_id: str) -> Optional[str]:
+    cls = _scenario_class(scenario_id)
+    if cls.endswith("Easy"):
+        return "Easy"
+    if cls.endswith("Medium"):
+        return "Medium"
+    if (
+        cls.endswith("Hard")
+        or "MultiStep" in cls
+        or "MultiTool" in cls
+        or "Negative" in cls
+        or "EdgeCases" in cls
+    ):
+        return "Hard"
+    return None
+
+
+def thesis_hard_subbucket(scenario_id: str) -> Optional[str]:
+    cls = _scenario_class(scenario_id)
+    if "MultiTool" in cls:
+        return "Multi_tool"
+    if "MultiStep" in cls:
+        return "Multi_step"
+    if "EdgeCases" in cls:
+        return "EdgeCases"
+    if "Negative" in cls:
+        return "Negative"
+    if cls.endswith("Hard"):
+        return "Standard"
+    return None
+
+
 @dataclass
 class EvaluationScenario:
     """Ein einzelnes Evaluierungsszenario mit Prompt und erwartetem Ergebnis."""
@@ -135,6 +189,10 @@ class AggregatedMetrics:
     avg_tokens_per_scenario: float = 0.0
     total_time_seconds: float = 0.0
     avg_latency_ms: float = 0.0
+
+    # Thesis-Taxonomie auf Basis der Testklassennamen (optional).
+    metrics_by_thesis_difficulty: dict = field(default_factory=dict)
+    metrics_by_hard_subtype: dict = field(default_factory=dict)
 
 
 @dataclass 
@@ -356,6 +414,28 @@ def aggregate_results(results: list[ScenarioResult]) -> AggregatedMetrics:
                 "exact_match_rate": sum(1 for r in diff_results if r.exact_match) / len(diff_results),
                 "mean_argument_accuracy": _mean_arg_acc(diff_results)
             }
+
+    def _bucket_metrics(rs):
+        return {
+            "count": len(rs),
+            "mean_f1": statistics.mean([r.tool_f1 for r in rs]),
+            "exact_match_rate": sum(1 for r in rs if r.exact_match) / len(rs),
+            "mean_argument_accuracy": _mean_arg_acc(rs),
+        }
+
+    # Group by thesis top-level difficulty (Easy/Medium/Hard).
+    by_thesis_difficulty = {}
+    for cat in THESIS_TOP_ORDER:
+        bucket_results = [r for r in results if thesis_top_bucket(r.scenario_id) == cat]
+        if bucket_results:
+            by_thesis_difficulty[cat] = _bucket_metrics(bucket_results)
+
+    # Group by hard sub-type (Standard/Multi_step/Multi_tool/Negative/EdgeCases).
+    by_hard_subtype = {}
+    for cat in THESIS_HARD_ORDER:
+        bucket_results = [r for r in results if thesis_hard_subbucket(r.scenario_id) == cat]
+        if bucket_results:
+            by_hard_subtype[cat] = _bucket_metrics(bucket_results)
     
     # Group by tool
     by_tool = {}
@@ -419,6 +499,8 @@ def aggregate_results(results: list[ScenarioResult]) -> AggregatedMetrics:
         metrics_by_difficulty=by_difficulty,
         metrics_by_tool=by_tool,
         metrics_by_category=by_category,
+        metrics_by_thesis_difficulty=by_thesis_difficulty,
+        metrics_by_hard_subtype=by_hard_subtype,
         total_errors=errors,
         forbidden_tool_violations=forbidden_violations,
         missing_tool_count=missing_tools,
@@ -464,12 +546,42 @@ Task Success Rate & %.3f & -- \\
 \textbf{Difficulty} & \textbf{N} & \textbf{F1} & \textbf{Task Success Rate} \\
 \midrule
 """
-    for diff, data in sorted(metrics.metrics_by_difficulty.items()):
+    top_buckets = metrics.metrics_by_thesis_difficulty or metrics.metrics_by_difficulty
+    top_order = THESIS_TOP_ORDER if metrics.metrics_by_thesis_difficulty else sorted(top_buckets.keys())
+    for diff in top_order:
+        if diff not in top_buckets:
+            continue
+        data = top_buckets[diff]
+        label = diff if metrics.metrics_by_thesis_difficulty else diff.capitalize()
         latex += "%s & %d & %.3f & %.3f \\\\\n" % (
-            diff.capitalize(), data["count"], data["mean_f1"], data["exact_match_rate"]
+            label, data["count"], data["mean_f1"], data["exact_match_rate"]
         )
     
     latex += r"""\bottomrule
+\end{tabular}
+\end{table}
+"""
+
+    # Add by-hard-subtype table
+    if metrics.metrics_by_hard_subtype:
+        latex += r"""
+\begin{table}[h]
+\centering
+\caption{Results by Hard Difficulty}
+\label{tab:results_by_hard_difficulty}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Hard Type} & \textbf{N} & \textbf{F1} & \textbf{Task Success Rate} \\
+\midrule
+"""
+        for cat in THESIS_HARD_ORDER:
+            if cat not in metrics.metrics_by_hard_subtype:
+                continue
+            data = metrics.metrics_by_hard_subtype[cat]
+            latex += "%s & %d & %.3f & %.3f \\\\\n" % (
+                cat.replace("_", r"\_"), data["count"], data["mean_f1"], data["exact_match_rate"]
+            )
+        latex += r"""\bottomrule
 \end{tabular}
 \end{table}
 """
@@ -529,9 +641,26 @@ def generate_markdown_report(report: EvaluationReport) -> str:
 | Difficulty | N | F1 | Task Success Rate |
 |------------|---|-----|-------------|
 """
-    
-    for diff, data in sorted(m.metrics_by_difficulty.items()):
-        md += f"| {diff.capitalize()} | {data['count']} | {data['mean_f1']:.3f} | {data['exact_match_rate']:.1%} |\n"
+    # Use the thesis-aligned (class-name-based) buckets when available.
+    top_buckets = m.metrics_by_thesis_difficulty or m.metrics_by_difficulty
+    top_order = THESIS_TOP_ORDER if m.metrics_by_thesis_difficulty else sorted(top_buckets.keys())
+    for diff in top_order:
+        if diff not in top_buckets:
+            continue
+        data = top_buckets[diff]
+        label = diff if m.metrics_by_thesis_difficulty else diff.capitalize()
+        md += f"| {label} | {data['count']} | {data['mean_f1']:.3f} | {data['exact_match_rate']:.1%} |\n"
+
+    # Hard sub-breakdown (Standard / Multi_step / Multi_tool / Negative / EdgeCases).
+    if m.metrics_by_hard_subtype:
+        md += "\n---\n\n## Results by Hard Difficulty\n\n"
+        md += "| Hard Type | N | F1 | Task Success Rate |\n"
+        md += "|------------|---|-----|-------------|\n"
+        for cat in THESIS_HARD_ORDER:
+            if cat not in m.metrics_by_hard_subtype:
+                continue
+            data = m.metrics_by_hard_subtype[cat]
+            md += f"| {cat} | {data['count']} | {data['mean_f1']:.3f} | {data['exact_match_rate']:.1%} |\n"
     
     md += """
 ---

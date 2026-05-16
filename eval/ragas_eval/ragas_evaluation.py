@@ -132,17 +132,21 @@ def load_testset(csv_path: str = "data/Testset.CSV", limit: int = None) -> pd.Da
 def get_rag_context_from_langsmith(client: Client, trace_id: str, debug: bool = False) -> List[str]:
     """
     Holt RAG-Kontext aus LangSmith für eine spezifische Trace-ID.
-    
+
     Die Documents befinden sich im Retriever-Output unter dem Key 'output' (nicht 'documents'!).
     Jedes Document hat 'page_content' und 'metadata'.
-    
+
+    Bei mehreren Retriever-Runs (z.B. _naive_retrieve + _advanced_retrieve nach ReRanking)
+    wird nur der Run mit den WENIGSTEN Dokumenten verwendet, da das die finale
+    post-reranking Auswahl ist — also genau das, was das LLM tatsächlich gesehen hat.
+
     Args:
         client: LangSmith Client
         trace_id: Die Trace-ID der Session
         debug: Wenn True, gebe Debug-Informationen aus
-        
+
     Returns:
-        Liste von RAG-Context-Chunks aus den Retriever-Documents
+        Liste von RAG-Context-Chunks aus dem finalen Retriever-Run
     """
     try:
         # Hole alle Child-Runs für diese Trace
@@ -151,38 +155,43 @@ def get_rag_context_from_langsmith(client: Client, trace_id: str, debug: bool = 
             trace_id=trace_id,
             is_root=False
         ))
-        
+
         if debug:
             print(f"      🔍 DEBUG: {len(child_runs)} child runs gefunden")
             for i, child in enumerate(child_runs[:10]):  # Nur erste 10 zeigen
                 print(f"         [{i}] Type: {child.run_type}, Name: {child.name}")
-        
-        # Suche nach Retriever-Run oder Tool-Run mit RAG
-        contexts = []
+
+        # Sammle alle Retriever-Runs mit ihren Dokumenten
+        retriever_runs = []
         for child in child_runs:
-            # Prüfe verschiedene Möglichkeiten
             if child.run_type == "retriever":
                 if child.outputs and isinstance(child.outputs, dict):
                     # Documents sind unter 'output' Key (nicht 'documents')!
                     documents = child.outputs.get('output', [])
-                    for doc in documents:
-                        if isinstance(doc, dict) and 'page_content' in doc:
-                            contexts.append(doc['page_content'])
-            
-            # Auch Tool-Runs prüfen (university_knowledge_search)
-            elif child.run_type == "tool" and "university_knowledge" in str(child.name).lower():
-                if child.outputs:
-                    if debug:
-                        print(f"      🔍 DEBUG: Found university_knowledge tool run")
-                        print(f"         Output type: {type(child.outputs)}")
-                        print(f"         Output (first 200 chars): {str(child.outputs)[:200]}")
-                    
-                    # Outputs könnte ein String mit RAG-Ergebnis sein
-                    # oder ein Dict mit weiteren Infos
-                    if isinstance(child.outputs, dict) and 'output' in child.outputs:
-                        contexts.append(str(child.outputs['output']))
-                    elif isinstance(child.outputs, str):
-                        contexts.append(child.outputs)
+                    if documents:
+                        retriever_runs.append({
+                            'name': child.name,
+                            'documents': documents,
+                            'doc_count': len(documents)
+                        })
+
+        contexts = []
+        if retriever_runs:
+            # Bei mehreren Retriever-Runs: Nimm den mit den WENIGSTEN Dokumenten.
+            # Das ist der finale Run nach ReRanking (z.B. _advanced_retrieve Top-K),
+            # also genau das was das LLM gesehen hat. Alle anderen Runs enthalten
+            # ungefiltertes Pre-Reranking-Material, das context_precision verzerrt.
+            final_run = min(retriever_runs, key=lambda x: x['doc_count'])
+
+            if debug:
+                print(f"      🔍 DEBUG: {len(retriever_runs)} Retriever-Run(s) gefunden")
+                for r in retriever_runs:
+                    marker = " ← verwendet" if r is final_run else ""
+                    print(f"         '{r['name']}': {r['doc_count']} docs{marker}")
+
+            for doc in final_run['documents']:
+                if isinstance(doc, dict) and 'page_content' in doc:
+                    contexts.append(doc['page_content'])
         
         if contexts:
             if debug:
@@ -486,8 +495,8 @@ def run_ragas_evaluation(
             max_retries=3
         )
     else:
-        # Ollama LLM konfigurieren (seed via model_kwargs, da ChatOllama
-        # ihn nicht als Top-Level-Parameter exponiert)
+        # Ollama LLM konfigurieren (langchain_ollama.ChatOllama exponiert seed
+        # als nativen Top-Level-Parameter und sendet es in den API-options)
         llm = ChatOllama(
             model=final_judge_model,
             base_url=OLLAMA_BASE_URL,
