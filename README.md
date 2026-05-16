@@ -29,7 +29,7 @@ Four agent types are available, selectable at runtime:
 ### Tools
 | Tool | Purpose |
 |---|---|
-| `university_knowledge_search` | RAG over 329 categorised WiSo documents |
+| `university_knowledge_search` | RAG over categorised WiSo documents |
 | `web_scraper` | Extracts content from arbitrary URLs |
 | `duckduckgo_search` | Privacy-friendly web search |
 | `klips2_register` | KLIPS2 account registration |
@@ -38,13 +38,6 @@ Four agent types are available, selectable at runtime:
 | `klips2_change_address` | Address update |
 | `klips2_change_password` | Password change |
 | `send_email` | Support escalation via SMTP |
-
-> **Disclaimer:** Full end-to-end functionality of the KLIPS2 tools (`klips2_*`) was not a primary objective of this thesis — the research focus was on agent architecture, tool-selection accuracy, and RAG quality. These tools automate interactions with the KLIPS2 web interface via browser automation and may break if the university updates its portal layout or authentication flow. They are provided as a proof-of-concept and are not guaranteed to work against the live system.
-
-### Vector Database
-- **329 document chunks** from 50 WiSo web pages
-- ChromaDB with `BAAI/bge-m3` embeddings (1024 dimensions, multilingual DE/EN)
-- Five named collections: `wiso_studium`, `wiso_fakultaet`, `wiso_services`, `wiso_forschung`, `wiso_allgemein`
 
 ## Technology Stack
 
@@ -192,34 +185,6 @@ mkdir -p eval/ragas_eval/data/vector_db/
 tar -xzf vector_db.tar.gz -C eval/ragas_eval/data/vector_db/
 ```
 
-### 5. Run the Agent
-
-```bash
-# Streamlit UI — Single-Agent
-python main.py --ui
-
-# Streamlit UI — Multi-Agent
-python main.py --ui --agent-mode multi
-
-# CLI — Single-Agent
-python main.py
-
-# CLI — Multi-Agent
-python main.py --agent-mode multi
-```
-
----
-
-## Running Tests
-
-```bash
-source .venv/bin/activate
-
-# Recommended: run only unit tests — no LLM, no network, no credentials required
-python -m pytest tests/ -m "not llm and not integration and not network and not klips and not email" -v
-```
-
-
 ---
 
 ## Running Evaluations
@@ -315,17 +280,39 @@ RAGAS judge options:
 
 ---
 
+## Running Tests
+
+```bash
+source .venv/bin/activate
+
+# Recommended: run only unit tests — no LLM, no network, no credentials required
+python -m pytest tests/ -m "not llm and not integration and not network and not klips and not email" -v
+```
+
+---
+
+## Running Application
+
+```bash
+# Streamlit UI
+python main.py --ui
+
+# CLI
+python main.py
+```
+
+The `--agent-mode` flag can be used to select a different agent (e.g. `--agent-mode multi`).
+
+> **Disclaimer:** The Streamlit UI was not a primary focus of this thesis and was not used in any of the evaluations — it is included as a bonus on top of the core research artifacts. Additionally, several tools (e.g. `klips2_*`, `send_email`) depend on a live external environment (KLIPS2 portal, SMTP server) and may not function if those services are unavailable or have changed. As such, end-to-end functionality is not guaranteed in all configurations. Both the UI and the tool integrations are candidates for improvement in the future.
+
+---
+
 ## Troubleshooting
 
 **Ollama not reachable**
 ```bash
 ollama serve         # start the server
 ollama list          # verify available models
-```
-
-**Vector database not found**
-```bash
-python src/scraper/pipelines/crawler_scraper_pipeline.py --organize-by-category
 ```
 
 **Import errors**
@@ -336,7 +323,6 @@ pip install -r requirements.txt
 
 **Slow performance with local models**
 - Use a smaller model: `ollama pull llama3.2:1b`
-- Reduce scraper concurrency: `--concurrent-requests 5`
 
 ---
 
