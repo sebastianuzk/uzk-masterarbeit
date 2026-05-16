@@ -103,8 +103,9 @@ uzk-masterarbeit/
 │   ├── integration/
 │   └── llm/
 └── data/
-    ├── vector_db/                  # ChromaDB collections (see Vector DB section)
     └── eval/final/                 # Evaluation results by model/agent
+├── eval/
+│   └── ragas_eval/data/vector_db/ # ChromaDB collections (see Vector DB section)
 ```
 
 ---
@@ -123,7 +124,7 @@ uzk-masterarbeit/
 ### 1. Clone and Install
 
 ```bash
-git clone <REPO_URL>
+git clone -b Abgabe_JSebastian_de_Wet https://github.com/sebastianuzk/uzk-masterarbeit.git
 cd uzk-masterarbeit
 
 python3 -m venv .venv
@@ -184,10 +185,11 @@ ollama pull llama3.1:8b
 
 > **Download:** [→ Vector DB on Google Drive](https://drive.google.com/drive/folders/1aqOYKc6DSfwgWFhHk2JL00eOr7Tbi_0Y?usp=sharing)
 
-Extract the archive into `data/vector_db/`:
+Extract the archive into `eval/ragas_eval/data/vector_db/`:
 
 ```bash
-tar -xzf vector_db.tar.gz -C data/vector_db/
+mkdir -p eval/ragas_eval/data/vector_db/
+tar -xzf vector_db.tar.gz -C eval/ragas_eval/data/vector_db/
 ```
 
 ### 5. Run the Agent
