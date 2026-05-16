@@ -64,7 +64,6 @@ Four agent types are available, selectable at runtime:
 uzk-masterarbeit/
 ├── main.py                         # Entry point (CLI + Streamlit)
 ├── requirements.txt
-├── Makefile                        # Convenience commands
 ├── config/
 │   ├── settings.py                 # Central configuration (reads .env)
 │   └── logging_config.py
@@ -181,7 +180,7 @@ ollama pull llama3.1:8b
 
 ### 4. Vector Database
 
-> **Download:** [→ PLACEHOLDER: insert vector database download link here](#)
+> **Download:** [→ Vector DB on Google Drive](https://drive.google.com/drive/folders/1aqOYKc6DSfwgWFhHk2JL00eOr7Tbi_0Y?usp=sharing)
 
 Extract the archive into `data/vector_db/`:
 
@@ -205,28 +204,27 @@ python main.py
 python main.py --agent-mode multi
 ```
 
-Or via `make`:
-
-```bash
-make ui          # Streamlit, Single-Agent
-make ui-multi    # Streamlit, Multi-Agent
-make run         # CLI, Single-Agent
-make run-multi   # CLI, Multi-Agent
-```
-
 ---
 
 ## Running Tests
 
 ```bash
-make test                # All tests
-make test-fast           # Unit tests only (fast)
-make test-integration    # Integration tests
-
-# Or directly with pytest:
 source .venv/bin/activate
+
+# Recommended: run only unit tests — no LLM, no network, no credentials required
+python -m pytest tests/ -m "not llm and not integration and not network and not klips and not email" -v
+
+# All unit tests
+python -m pytest tests/unit/ -v
+
+# Integration tests (requires a running agent and configured .env)
+python -m pytest tests/integration/ -v
+
+# All tests
 python -m pytest tests/ -v
 ```
+
+> **Tip:** Running with `-m "not llm and not integration and not network and not klips and not email"` skips every test that needs an LLM, live network access, or external credentials, making the suite fast and self-contained.
 
 ---
 
@@ -242,17 +240,14 @@ Results are saved to `data/eval/final/<model>/<timestamp>/`.
 
 ### Tool Evaluation
 
-Tests tool-selection accuracy across 100 curated KLIPS2 scenarios. Metrics: F1, precision, recall, and argument matching.
+Tests tool-selection accuracy across 100 curated KLIPS2 scenarios.
 
 ```bash
 # llama3.1:8b, single agent
 python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools
 
-# OpenAI model
+# OpenAI model (--provider selects the LLM backend for the agent under test)
 python -m eval.run_full_evaluation --model gpt-5.2 --provider openai --agent single --mode tools
-
-# Compare all agent types
-python -m eval.run_full_evaluation --model llama3.1:8b --agent all --mode tools
 
 # Specific scenarios only
 python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools --test-ids s1 s2 s3
@@ -263,9 +258,13 @@ python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode too
 # With internal trace logging (for failed scenarios)
 python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools --enable-trace
 
-# Ignore existing checkpoints and restart
+# Recommended: always pass --no-resume so each run starts clean
 python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode tools --no-resume
 ```
+
+**`--provider` flag:** selects the LLM backend for the *agent under test* — independent of the RAGAS judge. Valid values are `ollama`, `openai`, and `anthropic`. When omitted the value falls back to `LLM_PROVIDER` in your `.env`.
+
+> **Recommendation:** run each model and agent variant in a separate command with `--no-resume` rather than using `--agent all`. This gives cleaner checkpoints and makes it easier to re-run a single failed variant without disturbing the others.
 
 Available agent types (`--agent`):
 
@@ -287,17 +286,18 @@ python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag
 
 # Use OpenAI as the RAGAS judge (recommended for quality)
 python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag \
-  --ragas-judge-provider openai --ragas-judge-model gpt-4o-mini
+  --ragas-judge-provider openai --ragas-judge-model gpt-4.1-mini
 
 # Limit number of test questions (default: 100, max: 116)
 python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag --rag-limit 50
 
 # Increase parallel judge workers for faster OpenAI evaluation
 python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag \
-  --ragas-judge-provider openai --ragas-workers 150
+  --ragas-judge-provider openai --ragas-judge-model gpt-4.1-mini --ragas-workers 150
 
-# Run both tool and RAGAS evaluation in one pass
-python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode all
+# Recommended: run with --no-resume and one model/agent at a time
+python -m eval.run_full_evaluation --model gpt-5.2 --provider openai --agent single --mode rag \
+  --ragas-judge-provider openai --ragas-judge-model gpt-4.1-mini --no-resume
 ```
 
 RAGAS judge options:
@@ -305,9 +305,11 @@ RAGAS judge options:
 | Flag | Default | Description |
 |---|---|---|
 | `--ragas-judge-provider` | auto-detect | `openai` or `ollama` |
-| `--ragas-judge-model` | `gpt-4o-mini` / `qwen2.5:7b` | Judge model name |
+| `--ragas-judge-model` | `gpt-4.1-mini` / `qwen2.5:7b` | Judge model name (recommended: `gpt-4.1-mini`) |
 | `--ragas-workers` | `8` | Parallel judge workers (`150` recommended for OpenAI) |
 | `--rag-limit` | `100` | Max number of RAGAS test questions (max 116) |
+
+> **Recommendation:** run each model and agent variant separately with `--no-resume` to keep results isolated and avoid stale checkpoints carrying over between runs.
 
 ---
 
