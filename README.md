@@ -39,6 +39,8 @@ Four agent types are available, selectable at runtime:
 | `klips2_change_password` | Password change |
 | `send_email` | Support escalation via SMTP |
 
+> **Disclaimer:** Full end-to-end functionality of the KLIPS2 tools (`klips2_*`) was not a primary objective of this thesis — the research focus was on agent architecture, tool-selection accuracy, and RAG quality. These tools automate interactions with the KLIPS2 web interface via browser automation and may break if the university updates its portal layout or authentication flow. They are provided as a proof-of-concept and are not guaranteed to work against the live system.
+
 ### Vector Database
 - **329 document chunks** from 50 WiSo web pages
 - ChromaDB with `BAAI/bge-m3` embeddings (1024 dimensions, multilingual DE/EN)
@@ -213,18 +215,8 @@ source .venv/bin/activate
 
 # Recommended: run only unit tests — no LLM, no network, no credentials required
 python -m pytest tests/ -m "not llm and not integration and not network and not klips and not email" -v
-
-# All unit tests
-python -m pytest tests/unit/ -v
-
-# Integration tests (requires a running agent and configured .env)
-python -m pytest tests/integration/ -v
-
-# All tests
-python -m pytest tests/ -v
 ```
 
-> **Tip:** Running with `-m "not llm and not integration and not network and not klips and not email"` skips every test that needs an LLM, live network access, or external credentials, making the suite fast and self-contained.
 
 ---
 
