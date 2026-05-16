@@ -272,6 +272,14 @@ Available agent types (`--agent`):
 
 Tests RAG answer quality using RAGAS metrics (faithfulness, context recall, answer relevancy). Runs the agent against up to 116 questions from the testset and uses a judge model to score the responses.
 
+> **Required:** LangSmith tracing must be enabled for RAGAS evaluation to work. Set the following in your `.env` before running:
+> ```dotenv
+> LANGSMITH_TRACING=true
+> LANGSMITH_API_KEY=lsv2_pt_...
+> LANGSMITH_PROJECT=masterarbeit
+> LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+> ```
+
 ```bash
 # llama3.1:8b, single agent, Ollama judge
 python -m eval.run_full_evaluation --model llama3.1:8b --agent single --mode rag
